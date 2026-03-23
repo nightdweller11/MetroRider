@@ -9,6 +9,12 @@ interface TrackBounds {
   pointCount: number;
 }
 
+interface TileStats {
+  loadedCount: number;
+  queuedCount: number;
+  currentTile: { x: number; y: number } | null;
+}
+
 interface DebugState {
   cameraPos: THREE.Vector3;
   cameraLat: number;
@@ -26,6 +32,7 @@ interface DebugState {
   lineName: string;
   stationCount: number;
   trackBounds: TrackBounds | null;
+  tileStats: TileStats;
 }
 
 interface ClearingStats {
@@ -64,6 +71,7 @@ export class DebugOverlay {
       lineName: '',
       stationCount: 0,
       trackBounds: null,
+      tileStats: { loadedCount: 0, queuedCount: 0, currentTile: null },
     };
 
     this.clearingStats = {
@@ -180,6 +188,10 @@ export class DebugOverlay {
     }
   }
 
+  updateTileStats(loadedCount: number, queuedCount: number, currentTile: { x: number; y: number } | null): void {
+    this.state.tileStats = { loadedCount, queuedCount, currentTile };
+  }
+
   updateClearingStats(stats: {
     trackClearedCount: number;
     builtCount: number;
@@ -242,6 +254,7 @@ export class DebugOverlay {
   private render(): void {
     const s = this.state;
     const c = this.clearingStats;
+    const t = s.tileStats;
     const tb = s.trackBounds;
 
     let trackBoundsStr = '  (no data)\n';
@@ -279,6 +292,11 @@ export class DebugOverlay {
       `WORLD\n` +
       `  loaded:  ${s.worldLoaded ? 'YES' : 'NO'}\n` +
       `  meshes:  ${s.meshCount}\n` +
+      `\n` +
+      `TILES\n` +
+      `  loaded:  ${t.loadedCount}\n` +
+      `  queued:  ${t.queuedCount}\n` +
+      `  current: ${t.currentTile ? `(${t.currentTile.x}, ${t.currentTile.y})` : '(none)'}\n` +
       `\n` +
       `CORRIDOR CLEARING\n` +
       `  radius:        ${c.corridorRadius}m\n` +

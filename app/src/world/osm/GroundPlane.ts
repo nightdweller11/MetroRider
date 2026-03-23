@@ -67,6 +67,7 @@ export function generateGroundPlane(
   data: OSMData,
   projection: LocalProjection,
   extentMeters: number,
+  centerOffset?: { x: number; z: number },
 ): THREE.Group {
   const group = new THREE.Group();
   group.name = 'ground';
@@ -82,6 +83,10 @@ export function generateGroundPlane(
   });
   const ground = new THREE.Mesh(groundGeom, groundMat);
   ground.position.y = GROUND_Y;
+  if (centerOffset) {
+    ground.position.x = centerOffset.x;
+    ground.position.z = centerOffset.z;
+  }
   ground.receiveShadow = true;
   group.add(ground);
 

@@ -1,0 +1,10 @@
+{
+  "name": "metrorider-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev:server & npm run dev:client",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd app && npm run dev"
+  }
+}

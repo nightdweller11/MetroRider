@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { WorldBuilder } from '@/world/osm/WorldBuilder';
 import { LocalProjection } from '@/world/osm/LocalProjection';
+import { TileManager } from '@/world/osm/TileManager';
 import { TrainConsist } from '@/vehicles/TrainConsist';
 import { CameraController } from '@/camera/CameraController';
 import { StationManager } from '@/gameplay/StationManager';
@@ -12,8 +12,7 @@ import { parseMetroMap, type ParsedLine } from '@/data/RouteParser';
 import type { MetroMapData } from '@/data/RouteParser';
 import { buildTrackData, buildTrackDataFromPolyline, buildTrackMesh, buildStationMarker, buildTrainTracks, type TrackData } from '@/world/TrackBuilder';
 import { bearing } from '@/core/CoordinateSystem';
-import { routeLineOnRailways, buildCorridorSegments, CORRIDOR_RADIUS } from '@/world/osm/TrackRouter';
-import type { OSMData } from '@/world/osm/OSMFetcher';
+import { buildCorridorSegments, CORRIDOR_RADIUS } from '@/world/osm/TrackRouter';
 
 const MAX_SPEED = 55;  // m/s (~200 km/h)
 const ACCEL = 5.0;
@@ -32,7 +31,7 @@ export class Game {
   private renderer: THREE.WebGLRenderer;
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
-  private worldBuilder: WorldBuilder;
+  private tileManager: TileManager;
   private projection: LocalProjection;
   private cameraController: CameraController;
   private stationManager: StationManager;
@@ -104,7 +103,7 @@ export class Game {
     // Default projection centered at 0,0; will be updated when map loads
     this.projection = new LocalProjection(0, 0);
 
-    this.worldBuilder = new WorldBuilder(this.scene, 0, 0);
+    this.tileManager = new TileManager(this.scene, 0, 0);
     this.cameraController = new CameraController(this.camera, this.projection);
     this.cameraController.attachDOM(canvas);
     this.stationManager = new StationManager();
@@ -161,40 +160,13 @@ export class Game {
     }
 
     // Build world using the full bbox center
-    this.worldBuilder.dispose();
+    this.tileManager.dispose();
     const fullBbox = LocalProjection.bboxFromStations(allPoints, 200);
+    const centerLat = fullBbox.centerLat;
+    const centerLng = fullBbox.centerLng;
 
-    // Check if the map is too large for a single OSM load
-    const latExtentKm = (fullBbox.north - fullBbox.south) * 111.319;
-    const lngExtentKm = (fullBbox.east - fullBbox.west) * 111.319 * Math.cos(fullBbox.centerLat * Math.PI / 180);
-    const isLargeMap = latExtentKm > 20 || lngExtentKm > 20;
-
-    if (isLargeMap) {
-      console.log(`[Game] Large map detected: ${latExtentKm.toFixed(1)}km x ${lngExtentKm.toFixed(1)}km. Will load OSM for first line only.`);
-    }
-
-    // For large maps, center on the first line; otherwise center on overall bbox
-    let osmStations: { lat: number; lng: number }[];
-    let osmMargin: number;
-    let centerLat: number;
-    let centerLng: number;
-
-    if (isLargeMap) {
-      const firstLine = parsed[0];
-      osmStations = firstLine.allPoints.map(s => ({ lat: s.lat, lng: s.lng }));
-      osmMargin = 300;
-      const firstBbox = LocalProjection.bboxFromStations(osmStations, osmMargin);
-      centerLat = firstBbox.centerLat;
-      centerLng = firstBbox.centerLng;
-    } else {
-      osmStations = allPoints;
-      osmMargin = 500;
-      centerLat = fullBbox.centerLat;
-      centerLng = fullBbox.centerLng;
-    }
-
-    this.worldBuilder = new WorldBuilder(this.scene, centerLat, centerLng);
-    this.projection = this.worldBuilder.projection;
+    this.tileManager = new TileManager(this.scene, centerLat, centerLng);
+    this.projection = this.tileManager.projection;
 
     // Update all subsystems with new projection
     this.cameraController.setProjection(this.projection);
@@ -202,7 +174,7 @@ export class Game {
     this.passengerSystem.setProjection(this.projection);
     this.debug.setProjection(this.projection);
 
-    this.hud.showToast('Loading world...', 'Fetching OpenStreetMap data');
+    this.hud.showToast('Loading world...', 'Fetching tile data');
 
     // Phase 1: Build track data - use waypoints as polyline when available
     const preRouteTrackData: { line: ParsedLine; track: TrackData }[] = [];
@@ -231,15 +203,19 @@ export class Game {
 
     console.log(`[Game] Corridor segments: ${allCorridorSegments.length} (radius=${CORRIDOR_RADIUS}m)`);
 
-    let osmData: OSMData | null = null;
+    // Set corridor segments on the tile manager so new tiles get building clearing
+    this.tileManager.setCorridorSegments(allCorridorSegments);
+
+    // Load initial tiles around the first line's center
+    const firstLine = parsed[0];
+    const firstStation = firstLine.stations[0];
     try {
-      osmData = await this.worldBuilder.loadArea(osmStations, osmMargin, (msg) => {
-        console.log(`[Game] World: ${msg}`);
-      }, allCorridorSegments);
+      await this.tileManager.loadInitialTiles(firstStation.lat, firstStation.lng);
+      console.log(`[Game] Initial tiles loaded: ${this.tileManager.getStats().loadedCount} tiles`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[Game] Failed to load OSM world: ${msg}`);
-      this.hud.showPersistentError(`Failed to load OSM world: ${msg}`);
+      console.error(`[Game] Failed to load initial tiles: ${msg}`);
+      this.hud.showPersistentError(`Failed to load tiles: ${msg}`);
     }
 
     // Clear old track geometry
@@ -263,7 +239,7 @@ export class Game {
     }
     this.lines = [];
 
-    // Phase 2: Build final tracks - use waypoints or OSM routing
+    // Phase 2: Build final tracks - use waypoints or Catmull-Rom fallback
     for (const line of parsed) {
       let track: TrackData;
       const hasWaypoints = line.allPoints.length > line.stations.length;
@@ -272,21 +248,9 @@ export class Game {
         const polyline: [number, number][] = line.allPoints.map(p => [p.lng, p.lat]);
         track = buildTrackDataFromPolyline(polyline, line.stations);
         console.log(`[Game] Line "${line.name}": using waypoint path (${polyline.length} pts, ${line.stations.length} real stations)`);
-      } else if (osmData && osmData.railways && osmData.railways.length > 0) {
-        const routeResult = routeLineOnRailways(
-          line.stations.map(s => ({ lat: s.lat, lng: s.lng })),
-          osmData,
-        );
-        if (routeResult.usedOSM) {
-          track = buildTrackDataFromPolyline(routeResult.polyline, line.stations);
-          console.log(`[Game] Line "${line.name}": using OSM-routed track (${routeResult.polyline.length} points)`);
-        } else {
-          track = buildTrackData(line.stations);
-          console.log(`[Game] Line "${line.name}": using Catmull-Rom fallback`);
-        }
       } else {
         track = buildTrackData(line.stations);
-        console.log(`[Game] Line "${line.name}": no railway data, using Catmull-Rom`);
+        console.log(`[Game] Line "${line.name}": using Catmull-Rom`);
       }
 
       const trackMesh = buildTrackMesh(track, line.color, this.projection);
@@ -313,33 +277,28 @@ export class Game {
       this.lines.push({ parsed: line, track, trackMesh, trackRails: null, stationMarkers });
     }
 
-    // Phase 3: Rebuild buildings using FINAL routed track corridor segments
-    if (osmData) {
-      try {
-        const finalCorridorSegments: { x1: number; z1: number; x2: number; z2: number }[] = [];
-        for (const ls of this.lines) {
-          const localPoints = ls.track.spline.points.map(([lng, lat]) =>
-            this.projection.projectToLocal(lat, lng),
-          );
-          finalCorridorSegments.push(...buildCorridorSegments(localPoints));
-
-          const first = ls.track.spline.points[0];
-          const last = ls.track.spline.points[ls.track.spline.points.length - 1];
-          const firstLocal = localPoints[0];
-          const lastLocal = localPoints[localPoints.length - 1];
-          console.log(`[Game] Line "${ls.parsed.name}" track: ${ls.track.spline.points.length} pts, first=(${first[1].toFixed(5)},${first[0].toFixed(5)}) local=(${firstLocal.x.toFixed(1)},${firstLocal.z.toFixed(1)}), last=(${last[1].toFixed(5)},${last[0].toFixed(5)}) local=(${lastLocal.x.toFixed(1)},${lastLocal.z.toFixed(1)})`);
-        }
-        console.log(`[Game] Phase 3: rebuilding buildings with ${finalCorridorSegments.length} final corridor segments (radius=${CORRIDOR_RADIUS}m)`);
-        this.worldBuilder.rebuildBuildings(osmData, finalCorridorSegments);
-        console.log('[Game] Phase 3: buildings rebuilt successfully');
-
-        this.buildCorridorDebugMesh(finalCorridorSegments);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[Game] Phase 3 FAILED: ${msg}`, err);
+    // Phase 3: Rebuild buildings in loaded tiles using FINAL corridor segments
+    try {
+      const finalCorridorSegments: { x1: number; z1: number; x2: number; z2: number }[] = [];
+      for (const ls of this.lines) {
+        const localPoints = ls.track.spline.points.map(([lng, lat]) =>
+          this.projection.projectToLocal(lat, lng),
+        );
+        finalCorridorSegments.push(...buildCorridorSegments(localPoints));
       }
-    } else {
-      console.error('[Game] Phase 3 SKIPPED: osmData is null');
+      console.log(`[Game] Phase 3: rebuilding buildings with ${finalCorridorSegments.length} final corridor segments (radius=${CORRIDOR_RADIUS}m)`);
+      this.tileManager.rebuildAllBuildings(finalCorridorSegments);
+      console.log('[Game] Phase 3: buildings rebuilt successfully');
+
+      this.buildCorridorDebugMesh(finalCorridorSegments);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Game] Phase 3 FAILED: ${msg}`, err);
+    }
+
+    // Pre-warm tiles along all track paths (background, fire-and-forget)
+    for (const ls of this.lines) {
+      this.tileManager.prewarmTrackTiles(ls.track.spline.points);
     }
 
     this.hud.buildLineSelector(parsed);
@@ -390,6 +349,9 @@ export class Game {
     this.direction = 1;
     this.doorsOpen = false;
     this.stationManager.reset();
+
+    // Flush old queue and immediately load tiles around the new line's first station
+    this.tileManager.resetForLineSwitch(stations[0].lat, stations[0].lng);
 
     this.train.rebuild(ls.parsed.color, this.direction);
     this.passengerSystem.populateStations(stations, ls.parsed.color);
@@ -447,6 +409,7 @@ export class Game {
       this.processInput(dt);
       this.updatePhysics(dt);
       this.updateTrain();
+      this.updateTiles();
       this.updateStations(dt);
       this.updateCamera(dt);
       this.updateDebug(dt);
@@ -554,6 +517,12 @@ export class Game {
     this.hud.updateStation(state.stationName, state.nextStationDist, state.arriving);
   }
 
+  private updateTiles(): void {
+    if (this.lastTrainPos.lat !== 0 || this.lastTrainPos.lng !== 0) {
+      this.tileManager.update(this.lastTrainPos.lat, this.lastTrainPos.lng);
+    }
+  }
+
   private updateCamera(dt: number): void {
     if (!this.lines[this.currentLineIdx]) return;
 
@@ -573,10 +542,13 @@ export class Game {
       this.train.getLeadCarWorldPos(),
       this.trainSpeed, this.trainDist,
     );
-    this.debug.updateWorld(this.worldBuilder.isLoaded(), this.scene);
+    this.debug.updateWorld(this.tileManager.isLoaded(), this.scene);
     this.debug.updateMeta(this.cameraController.getModeLabel());
 
-    const clearStats = this.worldBuilder.getClearingStats();
+    const tileStats = this.tileManager.getStats();
+    this.debug.updateTileStats(tileStats.loadedCount, tileStats.queuedCount, tileStats.currentTile);
+
+    const clearStats = this.tileManager.getClearingStats();
     if (clearStats) {
       this.debug.updateClearingStats(clearStats);
     }
@@ -658,7 +630,7 @@ export class Game {
       this.corridorDebugMesh.geometry.dispose();
       (this.corridorDebugMesh.material as THREE.Material).dispose();
     }
-    this.worldBuilder.dispose();
+    this.tileManager.dispose();
     this.input.dispose();
     this.passengerSystem.dispose();
     this.debug.dispose();
