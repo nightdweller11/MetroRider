@@ -1,0 +1,20 @@
+{
+  "name": "metrorider",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "3d-tiles-renderer": "^0.4.23",
+    "three": "^0.183.2"
+  },
+  "devDependencies": {
+    "@types/three": "^0.183.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1"
+  }
+}

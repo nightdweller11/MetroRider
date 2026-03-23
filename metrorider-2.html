@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MetroRider</title>
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js" crossorigin="anonymous"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" crossorigin="anonymous"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0f; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; }
+
+  #token-screen {
+    position: fixed; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    background: #0a0a0f;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(230,30,37,0.08) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 50%, rgba(0,160,120,0.06) 0%, transparent 60%);
+  }
+  #token-screen.hidden { display: none; }
+  .token-card {
+    width: 480px; max-width: 90vw; padding: 48px;
+    background: rgba(20,20,30,0.9); border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px; backdrop-filter: blur(20px);
+  }
+  .token-card h1 {
+    font-size: 28px; font-weight: 700; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #e61e25, #ff6b6b);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .token-card .sub { font-size: 13px; color: #666; margin-bottom: 32px; line-height: 1.5; }
+  .token-card .sub a { color: #888; text-decoration: underline; }
+  .token-card input {
+    width: 100%; padding: 14px 16px; border-radius: 8px;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+    color: #fff; font-family: monospace; font-size: 13px; outline: none;
+  }
+  .token-card input:focus { border-color: #e61e25; }
+  .token-card input::placeholder { color: #444; }
+  .token-card button {
+    width: 100%; padding: 14px; margin-top: 16px; border-radius: 8px;
+    background: #e61e25; border: none; color: #fff;
+    font-family: monospace; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
+  }
+  .token-card button:hover { background: #ff2d35; transform: translateY(-1px); }
+
+  #map { position: fixed; inset: 0; }
+
+  #hud { position: fixed; inset: 0; z-index: 100; pointer-events: none; display: none; }
+  #hud.active { display: block; }
+
+  .hud-top {
+    position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .hud-badge {
+    padding: 8px 16px; border-radius: 8px;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px); font-size: 12px; letter-spacing: 0.5px;
+  }
+  .hud-badge .label { color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+  .hud-badge .value { color: #fff; font-weight: 600; margin-top: 2px; }
+  .hud-line-dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 12px currentColor; display: inline-block; vertical-align: middle; margin-right: 6px; }
+
+  .hud-speed { position: absolute; bottom: 30px; left: 30px; pointer-events: auto; }
+  .speed-ring { width: 140px; height: 140px; position: relative; }
+  .speed-ring svg { width: 100%; height: 100%; transform: rotate(-135deg); }
+  .speed-ring .track { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 6; }
+  .speed-ring .fill { fill: none; stroke: #e61e25; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.1s; }
+  .speed-value { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .speed-value .num { font-size: 32px; font-weight: 700; color: #fff; line-height: 1; }
+  .speed-value .unit { font-size: 10px; color: #666; letter-spacing: 1px; margin-top: 4px; }
+
+  .hud-station { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 280px; }
+  .station-next {
+    padding: 16px 32px; border-radius: 12px;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px);
+  }
+  .station-next .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1.5px; }
+  .station-next .name { font-size: 20px; font-weight: 700; color: #fff; margin-top: 4px; }
+  .station-next .dist { font-size: 12px; color: #888; margin-top: 4px; }
+  .station-arriving {
+    padding: 20px 40px; border-radius: 12px;
+    background: rgba(10,10,15,0.9); border: 1px solid rgba(230,30,37,0.3);
+    backdrop-filter: blur(16px); animation: pulse-border 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-border { 0%, 100% { border-color: rgba(230,30,37,0.3); } 50% { border-color: rgba(230,30,37,0.7); } }
+  .station-arriving .label { font-size: 11px; color: #e61e25; text-transform: uppercase; letter-spacing: 2px; font-weight: 600; }
+  .station-arriving .name { font-size: 24px; font-weight: 700; color: #fff; margin-top: 6px; }
+
+  .hud-controls { position: absolute; bottom: 30px; right: 30px; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+  .ctrl-btn {
+    width: 56px; height: 56px; border-radius: 12px;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px); color: #888;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s; font-size: 20px;
+    user-select: none; -webkit-user-select: none;
+  }
+  .ctrl-btn:hover { border-color: rgba(255,255,255,0.2); color: #fff; }
+  .ctrl-btn.active { border-color: #e61e25; color: #e61e25; background: rgba(230,30,37,0.1); }
+  .ctrl-btn.accel.active { border-color: #00c853; color: #00c853; background: rgba(0,200,83,0.1); }
+
+  .hud-camera { position: absolute; top: 20px; right: 20px; pointer-events: auto; }
+  .camera-pill {
+    padding: 8px 16px; border-radius: 20px;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px); font-size: 11px; color: #888;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
+  }
+  .camera-pill:hover { border-color: rgba(255,255,255,0.2); color: #fff; }
+
+  .hud-lines { position: absolute; top: 70px; right: 20px; display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+  .line-btn {
+    padding: 8px 16px; border-radius: 8px;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px); font-size: 12px; color: #888;
+    cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+  }
+  .line-btn:hover { border-color: rgba(255,255,255,0.2); }
+  .line-btn.active { border-color: var(--lc); color: #fff; }
+  .line-btn .dot { width: 8px; height: 8px; border-radius: 50%; }
+
+  .hud-keys {
+    position: absolute; top: 20px; left: 20px;
+    padding: 12px 16px; border-radius: 8px;
+    background: rgba(10,10,15,0.85); border: 1px solid rgba(255,255,255,0.08);
+    backdrop-filter: blur(16px); font-size: 10px; color: #555; line-height: 1.8; pointer-events: auto;
+  }
+  .hud-keys kbd {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+    color: #aaa; font-size: 10px; font-family: monospace;
+  }
+
+  #loading-overlay {
+    position: fixed; inset: 0; z-index: 500; background: #0a0a0f;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 16px; transition: opacity 0.5s;
+  }
+  #loading-overlay.hidden { opacity: 0; pointer-events: none; }
+  .loader { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #e61e25; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader-text { font-size: 12px; color: #555; letter-spacing: 1px; }
+
+  .toast {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    padding: 24px 40px; border-radius: 12px; z-index: 200;
+    background: rgba(10,10,15,0.95); border: 1px solid rgba(230,30,37,0.4);
+    backdrop-filter: blur(20px); text-align: center; animation: toast-in 0.3s ease-out; pointer-events: none;
+  }
+  .toast .big { font-size: 22px; font-weight: 700; color: #fff; }
+  .toast .small { font-size: 12px; color: #888; margin-top: 6px; }
+  @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+</style>
+</head>
+<body>
+
+<div id="token-screen">
+  <div class="token-card">
+    <h1>MetroRider</h1>
+    <div class="sub">
+      A real-time 3D train simulator built from MetroDreamin' data.<br>
+      Enter your Mapbox access token to load the city.<br>
+      <a href="https://account.mapbox.com/access-tokens/" target="_blank">Get a free token →</a>
+    </div>
+    <input id="token-input" type="text" placeholder="pk.eyJ1Ij..." spellcheck="false">
+    <button onclick="startGame()">Launch MetroRider</button>
+  </div>
+</div>
+
+<div id="loading-overlay" class="hidden">
+  <div class="loader"></div>
+  <div class="loader-text">Building the city…</div>
+</div>
+
+<div id="map"></div>
+
+<div id="hud">
+  <div class="hud-top">
+    <div class="hud-badge">
+      <span class="hud-line-dot" id="hud-line-dot"></span>
+      <span>
+        <span class="label">Line</span>
+        <span class="value" id="hud-line-name">—</span>
+      </span>
+    </div>
+    <div class="hud-badge">
+      <span class="label">Direction</span>
+      <span class="value" id="hud-direction">—</span>
+    </div>
+  </div>
+
+  <div class="hud-speed">
+    <div class="speed-ring">
+      <svg viewBox="0 0 140 140">
+        <circle class="track" cx="70" cy="70" r="60" stroke-dasharray="283" stroke-dashoffset="70"/>
+        <circle class="fill" id="speed-arc" cx="70" cy="70" r="60" stroke-dasharray="283" stroke-dashoffset="283"/>
+      </svg>
+      <div class="speed-value">
+        <div class="num" id="speed-num">0</div>
+        <div class="unit">KM/H</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hud-station" id="hud-station"></div>
+
+  <div class="hud-controls">
+    <div class="ctrl-btn accel" id="btn-accel" onmousedown="btnDown('accel')" onmouseup="btnUp('accel')" ontouchstart="btnDown('accel')" ontouchend="btnUp('accel')">▲</div>
+    <div class="ctrl-btn" id="btn-brake" onmousedown="btnDown('brake')" onmouseup="btnUp('brake')" ontouchstart="btnDown('brake')" ontouchend="btnUp('brake')">▼</div>
+    <div class="ctrl-btn" id="btn-doors" onclick="toggleDoors()">⊟</div>
+  </div>
+
+  <div class="hud-camera">
+    <div class="camera-pill" onclick="cycleCamera()">
+      <span id="cam-label">CAB VIEW</span> · <kbd>C</kbd>
+    </div>
+  </div>
+
+  <div class="hud-lines" id="hud-lines"></div>
+
+  <div class="hud-keys">
+    <kbd>W</kbd> / <kbd>↑</kbd> Accelerate<br>
+    <kbd>S</kbd> / <kbd>↓</kbd> Brake<br>
+    <kbd>Space</kbd> Emergency brake<br>
+    <kbd>D</kbd> Open/close doors<br>
+    <kbd>C</kbd> Camera mode<br>
+    <kbd>R</kbd> Reverse direction<br>
+    <kbd>1</kbd>–<kbd>3</kbd> Switch line
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// ERROR HANDLING
+// ═══════════════════════════════════════════════════
+let gameInitialized = false;
+window.addEventListener('error', (e) => {
+  if (!e.error && (!e.message || e.message === 'Script error.')) return;
+  console.error('Error:', e.error || e.message);
+  if (!gameInitialized && typeof resetToTokenScreen === 'function')
+    resetToTokenScreen('Error: ' + (e.error?.message || e.message));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  console.error('Promise rejection:', e.reason);
+  if (!gameInitialized && typeof resetToTokenScreen === 'function')
+    resetToTokenScreen('Connection error: ' + (e.reason?.message || 'Could not reach servers'));
+});
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('token-input')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') startGame(); });
+});
+
+// ═══════════════════════════════════════════════════
+// SAMPLE METRO DATA — Tel Aviv
+// ═══════════════════════════════════════════════════
+const METRO_DATA = {
+  name: "Tel Aviv Metro",
+  stations: {
+    r1:  { name: "Petah Tikva Central", lat: 32.0905, lng: 34.8855 },
+    r2:  { name: "Em HaMoshavot",       lat: 32.0865, lng: 34.8720 },
+    r3:  { name: "Kiryat Aryeh",        lat: 32.0840, lng: 34.8530 },
+    r4:  { name: "Bnei Brak",           lat: 32.0820, lng: 34.8350 },
+    r5:  { name: "Ramat Gan Diamond",   lat: 32.0785, lng: 34.8120 },
+    r6:  { name: "Arlozorov",           lat: 32.0795, lng: 34.7920 },
+    r7:  { name: "Dizengoff Center",    lat: 32.0755, lng: 34.7745 },
+    r8:  { name: "Carlebach",           lat: 32.0680, lng: 34.7790 },
+    r9:  { name: "Allenby",             lat: 32.0640, lng: 34.7710 },
+    r10: { name: "Neve Sha'anan",       lat: 32.0565, lng: 34.7680 },
+    r11: { name: "Jaffa Clock Tower",   lat: 32.0510, lng: 34.7560 },
+    r12: { name: "Bat Yam Central",     lat: 32.0225, lng: 34.7505 },
+    g1:  { name: "Tel Aviv University",  lat: 32.1135, lng: 34.8045 },
+    g2:  { name: "Ramat Aviv",           lat: 32.1050, lng: 34.7975 },
+    g3:  { name: "Basel Square",         lat: 32.0885, lng: 34.7790 },
+    g4:  { name: "Habima",               lat: 32.0720, lng: 34.7795 },
+    g5:  { name: "Rothschild",           lat: 32.0640, lng: 34.7755 },
+    g6:  { name: "Florentin",            lat: 32.0570, lng: 34.7710 },
+    g7:  { name: "Jaffa Port",           lat: 32.0520, lng: 34.7500 },
+    b1:  { name: "Herzliya Marina",     lat: 32.1610, lng: 34.7920 },
+    b2:  { name: "Tel Baruch Beach",    lat: 32.1310, lng: 34.7870 },
+    b3:  { name: "Port of Tel Aviv",    lat: 32.0985, lng: 34.7715 },
+    b4:  { name: "Gordon Beach",        lat: 32.0830, lng: 34.7670 },
+    b5:  { name: "Frishman Beach",      lat: 32.0780, lng: 34.7680 },
+    b6:  { name: "Jerusalem Beach",     lat: 32.0615, lng: 34.7605 },
+  },
+  lines: [
+    { id: "red", name: "Red Line", color: "#e61e25", stationIds: ["r1","r2","r3","r4","r5","r6","r7","r8","r9","r10","r11","r12"] },
+    { id: "green", name: "Green Line", color: "#00a878", stationIds: ["g1","g2","g3","g4","g5","g6","g7"] },
+    { id: "blue", name: "Blue Line", color: "#2196f3", stationIds: ["b1","b2","b3","b4","b5","b6"] }
+  ]
+};
+
+// ═══════════════════════════════════════════════════
+// SPLINE & MATH
+// ═══════════════════════════════════════════════════
+function catmullRom(p0, p1, p2, p3, t) {
+  const t2 = t*t, t3 = t2*t;
+  return 0.5*((2*p1)+(-p0+p2)*t+(2*p0-5*p1+4*p2-p3)*t2+(-p0+3*p1-3*p2+p3)*t3);
+}
+function buildSplinePath(stations, pps = 30) {
+  const n = stations.length;
+  if (n < 2) return { points: stations.map(s=>[s.lng,s.lat]), stationIndices: [0] };
+  const pts = [], stationIndices = [];
+  for (let i = 0; i < n-1; i++) {
+    const p0 = stations[Math.max(0,i-1)], p1 = stations[i], p2 = stations[i+1], p3 = stations[Math.min(n-1,i+2)];
+    stationIndices.push(pts.length);
+    for (let j = 0; j < pps; j++) {
+      const t = j/pps;
+      pts.push([catmullRom(p0.lng,p1.lng,p2.lng,p3.lng,t), catmullRom(p0.lat,p1.lat,p2.lat,p3.lat,t)]);
+    }
+  }
+  stationIndices.push(pts.length);
+  pts.push([stations[n-1].lng, stations[n-1].lat]);
+  return { points: pts, stationIndices };
+}
+function haversine(lat1,lng1,lat2,lng2) {
+  const R=6371000, dLat=(lat2-lat1)*Math.PI/180, dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function bearing(lat1,lng1,lat2,lng2) {
+  const dLng=(lng2-lng1)*Math.PI/180, la1=lat1*Math.PI/180, la2=lat2*Math.PI/180;
+  const y=Math.sin(dLng)*Math.cos(la2), x=Math.cos(la1)*Math.sin(la2)-Math.sin(la1)*Math.cos(la2)*Math.cos(dLng);
+  return ((Math.atan2(y,x)*180/Math.PI)+360)%360;
+}
+function buildCumulativeDistances(points) {
+  const d=[0];
+  for (let i=1;i<points.length;i++) d.push(d[i-1]+haversine(points[i-1][1],points[i-1][0],points[i][1],points[i][0]));
+  return d;
+}
+function getPositionAtDistance(points, cumDist, dist) {
+  if (dist<=0) return {lng:points[0][0],lat:points[0][1],idx:0};
+  if (dist>=cumDist[cumDist.length-1]) { const l=points[points.length-1]; return {lng:l[0],lat:l[1],idx:points.length-1}; }
+  let lo=0, hi=cumDist.length-1;
+  while(lo<hi-1){const mid=(lo+hi)>>1;if(cumDist[mid]<=dist)lo=mid;else hi=mid;}
+  const segLen=cumDist[hi]-cumDist[lo], t=segLen>0?(dist-cumDist[lo])/segLen:0;
+  return { lng:points[lo][0]+t*(points[hi][0]-points[lo][0]), lat:points[lo][1]+t*(points[hi][1]-points[lo][1]), idx:lo };
+}
+
+// ═══════════════════════════════════════════════════
+// GAME STATE
+// ═══════════════════════════════════════════════════
+let map = null;
+let lineData = [];
+let currentLineIdx = 0;
+let trainDist = 0;
+let trainSpeed = 0;
+let direction = 1;
+let doorsOpen = false;
+let atStation = null;
+let cameraMode = 0;
+const cameraModes = ['CAB VIEW','CHASE CAM','OVERVIEW'];
+const MAX_SPEED = 22;
+const ACCEL = 3.5;
+const BRAKE = 5.0;
+const FRICTION = 0.3;
+const STATION_STOP_DIST = 40;
+const keys = {};
+let lastFrame = 0;
+let stationToast = null;
+let stationToastTimeout = null;
+
+// Three.js state
+let trainScene, trainCamera, trainRenderer;
+let trainGroup; // root group for the whole consist
+const NUM_CARS = 3;
+const CAR_SPACING = 28; // meters between car centers
+let currentTrainColor = '#e61e25';
+let trainCarGroups = [];
+
+// Current position for the 3D layer
+let trainLng = 34.7818, trainLat = 32.074, trainBearing = 0;
+
+// ═══════════════════════════════════════════════════
+// THREE.JS TRAIN BUILDER
+// ═══════════════════════════════════════════════════
+function buildTrainCar(color, isHead, isTail) {
+  const car = new THREE.Group();
+
+  // Main body
+  const bodyLen = 20, bodyW = 3.2, bodyH = 3.6;
+  const bodyGeo = new THREE.BoxGeometry(bodyW, bodyH, bodyLen);
+  const bodyMat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.6, roughness: 0.3 });
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.position.y = bodyH / 2 + 1.2;
+  car.add(body);
+
+  // Roof — slightly wider, rounded look via a flattened cylinder segment
+  const roofGeo = new THREE.BoxGeometry(bodyW + 0.2, 0.3, bodyLen - 0.2);
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x333340, metalness: 0.8, roughness: 0.2 });
+  const roof = new THREE.Mesh(roofGeo, roofMat);
+  roof.position.y = bodyH + 1.2 + 0.15;
+  car.add(roof);
+
+  // Roof AC unit
+  const acGeo = new THREE.BoxGeometry(1.8, 0.5, 6);
+  const acMat = new THREE.MeshStandardMaterial({ color: 0x444455, metalness: 0.5, roughness: 0.5 });
+  const ac = new THREE.Mesh(acGeo, acMat);
+  ac.position.y = bodyH + 1.2 + 0.55;
+  car.add(ac);
+
+  // Windows — two rows on each side
+  const winMat = new THREE.MeshStandardMaterial({ color: 0x88ccff, emissive: 0x224466, emissiveIntensity: 0.8, metalness: 0.9, roughness: 0.1 });
+  const windowCount = 6;
+  for (let side = -1; side <= 1; side += 2) {
+    for (let i = 0; i < windowCount; i++) {
+      const winGeo = new THREE.BoxGeometry(0.05, 1.2, 1.6);
+      const win = new THREE.Mesh(winGeo, winMat);
+      win.position.set(side * (bodyW/2 + 0.03), bodyH/2 + 1.2 + 0.4, -bodyLen/2 + 2 + i * (bodyLen - 4) / (windowCount - 1));
+      car.add(win);
+    }
+  }
+
+  // Door indicators — two doors per side
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x222233, metalness: 0.5, roughness: 0.4 });
+  for (let side = -1; side <= 1; side += 2) {
+    for (let d = -1; d <= 1; d += 2) {
+      const doorGeo = new THREE.BoxGeometry(0.06, 2.4, 1.4);
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position.set(side * (bodyW/2 + 0.04), bodyH/2 + 1.2 - 0.3, d * 4.5);
+      car.add(door);
+    }
+  }
+
+  // Undercarriage / bogie
+  const underGeo = new THREE.BoxGeometry(bodyW - 0.4, 0.6, bodyLen - 2);
+  const underMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.3, roughness: 0.8 });
+  const under = new THREE.Mesh(underGeo, underMat);
+  under.position.y = 0.8;
+  car.add(under);
+
+  // Wheels (simplified as dark cylinders)
+  const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12);
+  const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.3 });
+  for (let side = -1; side <= 1; side += 2) {
+    for (let wz = -1; wz <= 1; wz += 2) {
+      const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+      wheel.rotation.z = Math.PI / 2;
+      wheel.position.set(side * 1.6, 0.5, wz * 6);
+      car.add(wheel);
+    }
+  }
+
+  // Headlight (front car only)
+  if (isHead) {
+    const hlMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffcc, emissiveIntensity: 2.0 });
+    for (let side = -1; side <= 1; side += 2) {
+      const hlGeo = new THREE.SphereGeometry(0.2, 8, 8);
+      const hl = new THREE.Mesh(hlGeo, hlMat);
+      hl.position.set(side * 1.0, bodyH/2 + 1.2 - 0.5, bodyLen/2 + 0.1);
+      car.add(hl);
+    }
+    // Destination board
+    const boardGeo = new THREE.BoxGeometry(2.0, 0.5, 0.06);
+    const boardMat = new THREE.MeshStandardMaterial({ color: 0x111122, emissive: 0xff6600, emissiveIntensity: 0.5 });
+    const board = new THREE.Mesh(boardGeo, boardMat);
+    board.position.set(0, bodyH + 0.8, bodyLen/2 + 0.05);
+    car.add(board);
+  }
+
+  // Tail light (rear car only)
+  if (isTail) {
+    const tlMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 1.5 });
+    for (let side = -1; side <= 1; side += 2) {
+      const tlGeo = new THREE.SphereGeometry(0.15, 8, 8);
+      const tl = new THREE.Mesh(tlGeo, tlMat);
+      tl.position.set(side * 1.0, bodyH/2 + 1.2 - 0.5, -bodyLen/2 - 0.1);
+      car.add(tl);
+    }
+  }
+
+  // Pantograph on middle car (simplified diamond shape)
+  if (!isHead && !isTail) {
+    const pantoMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.2 });
+    const armGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.0, 6);
+    for (let side = -1; side <= 1; side += 2) {
+      const arm = new THREE.Mesh(armGeo, pantoMat);
+      arm.rotation.z = side * 0.3;
+      arm.position.set(side * 0.3, bodyH + 1.2 + 1.0, 0);
+      car.add(arm);
+    }
+    const contactGeo = new THREE.BoxGeometry(1.5, 0.06, 0.3);
+    const contact = new THREE.Mesh(contactGeo, pantoMat);
+    contact.position.y = bodyH + 1.2 + 2.0;
+    car.add(contact);
+  }
+
+  // Line color stripe along the side
+  const stripeMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.3 });
+  for (let side = -1; side <= 1; side += 2) {
+    const stripeGeo = new THREE.BoxGeometry(0.06, 0.25, bodyLen - 0.5);
+    const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+    stripe.position.set(side * (bodyW/2 + 0.04), 2.0, 0);
+    car.add(stripe);
+  }
+
+  return car;
+}
+
+function buildTrain(color) {
+  const group = new THREE.Group();
+  trainCarGroups = [];
+  for (let i = 0; i < NUM_CARS; i++) {
+    const isHead = (direction === 1) ? (i === NUM_CARS - 1) : (i === 0);
+    const isTail = (direction === 1) ? (i === 0) : (i === NUM_CARS - 1);
+    const car = buildTrainCar(color, isHead, isTail);
+    // Cars are spaced along the Z axis (which we'll map to track direction)
+    car.position.z = -(i - (NUM_CARS-1)/2) * CAR_SPACING;
+    group.add(car);
+    trainCarGroups.push(car);
+  }
+  return group;
+}
+
+function rebuildTrainModel(color) {
+  if (trainGroup) trainScene.remove(trainGroup);
+  currentTrainColor = color;
+  trainGroup = buildTrain(color);
+  trainScene.add(trainGroup);
+}
+
+// ═══════════════════════════════════════════════════
+// MAPBOX CUSTOM LAYER (THREE.JS)
+// ═══════════════════════════════════════════════════
+const modelOrigin = [34.7818, 32.0740]; // reference point
+const modelAltitude = 0;
+const modelRotate = [Math.PI / 2, 0, 0];
+
+let modelTransform;
+
+function createCustomLayer() {
+  const mc = mapboxgl.MercatorCoordinate.fromLngLat(modelOrigin, modelAltitude);
+  const meterScale = mc.meterInMercatorCoordinateUnits();
+
+  modelTransform = {
+    translateX: mc.x,
+    translateY: mc.y,
+    translateZ: mc.z,
+    scale: meterScale
+  };
+
+  return {
+    id: '3d-train',
+    type: 'custom',
+    renderingMode: '3d',
+    onAdd: function(map, gl) {
+      trainScene = new THREE.Scene();
+
+      // Lighting
+      const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+      trainScene.add(ambient);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      dirLight.position.set(50, 100, 50);
+      trainScene.add(dirLight);
+      const hemiLight = new THREE.HemisphereLight(0x8899bb, 0x333344, 0.4);
+      trainScene.add(hemiLight);
+
+      // Point light on train (headlight glow)
+      const trainLight = new THREE.PointLight(0xffffcc, 1, 80);
+      trainLight.position.set(0, 5, 30);
+      trainScene.add(trainLight);
+
+      trainCamera = new THREE.Camera();
+      trainGroup = buildTrain('#e61e25');
+      trainScene.add(trainGroup);
+
+      trainRenderer = new THREE.WebGLRenderer({
+        canvas: map.getCanvas(),
+        context: gl,
+        antialias: true
+      });
+      trainRenderer.autoClear = false;
+    },
+    render: function(gl, matrix) {
+      // Compute train position in mercator coordinates
+      const mc = mapboxgl.MercatorCoordinate.fromLngLat([trainLng, trainLat], 0);
+      const meterScale = mc.meterInMercatorCoordinateUnits();
+
+      // Build the rotation matrix from bearing
+      const rotAngle = -trainBearing * Math.PI / 180;
+
+      const m = new THREE.Matrix4().fromArray(matrix);
+
+      const l = new THREE.Matrix4()
+        .makeTranslation(mc.x, mc.y, mc.z)
+        .scale(new THREE.Vector3(meterScale, -meterScale, meterScale))
+        .multiply(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+        .multiply(new THREE.Matrix4().makeRotationY(rotAngle));
+
+      trainCamera.projectionMatrix = m.multiply(l);
+
+      if (trainRenderer) {
+        trainRenderer.resetState();
+        trainRenderer.render(trainScene, trainCamera);
+      }
+
+      if (map) map.triggerRepaint();
+    }
+  };
+}
+
+// ═══════════════════════════════════════════════════
+// TOKEN / INIT
+// ═══════════════════════════════════════════════════
+function showTokenError(msg) {
+  let e = document.getElementById('token-error');
+  if (!e) { e = document.createElement('div'); e.id = 'token-error'; e.style.cssText = 'color:#ff4444;font-size:12px;margin-top:12px;line-height:1.5;'; document.querySelector('.token-card').appendChild(e); }
+  e.textContent = msg;
+}
+function resetToTokenScreen(msg) {
+  if (map) { try { map.remove(); } catch(e){} map = null; }
+  lineData = [];
+  document.getElementById('loading-overlay').classList.add('hidden');
+  document.getElementById('hud').classList.remove('active');
+  document.getElementById('token-screen').classList.remove('hidden');
+  if (msg) showTokenError(msg);
+}
+function startGame() {
+  if (typeof mapboxgl === 'undefined') { showTokenError('Mapbox library failed to load. Open this file directly in your browser.'); return; }
+  if (typeof THREE === 'undefined') { showTokenError('Three.js library failed to load. Check your internet connection.'); return; }
+  const token = document.getElementById('token-input').value.trim();
+  if (!token) { showTokenError('Please paste your Mapbox access token.'); return; }
+  if (!token.startsWith('pk.')) { showTokenError('Token should start with "pk."'); return; }
+  const err = document.getElementById('token-error'); if (err) err.textContent = '';
+  document.getElementById('token-screen').classList.add('hidden');
+  document.getElementById('loading-overlay').classList.remove('hidden');
+  mapboxgl.accessToken = token;
+  try { initMap(); } catch(e) { resetToTokenScreen('Init failed: ' + e.message); }
+}
+
+function initMap() {
+  map = new mapboxgl.Map({
+    container: 'map', style: 'mapbox://styles/mapbox/dark-v11',
+    center: [34.7818, 32.0740], zoom: 14, pitch: 60, bearing: 0, antialias: true
+  });
+
+  map.on('error', (e) => {
+    const msg = e?.error?.message || e?.message || '';
+    if (msg.includes('access token') || msg.includes('401') || msg.includes('403') || msg.includes('Not Authorized'))
+      resetToTokenScreen('Invalid Mapbox token. Please check and try again.');
+  });
+
+  const loadTimeout = setTimeout(() => {
+    if (!map?.loaded()) resetToTokenScreen('Map timed out. Check your token and connection.');
+  }, 15000);
+
+  map.on('load', () => {
+    clearTimeout(loadTimeout);
+    try {
+      // 3D buildings
+      const layers = map.getStyle().layers;
+      const labelLayerId = layers.find(l => l.type === 'symbol' && l.layout['text-field'])?.id;
+      map.addLayer({
+        id: '3d-buildings', source: 'composite', 'source-layer': 'building',
+        filter: ['==', 'extrude', 'true'], type: 'fill-extrusion', minzoom: 12,
+        paint: {
+          'fill-extrusion-color': '#1a1a2e',
+          'fill-extrusion-height': ['get', 'height'],
+          'fill-extrusion-base': ['get', 'min_height'],
+          'fill-extrusion-opacity': 0.7
+        }
+      }, labelLayerId);
+
+      map.addLayer({ id: 'sky', type: 'sky', paint: { 'sky-type': 'atmosphere', 'sky-atmosphere-sun': [0,90], 'sky-atmosphere-sun-intensity': 15 } });
+
+      // Process metro data
+      processMetroData();
+
+      // Track layers
+      lineData.forEach((line, i) => {
+        map.addSource(`line-${i}-src`, { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: line.spline.points } } });
+        map.addLayer({ id: `line-${i}-glow`, type: 'line', source: `line-${i}-src`, paint: { 'line-color': line.color, 'line-width': 8, 'line-opacity': 0.15, 'line-blur': 6 } });
+        map.addLayer({ id: `line-${i}-track`, type: 'line', source: `line-${i}-src`, paint: { 'line-color': line.color, 'line-width': 3, 'line-opacity': 0.8 } });
+        // Station markers
+        line.stations.forEach(st => {
+          const el = document.createElement('div');
+          el.style.cssText = `width:14px;height:14px;border-radius:50%;background:${line.color};border:2px solid #fff;box-shadow:0 0 10px ${line.color};`;
+          new mapboxgl.Marker({ element: el }).setLngLat([st.lng, st.lat]).addTo(map);
+        });
+      });
+
+      // Add 3D train custom layer
+      map.addLayer(createCustomLayer());
+
+      buildLineSelector();
+
+      setTimeout(() => {
+        document.getElementById('loading-overlay').classList.add('hidden');
+        document.getElementById('hud').classList.add('active');
+        selectLine(0);
+        gameInitialized = true;
+        requestAnimationFrame(gameLoop);
+      }, 800);
+    } catch(e) {
+      console.error('Init error:', e);
+      resetToTokenScreen('Error: ' + e.message);
+    }
+  });
+}
+
+function processMetroData() {
+  METRO_DATA.lines.forEach(line => {
+    const stations = line.stationIds.map(id => ({ id, name: METRO_DATA.stations[id].name, lat: METRO_DATA.stations[id].lat, lng: METRO_DATA.stations[id].lng }));
+    const spline = buildSplinePath(stations);
+    const cumDist = buildCumulativeDistances(spline.points);
+    const totalLength = cumDist[cumDist.length - 1];
+    const stationDists = spline.stationIndices.map(idx => cumDist[idx]);
+    lineData.push({ id: line.id, name: line.name, color: line.color, stations, spline, cumDist, totalLength, stationDists });
+  });
+}
+
+// ═══════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════
+function buildLineSelector() {
+  const c = document.getElementById('hud-lines');
+  lineData.forEach((line, i) => {
+    const btn = document.createElement('div');
+    btn.className = 'line-btn'; btn.style.setProperty('--lc', line.color); btn.dataset.idx = i;
+    btn.innerHTML = `<span class="dot" style="background:${line.color}"></span>${line.name}`;
+    btn.onclick = () => selectLine(i);
+    c.appendChild(btn);
+  });
+}
+
+function selectLine(idx) {
+  currentLineIdx = idx;
+  const line = lineData[idx];
+  trainDist = line.stationDists[0] + 10;
+  trainSpeed = 0; direction = 1; doorsOpen = false; atStation = null;
+  document.getElementById('hud-line-name').textContent = line.name;
+  document.getElementById('hud-line-dot').style.color = line.color;
+  document.getElementById('hud-direction').textContent = `→ ${line.stations[line.stations.length-1].name}`;
+  document.querySelectorAll('.line-btn').forEach((b,i) => b.classList.toggle('active', i === idx));
+  rebuildTrainModel(line.color);
+  const s = line.stations[0];
+  updateCamera(s.lng, s.lat, bearing(s.lat, s.lng, line.stations[1].lat, line.stations[1].lng), true);
+  showToast(line.name, `${line.stations[0].name} → ${line.stations[line.stations.length-1].name}`);
+}
+
+function showToast(big, small) {
+  if (stationToast) stationToast.remove();
+  stationToast = document.createElement('div');
+  stationToast.className = 'toast';
+  stationToast.innerHTML = `<div class="big">${big}</div><div class="small">${small}</div>`;
+  document.body.appendChild(stationToast);
+  clearTimeout(stationToastTimeout);
+  stationToastTimeout = setTimeout(() => { stationToast?.remove(); stationToast = null; }, 2500);
+}
+
+function updateHUD(speed, nextStation, distToNext, arriving) {
+  const kmh = Math.round(speed * 3.6);
+  document.getElementById('speed-num').textContent = kmh;
+  const pct = Math.min(kmh / 80, 1);
+  document.getElementById('speed-arc').style.strokeDashoffset = 283 - pct * 213;
+  document.getElementById('speed-arc').style.stroke = pct > 0.8 ? '#ff4444' : pct > 0.5 ? '#ffaa00' : lineData[currentLineIdx].color;
+  const stDiv = document.getElementById('hud-station');
+  if (arriving) {
+    stDiv.innerHTML = `<div class="station-arriving"><div class="label">Now Arriving</div><div class="name">${nextStation}</div></div>`;
+  } else if (nextStation) {
+    stDiv.innerHTML = `<div class="station-next"><div class="label">Next Station</div><div class="name">${nextStation}</div><div class="dist">${Math.round(distToNext)}m ahead</div></div>`;
+  }
+  document.getElementById('btn-accel').classList.toggle('active', keys['w'] || keys['arrowup']);
+  document.getElementById('btn-brake').classList.toggle('active', keys['s'] || keys['arrowdown'] || keys[' ']);
+}
+
+function cycleCamera() {
+  cameraMode = (cameraMode + 1) % cameraModes.length;
+  document.getElementById('cam-label').textContent = cameraModes[cameraMode];
+}
+function toggleDoors() {
+  if (trainSpeed < 0.5) {
+    doorsOpen = !doorsOpen;
+    document.getElementById('btn-doors').classList.toggle('active', doorsOpen);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+// INPUT
+// ═══════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key.toLowerCase() === 'c') cycleCamera();
+  if (e.key.toLowerCase() === 'd') toggleDoors();
+  if (e.key.toLowerCase() === 'r') {
+    direction *= -1;
+    const line = lineData[currentLineIdx];
+    document.getElementById('hud-direction').textContent = `→ ${direction===1 ? line.stations[line.stations.length-1].name : line.stations[0].name}`;
+    rebuildTrainModel(line.color);
+  }
+  if (e.key >= '1' && e.key <= '3' && parseInt(e.key)-1 < lineData.length) selectLine(parseInt(e.key)-1);
+});
+document.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+function btnDown(type) { if (type==='accel') keys['w']=true; if (type==='brake') keys['s']=true; }
+function btnUp(type) { if (type==='accel') keys['w']=false; if (type==='brake') keys['s']=false; }
+
+// ═══════════════════════════════════════════════════
+// CAMERA
+// ═══════════════════════════════════════════════════
+let camBearing = 0;
+function updateCamera(lng, lat, targetBearing, instant) {
+  let diff = targetBearing - camBearing;
+  if (diff > 180) diff -= 360;
+  if (diff < -180) diff += 360;
+  camBearing += diff * (instant ? 1 : 0.08);
+  camBearing = ((camBearing % 360) + 360) % 360;
+  const opts = { center: [lng, lat], bearing: camBearing, duration: instant ? 0 : 50, essential: true };
+  if (cameraMode === 0) { // Cab — look from front of train
+    opts.zoom = 17.5; opts.pitch = 72;
+    // Offset camera slightly ahead so you see the track in front
+    const rad = camBearing * Math.PI / 180;
+    const offset = 0.0002;
+    opts.center = [lng + Math.sin(rad) * offset * direction, lat + Math.cos(rad) * offset * direction];
+  } else if (cameraMode === 1) { // Chase
+    opts.zoom = 16.5; opts.pitch = 55;
+    const rad = (camBearing + 180) * Math.PI / 180;
+    opts.center = [lng + Math.sin(rad) * 0.001, lat + Math.cos(rad) * 0.001];
+  } else {
+    opts.zoom = 14; opts.pitch = 45;
+  }
+  map.easeTo(opts);
+}
+
+// ═══════════════════════════════════════════════════
+// GAME LOOP
+// ═══════════════════════════════════════════════════
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastFrame) / 1000, 0.05);
+  lastFrame = timestamp;
+  const line = lineData[currentLineIdx];
+
+  const throttle = (keys['w'] || keys['arrowup']) && !doorsOpen;
+  const braking = keys['s'] || keys['arrowdown'];
+  const emergency = keys[' '];
+
+  if (throttle) trainSpeed += ACCEL * dt;
+  else if (emergency) trainSpeed -= BRAKE * 2 * dt;
+  else if (braking) trainSpeed -= BRAKE * dt;
+  else trainSpeed -= FRICTION * dt;
+  trainSpeed = Math.max(0, Math.min(MAX_SPEED, trainSpeed));
+  if (doorsOpen && trainSpeed > 0.1) trainSpeed = 0;
+
+  trainDist += trainSpeed * dt * direction;
+  trainDist = Math.max(0, Math.min(line.totalLength, trainDist));
+  if (trainDist <= 5 || trainDist >= line.totalLength - 5) trainSpeed = 0;
+
+  // Lead car position
+  const pos = getPositionAtDistance(line.spline.points, line.cumDist, trainDist);
+  const lookAhead = getPositionAtDistance(line.spline.points, line.cumDist, trainDist + 30 * direction);
+  const brg = bearing(pos.lat, pos.lng, lookAhead.lat, lookAhead.lng);
+
+  // Update 3D train position (the custom layer reads these)
+  trainLng = pos.lng;
+  trainLat = pos.lat;
+  trainBearing = brg;
+
+  // Position each car along the spline for articulation
+  if (trainGroup && trainCarGroups.length > 0) {
+    for (let i = 0; i < trainCarGroups.length; i++) {
+      const carDist = trainDist - (i - (NUM_CARS-1)/2) * CAR_SPACING * direction;
+      const carPos = getPositionAtDistance(line.spline.points, line.cumDist, carDist);
+      const carAhead = getPositionAtDistance(line.spline.points, line.cumDist, carDist + 10 * direction);
+      const carBrg = bearing(carPos.lat, carPos.lng, carAhead.lat, carAhead.lng);
+
+      // Convert to meters relative to lead car
+      const dLng = (carPos.lng - pos.lng) * Math.cos(pos.lat * Math.PI / 180) * 111319;
+      const dLat = (carPos.lat - pos.lat) * 111319;
+
+      // Rotate to train's local frame
+      const rad = -brg * Math.PI / 180;
+      const localX = dLng * Math.cos(rad) - dLat * Math.sin(rad);
+      const localZ = dLng * Math.sin(rad) + dLat * Math.cos(rad);
+
+      trainCarGroups[i].position.x = localX;
+      trainCarGroups[i].position.z = -localZ;
+
+      // Each car rotates to face its own heading
+      const relBrg = (carBrg - brg) * Math.PI / 180;
+      trainCarGroups[i].rotation.y = -relBrg;
+    }
+  }
+
+  // Station detection
+  let nearestStIdx = -1, nearestStDist = Infinity, nextStIdx = -1, nextStDist = Infinity;
+  for (let i = 0; i < line.stationDists.length; i++) {
+    const d = Math.abs(trainDist - line.stationDists[i]);
+    if (d < nearestStDist) { nearestStDist = d; nearestStIdx = i; }
+    const ahead = direction === 1 ? line.stationDists[i] - trainDist : trainDist - line.stationDists[i];
+    if (ahead > 10 && ahead < nextStDist) { nextStDist = ahead; nextStIdx = i; }
+  }
+
+  const arriving = nearestStDist < STATION_STOP_DIST && trainSpeed < 2;
+  if (arriving && atStation !== nearestStIdx) {
+    atStation = nearestStIdx;
+    showToast(line.stations[nearestStIdx].name, `Station ${nearestStIdx+1} of ${line.stations.length}`);
+  }
+  if (!arriving) atStation = null;
+
+  const stName = arriving ? line.stations[nearestStIdx].name : (nextStIdx >= 0 ? line.stations[nextStIdx].name : line.stations[nearestStIdx].name);
+  updateCamera(pos.lng, pos.lat, brg, false);
+  updateHUD(trainSpeed, stName, arriving ? 0 : nextStDist, arriving);
+
+  requestAnimationFrame(gameLoop);
+}
+</script>
+</body>
+</html>
