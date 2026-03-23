@@ -21,6 +21,10 @@ const fetcher = new OverpassFetcher();
 
 app.use('/api/tiles', createTileRoutes(store, fetcher));
 
+app.get('/', (_req, res) => {
+  res.json({ service: 'MetroRider Tile Server', status: 'ok', tiles: store.tileCount() });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', tiles: store.tileCount() });
 });
