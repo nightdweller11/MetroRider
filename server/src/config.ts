@@ -9,7 +9,7 @@ export const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 export const DB_PATH = path.resolve(__dirname, '..', 'data', 'osm_cache.db');
 
-export const SERVER_PORT = parseInt(process.env.PORT || '3001', 10);
+export const SERVER_PORT = parseInt(process.env.PORT || '8080', 10);
 
 export const OVERPASS_SERVERS = [
   'https://overpass-api.de/api/interpreter',
