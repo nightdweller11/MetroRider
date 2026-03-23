@@ -51,7 +51,7 @@ app.use('/api/metrodreamin', async (req, res) => {
 // Serve built frontend (production)
 const clientDist = path.resolve(__dirname, '..', '..', 'app', 'dist');
 app.use(express.static(clientDist));
-app.get('*', (_req, res) => {
+app.use((_req, res) => {
   res.sendFile(path.join(clientDist, 'index.html'));
 });
 
