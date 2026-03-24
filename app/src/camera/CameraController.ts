@@ -173,7 +173,7 @@ export class CameraController {
     trainLat: number,
     trainLng: number,
     trainBearing: number,
-    direction: number,
+    _direction: number,
     dt: number,
   ): void {
     const lerpFactor = Math.min(1, dt * 4);
@@ -191,29 +191,29 @@ export class CameraController {
     }
 
     if (this.mode === 'cab') {
-      this.updateCabCamera(direction);
+      this.updateCabCamera();
     } else if (this.mode === 'chase') {
-      this.updateChaseCamera(direction);
+      this.updateChaseCamera();
     } else if (this.mode === 'orbit') {
       if (!this.isDragging) {
         this.orbitAngle += dt * 0.3;
       }
       this.updateOrbitCamera();
     } else if (this.mode === 'overview') {
-      this.updateOverviewCamera(direction);
+      this.updateOverviewCamera();
     }
   }
 
-  private updateCabCamera(direction: number): void {
+  private updateCabCamera(): void {
     const bearingRad = this.smoothBearing * Math.PI / 180;
-    const fwdLat = this.smoothLat + Math.cos(bearingRad) * CAB_FORWARD / 111319 * direction;
-    const fwdLng = this.smoothLng + Math.sin(bearingRad) * CAB_FORWARD / (111319 * Math.cos(this.smoothLat * Math.PI / 180)) * direction;
+    const fwdLat = this.smoothLat + Math.cos(bearingRad) * CAB_FORWARD / 111319;
+    const fwdLng = this.smoothLng + Math.sin(bearingRad) * CAB_FORWARD / (111319 * Math.cos(this.smoothLat * Math.PI / 180));
 
     this.projection.getPosition(fwdLat, fwdLng, CAB_ABOVE_GROUND, _camPos);
 
     const lookDist = 200;
-    const lookLat = fwdLat + Math.cos(bearingRad) * lookDist / 111319 * direction;
-    const lookLng = fwdLng + Math.sin(bearingRad) * lookDist / (111319 * Math.cos(fwdLat * Math.PI / 180)) * direction;
+    const lookLat = fwdLat + Math.cos(bearingRad) * lookDist / 111319;
+    const lookLng = fwdLng + Math.sin(bearingRad) * lookDist / (111319 * Math.cos(fwdLat * Math.PI / 180));
     this.projection.getPosition(lookLat, lookLng, CAB_ABOVE_GROUND - 3, _lookTarget);
 
     this.camera.position.copy(_camPos);
@@ -221,11 +221,11 @@ export class CameraController {
     this.camera.lookAt(_lookTarget);
   }
 
-  private updateChaseCamera(direction: number): void {
+  private updateChaseCamera(): void {
     const effectiveBearing = this.smoothBearing + this.chaseYawOffset;
     const bearingRad = effectiveBearing * Math.PI / 180;
-    const behindLat = this.smoothLat - Math.cos(bearingRad) * this.chaseDistance / 111319 * direction;
-    const behindLng = this.smoothLng - Math.sin(bearingRad) * this.chaseDistance / (111319 * Math.cos(this.smoothLat * Math.PI / 180)) * direction;
+    const behindLat = this.smoothLat - Math.cos(bearingRad) * this.chaseDistance / 111319;
+    const behindLng = this.smoothLng - Math.sin(bearingRad) * this.chaseDistance / (111319 * Math.cos(this.smoothLat * Math.PI / 180));
 
     this.projection.getPosition(behindLat, behindLng, this.chaseHeight, _camPos);
     this.projection.getPosition(this.smoothLat, this.smoothLng, 3, _lookTarget);
@@ -249,11 +249,11 @@ export class CameraController {
 
   private overviewHeight = OVERVIEW_HEIGHT;
 
-  private updateOverviewCamera(direction: number): void {
+  private updateOverviewCamera(): void {
     const bearingRad = this.smoothBearing * Math.PI / 180;
     const offsetDist = OVERVIEW_DISTANCE;
-    const behindLat = this.smoothLat - Math.cos(bearingRad) * offsetDist / 111319 * direction;
-    const behindLng = this.smoothLng - Math.sin(bearingRad) * offsetDist / (111319 * Math.cos(this.smoothLat * Math.PI / 180)) * direction;
+    const behindLat = this.smoothLat - Math.cos(bearingRad) * offsetDist / 111319;
+    const behindLng = this.smoothLng - Math.sin(bearingRad) * offsetDist / (111319 * Math.cos(this.smoothLat * Math.PI / 180));
 
     this.projection.getPosition(behindLat, behindLng, this.overviewHeight, _camPos);
     this.projection.getPosition(this.smoothLat, this.smoothLng, 0, _lookTarget);

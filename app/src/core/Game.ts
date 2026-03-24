@@ -13,6 +13,7 @@ import type { MetroMapData } from '@/data/RouteParser';
 import { buildTrackData, buildTrackDataFromPolyline, buildTrackMesh, buildStationMarker, buildTrainTracks, type TrackData } from '@/world/TrackBuilder';
 import { bearing } from '@/core/CoordinateSystem';
 import { buildCorridorSegments, CORRIDOR_RADIUS } from '@/world/osm/TrackRouter';
+import { SoundManager } from '@/audio/SoundManager';
 
 const MAX_SPEED = 55;  // m/s (~200 km/h)
 const ACCEL = 5.0;
@@ -40,6 +41,7 @@ export class Game {
   private input: InputHandler;
   private train: TrainConsist;
   private debug: DebugOverlay;
+  private sound: SoundManager;
 
   private sun: THREE.DirectionalLight;
 
@@ -112,11 +114,13 @@ export class Game {
     this.input = new InputHandler();
     this.train = new TrainConsist('#e61e25', 1, this.projection);
     this.debug = new DebugOverlay();
+    this.sound = new SoundManager();
 
     this.scene.add(this.train.group);
 
     this.stationManager.setArrivalCallback((station, index, total) => {
       this.hud.showToast(station.name, `Station ${index + 1} of ${total}`);
+      this.sound.playStationChime();
       const { boarded, alighted } = this.passengerSystem.handleStationStop(station);
       this.hud.setPassengerCount(this.passengerSystem.getOnboardCount());
       console.log(`[Game] Station ${station.name}: ${alighted} alighted, ${boarded} boarded`);
@@ -129,7 +133,23 @@ export class Game {
         this.hud.setCameraLabel(this.cameraController.getModeLabel());
       },
       onDoorsToggle: () => this.toggleDoors(),
+      onReverse: () => this.reverseDirection(),
+      onHorn: () => { this.sound.unlock(); this.sound.playHorn(); },
+      onMuteToggle: () => {
+        const muted = this.sound.toggleMute();
+        this.hud.setMuteState(muted);
+      },
+      onStationSelect: (lineIdx, stationIdx, dir) => this.goToStation(lineIdx, stationIdx, dir),
+      onDirectionChange: (dir) => this.setDirectionExplicit(dir),
     });
+
+    const unlockAudio = () => {
+      this.sound.unlock();
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+    };
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('keydown', unlockAudio);
 
     window.addEventListener('resize', () => this.onResize());
 
@@ -406,6 +426,7 @@ export class Game {
       this.updateTrain();
       this.updateTiles();
       this.updateStations(dt);
+      this.updateAudio();
       this.updateCamera(dt);
       this.updateDebug(dt);
       this.render();
@@ -428,16 +449,11 @@ export class Game {
     }
 
     if (this.input.wasJustPressed('reverse')) {
-      this.direction *= -1;
-      const ls = this.lines[this.currentLineIdx];
-      if (ls) {
-        const stations = ls.parsed.stations;
-        const terminalName = this.direction === 1
-          ? stations[stations.length - 1].name
-          : stations[0].name;
-        this.hud.setDirection(terminalName);
-        this.train.rebuild(ls.parsed.color, this.direction);
-      }
+      this.reverseDirection();
+    }
+
+    if (this.input.wasJustPressed('horn')) {
+      this.sound.playHorn();
     }
 
     const lineActions = [
@@ -558,7 +574,70 @@ export class Game {
   private toggleDoors(): void {
     if (this.trainSpeed < 0.5) {
       this.doorsOpen = !this.doorsOpen;
+      if (this.doorsOpen) {
+        this.sound.playDoorOpen();
+      } else {
+        this.sound.playDoorClose();
+      }
     }
+  }
+
+  private reverseDirection(): void {
+    this.setDirectionExplicit(this.direction * -1);
+  }
+
+  private setDirectionExplicit(dir: number): void {
+    this.direction = dir;
+    const ls = this.lines[this.currentLineIdx];
+    if (ls) {
+      const stations = ls.parsed.stations;
+      const terminalName = this.direction === 1
+        ? stations[stations.length - 1].name
+        : stations[0].name;
+      this.hud.setDirection(terminalName);
+      this.train.rebuild(ls.parsed.color, this.direction);
+    }
+  }
+
+  goToStation(lineIdx: number, stationIdx: number, dir: number): void {
+    if (lineIdx !== this.currentLineIdx) {
+      this.selectLine(lineIdx);
+    }
+    const ls = this.lines[this.currentLineIdx];
+    if (!ls) return;
+
+    const stations = ls.parsed.stations;
+    if (stationIdx < 0 || stationIdx >= stations.length) return;
+
+    this.trainDist = ls.track.stationDists[stationIdx] + 10;
+    this.trainSpeed = 0;
+    this.direction = dir;
+    this.doorsOpen = false;
+    this.stationManager.reset();
+
+    this.train.rebuild(ls.parsed.color, this.direction);
+    const terminalName = this.direction === 1
+      ? stations[stations.length - 1].name
+      : stations[0].name;
+    this.hud.setDirection(terminalName);
+
+    const st = stations[stationIdx];
+    this.cameraController.resetSmoothing(
+      st.lat, st.lng,
+      stationIdx < stations.length - 1
+        ? bearing(st.lat, st.lng, stations[stationIdx + 1].lat, stations[stationIdx + 1].lng)
+        : this.lastTrainPos.bearing,
+    );
+
+    this.tileManager.resetForLineSwitch(st.lat, st.lng);
+    this.hud.showToast(st.name, `Station ${stationIdx + 1} of ${stations.length}`);
+  }
+
+  private updateAudio(): void {
+    const throttle = this.input.isHeld('accelerate') && !this.doorsOpen;
+    const braking = this.input.isHeld('brake');
+    const emergency = this.input.isHeld('emergency');
+    this.sound.update(this.trainSpeed, throttle, braking, emergency);
   }
 
   private onResize(): void {
@@ -626,6 +705,7 @@ export class Game {
       (this.corridorDebugMesh.material as THREE.Material).dispose();
     }
     this.tileManager.dispose();
+    this.sound.dispose();
     this.input.dispose();
     this.passengerSystem.dispose();
     this.debug.dispose();

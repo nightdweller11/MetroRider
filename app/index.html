@@ -48,18 +48,30 @@
       <div class="hud-station" id="hud-station"></div>
 
       <div class="hud-controls">
-        <div class="ctrl-btn accel" id="btn-accel">&#9650;</div>
-        <div class="ctrl-btn" id="btn-brake">&#9660;</div>
-        <div class="ctrl-btn" id="btn-doors">&#8863;</div>
+        <div class="ctrl-col">
+          <div class="ctrl-btn accel" id="btn-accel">&#9650;</div>
+          <div class="ctrl-btn" id="btn-brake">&#9660;</div>
+        </div>
+        <div class="ctrl-col">
+          <div class="ctrl-btn" id="btn-horn">&#128227;</div>
+          <div class="ctrl-btn" id="btn-reverse">&#8634;</div>
+        </div>
+        <div class="ctrl-col">
+          <div class="ctrl-btn" id="btn-doors">&#8863;</div>
+        </div>
       </div>
 
       <div class="hud-camera">
         <div class="camera-pill" id="btn-camera">
           <span id="cam-label">CAB VIEW</span> &middot; <kbd>C</kbd>
         </div>
+        <div class="camera-pill mute-pill" id="btn-mute">
+          <span id="mute-icon">&#128266;</span>
+        </div>
       </div>
 
       <div class="hud-lines" id="hud-lines"></div>
+      <div class="station-picker hidden" id="station-picker"></div>
 
       <div class="hud-keys">
         <kbd>W</kbd> / <kbd>&uarr;</kbd> Accelerate<br>
@@ -68,6 +80,7 @@
         <kbd>D</kbd> Open/close doors<br>
         <kbd>C</kbd> Camera mode<br>
         <kbd>R</kbd> Reverse direction<br>
+        <kbd>H</kbd> Horn<br>
         <kbd>1</kbd>&ndash;<kbd>9</kbd> Switch line
       </div>
 

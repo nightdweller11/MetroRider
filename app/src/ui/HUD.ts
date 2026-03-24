@@ -1,5 +1,4 @@
 import type { ParsedLine } from '@/data/RouteParser';
-import type { CameraMode } from '@/camera/CameraController';
 
 export class HUD {
   private speedNum: HTMLElement;
@@ -15,6 +14,11 @@ export class HUD {
   private accelBtn: HTMLElement;
   private brakeBtn: HTMLElement;
   private doorsBtn: HTMLElement;
+  private reverseBtn: HTMLElement;
+  private hornBtn: HTMLElement;
+  private muteBtn: HTMLElement;
+  private muteIcon: HTMLElement;
+  private stationPicker: HTMLElement;
   private toastContainer: HTMLElement;
   private toastTimeout: ReturnType<typeof setTimeout> | null = null;
   private currentToast: HTMLElement | null = null;
@@ -22,6 +26,15 @@ export class HUD {
   private onLineSelect: ((idx: number) => void) | null = null;
   private onCameraToggle: (() => void) | null = null;
   private onDoorsToggle: (() => void) | null = null;
+  private onReverse: (() => void) | null = null;
+  private onHorn: (() => void) | null = null;
+  private onMuteToggle: (() => void) | null = null;
+  private onStationSelect: ((lineIdx: number, stationIdx: number, direction: number) => void) | null = null;
+  private onDirectionChange: ((direction: number) => void) | null = null;
+
+  private parsedLines: ParsedLine[] = [];
+  private activeLineIdx = 0;
+  private pickerOpen = false;
 
   constructor() {
     this.speedNum = this.el('speed-num');
@@ -37,10 +50,22 @@ export class HUD {
     this.accelBtn = this.el('btn-accel');
     this.brakeBtn = this.el('btn-brake');
     this.doorsBtn = this.el('btn-doors');
+    this.reverseBtn = this.el('btn-reverse');
+    this.hornBtn = this.el('btn-horn');
+    this.muteBtn = this.el('btn-mute');
+    this.muteIcon = this.el('mute-icon');
+    this.stationPicker = this.el('station-picker');
     this.toastContainer = this.el('toast-container');
 
     this.el('btn-camera').addEventListener('click', () => this.onCameraToggle?.());
     this.doorsBtn.addEventListener('click', () => this.onDoorsToggle?.());
+    this.reverseBtn.addEventListener('click', () => this.onReverse?.());
+    this.muteBtn.addEventListener('click', () => this.onMuteToggle?.());
+
+    this.hornBtn.addEventListener('mousedown', () => this.onHorn?.());
+    this.hornBtn.addEventListener('mouseup', () => {});
+    this.hornBtn.addEventListener('touchstart', (e) => { e.preventDefault(); this.onHorn?.(); });
+    this.hornBtn.addEventListener('touchend', (e) => { e.preventDefault(); });
 
     this.el('btn-change-map').addEventListener('click', () => {
       const showSelector = (window as unknown as Record<string, unknown>).__showMapSelector;
@@ -79,10 +104,20 @@ export class HUD {
     onLineSelect: (idx: number) => void;
     onCameraToggle: () => void;
     onDoorsToggle: () => void;
+    onReverse: () => void;
+    onHorn: () => void;
+    onMuteToggle: () => void;
+    onStationSelect: (lineIdx: number, stationIdx: number, direction: number) => void;
+    onDirectionChange: (direction: number) => void;
   }): void {
     this.onLineSelect = opts.onLineSelect;
     this.onCameraToggle = opts.onCameraToggle;
     this.onDoorsToggle = opts.onDoorsToggle;
+    this.onReverse = opts.onReverse;
+    this.onHorn = opts.onHorn;
+    this.onMuteToggle = opts.onMuteToggle;
+    this.onStationSelect = opts.onStationSelect;
+    this.onDirectionChange = opts.onDirectionChange;
   }
 
   show(): void {
@@ -93,7 +128,13 @@ export class HUD {
     this.hudEl.classList.add('hidden');
   }
 
+  setMuteState(muted: boolean): void {
+    this.muteIcon.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
+    this.muteBtn.classList.toggle('active', muted);
+  }
+
   buildLineSelector(lines: ParsedLine[]): void {
+    this.parsedLines = lines;
     this.linesContainer.innerHTML = '';
     lines.forEach((line, i) => {
       const btn = document.createElement('div');
@@ -101,12 +142,21 @@ export class HUD {
       btn.style.setProperty('--lc', line.color);
       btn.dataset.idx = String(i);
       btn.innerHTML = `<span class="dot" style="background:${line.color}"></span>${line.name}`;
-      btn.addEventListener('click', () => this.onLineSelect?.(i));
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (this.activeLineIdx === i && this.pickerOpen) {
+          this.closeStationPicker();
+        } else {
+          this.onLineSelect?.(i);
+          this.openStationPicker(i);
+        }
+      });
       this.linesContainer.appendChild(btn);
     });
   }
 
   setActiveLine(idx: number, line: ParsedLine, terminalName: string): void {
+    this.activeLineIdx = idx;
     this.lineNameEl.textContent = line.name;
     this.lineDotEl.style.color = line.color;
     this.directionEl.textContent = `\u2192 ${terminalName}`;
@@ -118,6 +168,75 @@ export class HUD {
   setDirection(terminalName: string): void {
     this.directionEl.textContent = `\u2192 ${terminalName}`;
   }
+
+  // ── Station Picker ─────────────────────────────────────────────────
+
+  private openStationPicker(lineIdx: number): void {
+    const line = this.parsedLines[lineIdx];
+    if (!line || line.stations.length < 2) return;
+
+    this.pickerOpen = true;
+    this.activeLineIdx = lineIdx;
+    const stations = line.stations;
+    const firstTerminal = stations[0].name;
+    const lastTerminal = stations[stations.length - 1].name;
+
+    let html = `<div class="sp-header" style="border-left: 3px solid ${line.color}">
+      <span class="sp-title">${line.name}</span>
+      <button class="sp-close" id="sp-close">&times;</button>
+    </div>`;
+
+    html += `<div class="sp-direction">
+      <button class="sp-dir-btn sp-dir-active" data-dir="1">\u2192 ${lastTerminal}</button>
+      <button class="sp-dir-btn" data-dir="-1">\u2190 ${firstTerminal}</button>
+    </div>`;
+
+    html += `<div class="sp-stations">`;
+    stations.forEach((st, i) => {
+      html += `<div class="sp-station" data-idx="${i}">
+        <span class="sp-dot" style="background:${line.color}"></span>
+        <span class="sp-name">${st.name}</span>
+      </div>`;
+    });
+    html += `</div>`;
+
+    this.stationPicker.innerHTML = html;
+    this.stationPicker.classList.remove('hidden');
+
+    let currentDir = 1;
+
+    this.stationPicker.querySelector('#sp-close')?.addEventListener('click', () => {
+      this.closeStationPicker();
+    });
+
+    this.stationPicker.querySelectorAll('.sp-dir-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const newDir = parseInt((btn as HTMLElement).dataset.dir ?? '1', 10);
+        if (newDir !== currentDir) {
+          currentDir = newDir;
+          this.stationPicker.querySelectorAll('.sp-dir-btn').forEach(b =>
+            b.classList.toggle('sp-dir-active', b === btn));
+          this.onDirectionChange?.(currentDir);
+        }
+      });
+    });
+
+    this.stationPicker.querySelectorAll('.sp-station').forEach((el) => {
+      el.addEventListener('click', () => {
+        const stIdx = parseInt((el as HTMLElement).dataset.idx ?? '0', 10);
+        this.onStationSelect?.(lineIdx, stIdx, currentDir);
+        this.closeStationPicker();
+      });
+    });
+  }
+
+  private closeStationPicker(): void {
+    this.pickerOpen = false;
+    this.stationPicker.classList.add('hidden');
+    this.stationPicker.innerHTML = '';
+  }
+
+  // ── Speed / Station / Controls ─────────────────────────────────────
 
   updateSpeed(speedMs: number, lineColor: string): void {
     const kmh = Math.round(speedMs * 3.6);
@@ -197,10 +316,6 @@ export class HUD {
     banner.innerHTML = `
       <div style="color:#ff6666;font-size:14px;font-weight:600;margin-bottom:8px;">Tile Loading Failed</div>
       <div style="color:#aaa;font-size:12px;line-height:1.6;">${message}</div>
-      <div style="color:#666;font-size:11px;margin-top:12px;">
-        The game engine is running &mdash; controls, HUD, and physics are all active.<br>
-        Fix the API key to see photorealistic 3D tiles.
-      </div>
     `;
   }
 }
