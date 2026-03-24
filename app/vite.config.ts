@@ -11,10 +11,6 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
-      '/api/tiles': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
       '/api/metrodreamin': {
         target: 'https://metrodreamin.com',
         changeOrigin: true,

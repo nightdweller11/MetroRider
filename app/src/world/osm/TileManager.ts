@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { OSMData, OSMElement, OSMNode, OSMWay } from './OSMFetcher';
+import { ClientOverpassFetcher } from './ClientOverpassFetcher';
 import { LocalProjection } from './LocalProjection';
 import { generateBuildings, type BuildingClearingStats } from './BuildingGenerator';
 import { generateRoads } from './RoadGenerator';
@@ -7,7 +8,6 @@ import { generateVegetation } from './VegetationGenerator';
 import { generateGroundPlane } from './GroundPlane';
 import { generateStreetLabels } from './StreetLabelGenerator';
 import {
-  TILE_SIZE_DEG,
   LOAD_RADIUS,
   UNLOAD_RADIUS,
   UPDATE_INTERVAL_MS,
@@ -17,15 +17,6 @@ import {
 } from './tileConfig';
 
 type CorridorSegment = { x1: number; z1: number; x2: number; z2: number };
-
-interface TileAPIResponse {
-  tileX: number;
-  tileY: number;
-  bbox: { south: number; west: number; north: number; east: number };
-  data: OSMElement[];
-  cachedAt: number;
-  error?: string;
-}
 
 export interface LoadedTile {
   tileX: number;
@@ -45,7 +36,6 @@ export interface TileManagerStats {
 const enum Priority {
   URGENT = 0,
   NORMAL = 1,
-  PREWARM = 2,
 }
 
 interface QueueEntry {
@@ -56,6 +46,7 @@ interface QueueEntry {
 
 const MAX_TILE_RETRIES = 3;
 const RETRY_DELAY_MS = 3000;
+const MAX_CONCURRENT = 4;
 
 function parseOSMElements(elements: OSMElement[]): OSMData {
   const nodeMap = new Map<number, OSMNode>();
@@ -103,6 +94,7 @@ export class TileManager {
   private scene: THREE.Scene;
   readonly projection: LocalProjection;
   private worldGroup: THREE.Group;
+  private fetcher: ClientOverpassFetcher;
   private loadedTiles = new Map<string, LoadedTile>();
   private inFlightKeys = new Set<string>();
   private failCounts = new Map<string, number>();
@@ -111,17 +103,14 @@ export class TileManager {
   private lastTileY = NaN;
   private corridorSegments: CorridorSegment[] = [];
   private disposed = false;
-  private apiBase = '/api/tiles';
 
-  // Priority queue: sorted by priority then distance
   private queue: QueueEntry[] = [];
-  private maxConcurrent = 6;
   private activeWorkers = 0;
-  private workerRunning = false;
 
   constructor(scene: THREE.Scene, centerLat: number, centerLng: number) {
     this.scene = scene;
     this.projection = new LocalProjection(centerLat, centerLng);
+    this.fetcher = new ClientOverpassFetcher();
     this.worldGroup = new THREE.Group();
     this.worldGroup.name = 'osm-world';
     this.scene.add(this.worldGroup);
@@ -158,11 +147,6 @@ export class TileManager {
     return this.queue.length > 0 || this.inFlightKeys.size > 0;
   }
 
-  /**
-   * Called when switching to a new line. Drops all pending
-   * lower-priority work and forces immediate loading around the
-   * given location.
-   */
   resetForLineSwitch(lat: number, lng: number): void {
     if (this.disposed) return;
 
@@ -198,7 +182,6 @@ export class TileManager {
     this.lastTileY = tileY;
     this.lastUpdateTime = now;
 
-    // Enqueue needed tiles with URGENT priority
     for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
       for (let dy = -LOAD_RADIUS; dy <= LOAD_RADIUS; dy++) {
         const dist = Math.abs(dx) + Math.abs(dy);
@@ -206,12 +189,8 @@ export class TileManager {
       }
     }
 
-    // Re-sort the queue every update so that tiles closest to the
-    // *current* train position always win regardless of when they
-    // were originally enqueued.
     this.resortQueue();
 
-    // Unload far-away tiles
     const toUnload: string[] = [];
     for (const [key, tile] of this.loadedTiles) {
       const dx = Math.abs(tile.tileX - tileX);
@@ -235,20 +214,16 @@ export class TileManager {
     this.lastTileY = tileY;
     this.lastUpdateTime = Date.now();
 
-    // Enqueue center tile as URGENT, immediate neighbours as URGENT,
-    // rest as NORMAL.
     for (let dx = -LOAD_RADIUS; dx <= LOAD_RADIUS; dx++) {
       for (let dy = -LOAD_RADIUS; dy <= LOAD_RADIUS; dy++) {
         const dist = Math.abs(dx) + Math.abs(dy);
-        this.enqueue(tileX + dx, tileY + dy, dist <= 1 ? Priority.URGENT : Priority.NORMAL);
+        this.enqueue(tileX + dx, tileY + dy, dist <= 2 ? Priority.URGENT : Priority.NORMAL);
       }
     }
 
     this.resortQueue();
     console.log(`[TileManager] Initial queue: ${this.queue.length} tiles`);
 
-    // Wait only for the center tile to appear before returning control
-    // to the game loop (everything else loads in the background).
     const centerKey = tileKey(tileX, tileY);
     await new Promise<void>((resolve) => {
       const check = () => {
@@ -262,32 +237,12 @@ export class TileManager {
     });
   }
 
-  // ── Pre-warm tiles along the track path ─────────────────────────────
-
-  prewarmTrackTiles(trackPoints: [number, number][]): void {
-    const seen = new Set<string>();
-    for (const [lng, lat] of trackPoints) {
-      const { tileX, tileY } = tileCoord(lat, lng);
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const key = tileKey(tileX + dx, tileY + dy);
-          if (!seen.has(key)) {
-            seen.add(key);
-            this.enqueue(tileX + dx, tileY + dy, Priority.PREWARM);
-          }
-        }
-      }
-    }
-    console.log(`[TileManager] Prewarm: ${seen.size} track tiles queued`);
-  }
-
   // ── Queue management ────────────────────────────────────────────────
 
   private enqueue(x: number, y: number, priority: Priority): void {
     const key = tileKey(x, y);
     if (this.loadedTiles.has(key) || this.inFlightKeys.has(key)) return;
 
-    // Check if already in queue – upgrade priority if needed
     const idx = this.queue.findIndex(e => e.x === x && e.y === y);
     if (idx >= 0) {
       if (priority < this.queue[idx].priority) {
@@ -309,10 +264,11 @@ export class TileManager {
       const db = Math.abs(b.x - cx) + Math.abs(b.y - cy);
       return da - db;
     });
+    this.pumpWorkers();
   }
 
   private pumpWorkers(): void {
-    while (this.activeWorkers < this.maxConcurrent && this.queue.length > 0) {
+    while (this.activeWorkers < MAX_CONCURRENT && this.queue.length > 0) {
       const entry = this.queue.shift()!;
       const key = tileKey(entry.x, entry.y);
 
@@ -332,21 +288,11 @@ export class TileManager {
 
   private async fetchAndRender(x: number, y: number, key: string): Promise<void> {
     try {
-      const response = await fetch(`${this.apiBase}/${x}/${y}`);
-      if (!response.ok) {
-        console.error(`[TileManager] ${key} HTTP ${response.status}`);
-        this.scheduleRetry(x, y, key);
-        return;
-      }
-
-      const result: TileAPIResponse = await response.json();
-      if (this.disposed || result.error) {
-        if (result.error) this.scheduleRetry(x, y, key);
-        return;
-      }
+      const elements = await this.fetcher.fetchTile(x, y);
+      if (this.disposed) return;
       if (this.loadedTiles.has(key)) return;
 
-      const osmData = parseOSMElements(result.data);
+      const osmData = parseOSMElements(elements);
       const group = this.buildTileGroup(x, y, osmData);
 
       this.loadedTiles.set(key, { tileX: x, tileY: y, group, osmData, loadedAt: Date.now() });

@@ -296,11 +296,6 @@ export class Game {
       console.error(`[Game] Phase 3 FAILED: ${msg}`, err);
     }
 
-    // Pre-warm tiles along all track paths (background, fire-and-forget)
-    for (const ls of this.lines) {
-      this.tileManager.prewarmTrackTiles(ls.track.spline.points);
-    }
-
     this.hud.buildLineSelector(parsed);
     this.selectLine(0);
     this.hud.show();

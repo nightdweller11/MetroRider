@@ -3,7 +3,7 @@ export const TILE_SIZE_DEG = 0.01;
 export const LOAD_RADIUS = 3;
 export const UNLOAD_RADIUS = 5;
 
-export const UPDATE_INTERVAL_MS = 2000;
+export const UPDATE_INTERVAL_MS = 500;
 
 export function tileCoord(lat: number, lng: number): { tileX: number; tileY: number } {
   return {
