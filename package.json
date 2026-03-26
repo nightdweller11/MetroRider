@@ -3,10 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "npm run dev:server & npm run dev:client",
-    "dev:server": "cd server && npm run dev",
-    "dev:client": "cd app && npm run dev",
-    "build": "cd app && npm install --include=dev && npm run build && cd ../server && npm install --include=dev && npm run build",
-    "start": "node server/dist/index.js"
+    "dev": "cd streets-gl && npm run dev:server & cd streets-gl && npm run dev",
+    "build": "cd streets-gl && npm install --include=dev && npm run build:all",
+    "start": "node streets-gl/server/dist/index.js"
   }
 }

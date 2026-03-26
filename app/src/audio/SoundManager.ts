@@ -1,10 +1,29 @@
+/**
+ * Open-source / free sound asset sources:
+ *
+ * - Wikimedia Commons   https://commons.wikimedia.org  (CC0 / CC-BY-SA, real recordings)
+ * - OpenGameArt          https://opengameart.org        (CC0 / CC-BY / GPL, game-ready assets)
+ * - Freesound            https://freesound.org          (CC0 / CC-BY, requires free account to download)
+ * - Pixabay              https://pixabay.com/sound-effects  (royalty-free, no attribution required)
+ * - Sonniss GDC Bundle    https://sonniss.com/gameaudiogdc  (royalty-free yearly bundle, hundreds of GB)
+ * - Kenney               https://kenney.nl/assets       (CC0, game-oriented packs)
+ * - Zapsplat             https://zapsplat.com           (free tier with attribution, large library)
+ * - BBC Sound Effects     https://sound-effects.bbcrewind.co.uk  (personal/educational/research use)
+ * - Internet Archive      https://archive.org/details/audio  (public domain collections)
+ *
+ * Current horn: Tokyo Metro 6000 series from Wikimedia Commons (CC).
+ * Alternatives in /audio/: jp-horn.mp3, kawasaki-horn.mp3
+ */
+
 const MAX_SPEED_REF = 55;
+const HORN_URL = '/audio/metro-horn.mp3';
 
 export class SoundManager {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private muted = false;
   private unlocked = false;
+  private hornBuffer: AudioBuffer | null = null;
 
   // Electric traction motor (VVVF inverter whine)
   private tractionOsc1: OscillatorNode | null = null;
@@ -40,11 +59,27 @@ export class SoundManager {
       this.masterGain.gain.value = this.muted ? 0 : 1;
       this.masterGain.connect(this.ctx.destination);
       this.startContinuousLayers();
+      this.loadHornSample();
       this.unlocked = true;
       console.log('[SoundManager] Audio context unlocked');
     } catch (err) {
       console.error('[SoundManager] Failed to create AudioContext:', err);
     }
+  }
+
+  private loadHornSample(): void {
+    if (!this.ctx) return;
+    fetch(HORN_URL)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then(buf => this.ctx!.decodeAudioData(buf))
+      .then(decoded => {
+        this.hornBuffer = decoded;
+        console.log(`[SoundManager] Horn sample loaded (${decoded.duration.toFixed(1)}s)`);
+      })
+      .catch(err => console.error('[SoundManager] Failed to load horn sample:', err));
   }
 
   update(speed: number, throttle: boolean, braking: boolean, emergency: boolean): void {
@@ -65,63 +100,18 @@ export class SoundManager {
 
   playHorn(): void {
     if (!this.ctx || !this.masterGain) return;
-    const t = this.ctx.currentTime;
-    const duration = 2.0;
 
-    // Train horns use multiple low-frequency tones (typically 3-5 notes)
-    // Common chord: Eb4, Gb4, Ab4, Bb4 ~ 311, 370, 415, 466 Hz
-    const hornFreqs = [185, 233, 277, 311];
-
-    for (const freq of hornFreqs) {
-      const osc = this.ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = freq;
-
-      // Second detuned oscillator for thickness
-      const osc2 = this.ctx.createOscillator();
-      osc2.type = 'sawtooth';
-      osc2.frequency.value = freq * 1.003;
-
+    if (this.hornBuffer) {
+      const src = this.ctx.createBufferSource();
+      src.buffer = this.hornBuffer;
       const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(0, t);
-      gain.gain.linearRampToValueAtTime(0.06, t + 0.08);
-      gain.gain.setValueAtTime(0.06, t + duration - 0.3);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-
-      // Resonant lowpass to shape the brassy timbre
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.value = 800;
-      filter.Q.value = 3;
-
-      osc.connect(filter);
-      osc2.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain!);
-      osc.start(t);
-      osc2.start(t);
-      osc.stop(t + duration);
-      osc2.stop(t + duration);
+      gain.gain.value = 0.7;
+      src.connect(gain);
+      gain.connect(this.masterGain);
+      src.start();
+    } else {
+      console.warn('[SoundManager] Horn sample not loaded yet');
     }
-
-    // Add a resonant body: filtered noise for air blast
-    const noiseBuf = this.createNoiseBuffer(duration);
-    const noiseSrc = this.ctx.createBufferSource();
-    noiseSrc.buffer = noiseBuf;
-    const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0, t);
-    noiseGain.gain.linearRampToValueAtTime(0.015, t + 0.1);
-    noiseGain.gain.setValueAtTime(0.015, t + duration - 0.3);
-    noiseGain.gain.linearRampToValueAtTime(0, t + duration);
-    const noiseFilter = this.ctx.createBiquadFilter();
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 500;
-    noiseFilter.Q.value = 1;
-    noiseSrc.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(this.masterGain!);
-    noiseSrc.start(t);
-    noiseSrc.stop(t + duration);
   }
 
   playDoorOpen(): void {

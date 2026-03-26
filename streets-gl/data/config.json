@@ -1,0 +1,15 @@
+{
+  "trainModel": "procedural-default",
+  "trackModel": "procedural-default",
+  "stationModel": "procedural-default",
+  "carCount": 3,
+  "sounds": {
+    "horn": "metro-horn",
+    "engine": "procedural",
+    "rail": "procedural",
+    "wind": "procedural",
+    "brake": "procedural",
+    "doorChime": "procedural",
+    "stationChime": "procedural"
+  }
+}

@@ -1,0 +1,330 @@
+{
+  "models": {
+    "trains": [
+      {
+        "id": "procedural-default",
+        "name": "Default (Procedural)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      },
+      {
+        "id": "kenney-subway-a",
+        "name": "Subway Train (Front)",
+        "path": "models/trains/train-electric-subway-a.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-subway-b",
+        "name": "Subway Train (Middle)",
+        "path": "models/trains/train-electric-subway-b.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-subway-c",
+        "name": "Subway Train (Rear)",
+        "path": "models/trains/train-electric-subway-c.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-city-a",
+        "name": "City Train (Front)",
+        "path": "models/trains/train-electric-city-a.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-city-b",
+        "name": "City Train (Middle)",
+        "path": "models/trains/train-electric-city-b.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-city-c",
+        "name": "City Train (Rear)",
+        "path": "models/trains/train-electric-city-c.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-bullet-a",
+        "name": "Bullet Train (Front)",
+        "path": "models/trains/train-electric-bullet-a.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-bullet-b",
+        "name": "Bullet Train (Middle)",
+        "path": "models/trains/train-electric-bullet-b.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-bullet-c",
+        "name": "Bullet Train (Rear)",
+        "path": "models/trains/train-electric-bullet-c.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-double-a",
+        "name": "Double-Decker (Front)",
+        "path": "models/trains/train-electric-double-a.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-double-b",
+        "name": "Double-Decker (Middle)",
+        "path": "models/trains/train-electric-double-b.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-double-c",
+        "name": "Double-Decker (Rear)",
+        "path": "models/trains/train-electric-double-c.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-square-a",
+        "name": "Square Metro (Front)",
+        "path": "models/trains/train-electric-square-a.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-square-b",
+        "name": "Square Metro (Middle)",
+        "path": "models/trains/train-electric-square-b.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-square-c",
+        "name": "Square Metro (Rear)",
+        "path": "models/trains/train-electric-square-c.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-tram-classic",
+        "name": "Classic Tram",
+        "path": "models/trains/train-tram-classic.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-tram-modern",
+        "name": "Modern Tram",
+        "path": "models/trains/train-tram-modern.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-tram-round",
+        "name": "Round Tram",
+        "path": "models/trains/train-tram-round.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-diesel-a",
+        "name": "Diesel Locomotive (Front)",
+        "path": "models/trains/train-diesel-a.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-diesel-b",
+        "name": "Diesel Locomotive (Middle)",
+        "path": "models/trains/train-diesel-b.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-diesel-c",
+        "name": "Diesel Locomotive (Rear)",
+        "path": "models/trains/train-diesel-c.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "uploaded-2d0a6c5a",
+        "name": "bombardier_s_train_carriage_-_london_underground",
+        "path": "models/trains/8ad982e3-1bfc-44a0-943f-fdab823b6ce2.glb",
+        "type": "gltf",
+        "source": "User Upload",
+        "uploaded": true
+      },
+      {
+        "id": "uploaded-23e553f9",
+        "name": "high-speed_train",
+        "path": "models/trains/a77944b2-3b61-44a4-acc6-6494f922b27a.glb",
+        "type": "gltf",
+        "source": "User Upload",
+        "uploaded": true
+      },
+      {
+        "id": "uploaded-44228de4",
+        "name": "train_-_intercity_125_executive_with_buffers",
+        "path": "models/trains/651c32eb-717c-44f6-99be-878908b404d7.glb",
+        "type": "gltf",
+        "source": "User Upload",
+        "uploaded": true
+      }
+    ],
+    "tracks": [
+      {
+        "id": "procedural-default",
+        "name": "Default (Procedural)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      },
+      {
+        "id": "kenney-track",
+        "name": "Track",
+        "path": "models/tracks/track.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-track-detailed",
+        "name": "Track (Detailed)",
+        "path": "models/tracks/track-detailed.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-track-rail",
+        "name": "Track Rail",
+        "path": "models/tracks/track-rail.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-track-segment",
+        "name": "Track Segment",
+        "path": "models/tracks/track-segment.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-track-single",
+        "name": "Single Track",
+        "path": "models/tracks/track-single.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      },
+      {
+        "id": "kenney-track-single-detailed",
+        "name": "Single Track (Detailed)",
+        "path": "models/tracks/track-single-detailed.glb",
+        "type": "gltf",
+        "source": "Kenney Train Kit (CC0)"
+      }
+    ],
+    "stations": [
+      {
+        "id": "procedural-default",
+        "name": "Default (Procedural)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ]
+  },
+  "sounds": {
+    "horn": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      },
+      {
+        "id": "metro-horn",
+        "name": "Tokyo Metro Horn",
+        "path": "sounds/horns/metro-horn.mp3",
+        "type": "sample",
+        "source": "Wikimedia Commons"
+      },
+      {
+        "id": "jp-horn",
+        "name": "Japanese Train Horn",
+        "path": "sounds/horns/jp-horn.mp3",
+        "type": "sample",
+        "source": "Wikimedia Commons"
+      },
+      {
+        "id": "kawasaki-horn",
+        "name": "Kawasaki Horn",
+        "path": "sounds/horns/kawasaki-horn.mp3",
+        "type": "sample",
+        "source": "Wikimedia Commons"
+      }
+    ],
+    "engine": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ],
+    "rail": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ],
+    "wind": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ],
+    "brake": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ],
+    "doorChime": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ],
+    "stationChime": [
+      {
+        "id": "procedural",
+        "name": "Procedural (Synthesized)",
+        "path": null,
+        "type": "procedural",
+        "source": "Built-in"
+      }
+    ]
+  }
+}
