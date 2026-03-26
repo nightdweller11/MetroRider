@@ -36,6 +36,124 @@ app.get('/api/admin/verify', (req, res) => {
 
 app.use('/data/assets', express.static(path.join(DATA_DIR, 'assets')));
 
+app.get('/api/metrodreamin/user/:userId', (req, res) => {
+	const userId = req.params.userId;
+	const pageSize = Math.min(parseInt(req.query.limit as string) || 200, 500);
+	console.log(`[Server] MetroDreamin user: fetching maps for ${userId} (limit=${pageSize})`);
+
+	const firestoreUrl = 'https://firestore.googleapis.com/v1/projects/metrodreamin/databases/(default)/documents:runQuery';
+	const query = JSON.stringify({
+		structuredQuery: {
+			from: [{collectionId: 'systems'}],
+			where: {
+				compositeFilter: {
+					op: 'AND',
+					filters: [
+						{fieldFilter: {field: {fieldPath: 'userId'}, op: 'EQUAL', value: {stringValue: userId}}},
+						{fieldFilter: {field: {fieldPath: 'isPrivate'}, op: 'EQUAL', value: {booleanValue: false}}},
+					],
+				},
+			},
+			orderBy: [{field: {fieldPath: 'lastUpdated'}, direction: 'DESCENDING'}],
+			limit: pageSize,
+		},
+	});
+
+	const userPageUrl = `https://metrodreamin.com/user/${userId}`;
+
+	const fetchUsername = new Promise<string>((resolve) => {
+		https.get(userPageUrl, {
+			headers: {
+				'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+				'Accept': 'text/html',
+			},
+		}, (proxyRes) => {
+			if (proxyRes.statusCode && proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+				resolve('Unknown User');
+				proxyRes.resume();
+				return;
+			}
+			const chunks: Buffer[] = [];
+			proxyRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+			proxyRes.on('end', () => {
+				try {
+					const html = Buffer.concat(chunks).toString('utf-8');
+					const ndIdx = html.indexOf('__NEXT_DATA__');
+					if (ndIdx < 0) { resolve('Unknown User'); return; }
+					const startTag = html.indexOf('>', ndIdx) + 1;
+					const endTag = html.indexOf('</script>', startTag);
+					const data = JSON.parse(html.substring(startTag, endTag));
+					resolve(data?.props?.pageProps?.userDocData?.displayName || 'Unknown User');
+				} catch {
+					resolve('Unknown User');
+				}
+			});
+		}).on('error', () => resolve('Unknown User'));
+	});
+
+	const postData = Buffer.from(query, 'utf-8');
+
+	const fsReq = https.request({
+		hostname: 'firestore.googleapis.com',
+		path: '/v1/projects/metrodreamin/databases/(default)/documents:runQuery',
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			'Content-Length': postData.length,
+		},
+	}, (fsRes) => {
+		const chunks: Buffer[] = [];
+		fsRes.on('data', (chunk: Buffer) => chunks.push(chunk));
+		fsRes.on('end', () => {
+			try {
+				const body = Buffer.concat(chunks).toString('utf-8');
+				const results = JSON.parse(body);
+
+				if (!Array.isArray(results)) {
+					console.error('[Server] Firestore query returned non-array:', body.substring(0, 200));
+					res.status(502).json({error: 'Firestore query failed'});
+					return;
+				}
+
+				const maps = results
+					.filter((r: any) => r.document)
+					.map((r: any) => {
+						const f = r.document.fields || {};
+						return {
+							id: f.systemId?.stringValue || '',
+							title: f.title?.stringValue || 'Untitled',
+							numLines: parseInt(f.numLines?.integerValue || '0', 10),
+							numStations: parseInt(f.numStations?.integerValue || '0', 10),
+						};
+					})
+					.filter((m: any) => m.id);
+
+				fetchUsername.then((username) => {
+					console.log(`[Server] MetroDreamin user "${username}": returning ${maps.length} maps`);
+					res.json({username, maps});
+				});
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				console.error(`[Server] Firestore parse error: ${msg}`);
+				res.status(502).json({error: 'Failed to parse Firestore response'});
+			}
+		});
+	});
+
+	fsReq.on('error', (err) => {
+		console.error(`[Server] Firestore request error: ${err.message}`);
+		res.status(502).json({error: 'Firestore request failed', detail: err.message});
+	});
+
+	fsReq.setTimeout(20000, () => {
+		fsReq.destroy();
+		res.status(504).json({error: 'Firestore request timeout'});
+	});
+
+	fsReq.write(postData);
+	fsReq.end();
+});
+
 app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 	const systemId = req.params.systemId;
 	const targetUrl = `https://metrodreamin.com/view/${systemId}`;

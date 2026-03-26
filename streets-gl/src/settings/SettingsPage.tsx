@@ -54,13 +54,6 @@ function getAdminToken(): string | null {
 	}
 }
 
-function promptAndStoreAdminToken(): string | null {
-	const token = prompt('Enter admin token to upload assets:');
-	if (!token) return null;
-	try { sessionStorage.setItem('metrorider-admin-token', token); } catch (e) { /* noop */ }
-	return token;
-}
-
 function loadUserConfig(): Partial<AssetConfig> {
 	try {
 		const raw = localStorage.getItem(CONFIG_KEY);
@@ -102,6 +95,30 @@ function getItems(catalog: AssetCatalog, category: CategoryId): AssetEntry[] {
 	return catalog.sounds[category] ?? [];
 }
 
+async function verifyToken(token: string): Promise<boolean> {
+	try {
+		const resp = await fetch(`/api/admin/verify?token=${encodeURIComponent(token)}`);
+		return resp.ok;
+	} catch (e) {
+		console.error('[Settings] Token verification failed:', e);
+		return false;
+	}
+}
+
+async function pushConfigToServer(config: AssetConfig, token: string): Promise<boolean> {
+	try {
+		const resp = await fetch(`/api/config?token=${token}`, {
+			method: 'PUT',
+			headers: {'Content-Type': 'application/json'},
+			body: JSON.stringify(config),
+		});
+		return resp.ok;
+	} catch (e) {
+		console.error('[Settings] Failed to push config to server:', e);
+		return false;
+	}
+}
+
 export default function SettingsPage(): React.ReactElement {
 	const [catalog, setCatalog] = useState<AssetCatalog | null>(null);
 	const [config, setConfig] = useState<AssetConfig | null>(null);
@@ -112,26 +129,25 @@ export default function SettingsPage(): React.ReactElement {
 	const [playingId, setPlayingId] = useState<string | null>(null);
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 
+	const [adminMode, setAdminMode] = useState<boolean>(false);
 	const [adminToken, setAdminToken] = useState<string | null>(getAdminToken);
 	const [tokenVerified, setTokenVerified] = useState<boolean>(false);
-	const isUrlAdmin = !!new URLSearchParams(window.location.search).get('admin');
 	const uploadRef = useRef<HTMLInputElement>(null);
 
 	useEffect((): void => {
 		const initialToken = getAdminToken();
 		if (initialToken) {
-			fetch(`/api/admin/verify?token=${encodeURIComponent(initialToken)}`)
-				.then(r => {
-					if (!r.ok) {
-						console.warn('[Settings] Stored admin token is invalid, clearing');
-						try { sessionStorage.removeItem('metrorider-admin-token'); } catch (_e) { /* noop */ }
-						setAdminToken(null);
-						setTokenVerified(false);
-					} else {
-						setTokenVerified(true);
-					}
-				})
-				.catch(e => console.error('[Settings] Token verification on load failed:', e));
+			verifyToken(initialToken).then(valid => {
+				if (!valid) {
+					try { sessionStorage.removeItem('metrorider-admin-token'); } catch (_e) { /* noop */ }
+					setAdminToken(null);
+					setTokenVerified(false);
+				} else {
+					setTokenVerified(true);
+					const isUrlAdmin = !!new URLSearchParams(window.location.search).get('admin');
+					if (isUrlAdmin) setAdminMode(true);
+				}
+			}).catch(e => console.error('[Settings] Token verification on load failed:', e));
 		}
 	}, []);
 
@@ -157,18 +173,40 @@ export default function SettingsPage(): React.ReactElement {
 		});
 	}, []);
 
+	const flash = useCallback((msg: string): void => {
+		setStatusMsg(msg);
+		setTimeout((): void => setStatusMsg(null), 2500);
+	}, []);
+
 	const handleSelect = useCallback((category: CategoryId, id: string): void => {
 		if (!config) return;
 		const next = setSelectedId(config, category, id);
 		setConfig(next);
 		saveUserConfig(next);
-		flash('Selection saved');
-	}, [config]);
 
-	const flash = useCallback((msg: string): void => {
-		setStatusMsg(msg);
-		setTimeout((): void => setStatusMsg(null), 2000);
-	}, []);
+		if (adminMode && adminToken && tokenVerified) {
+			pushConfigToServer(next, adminToken).then(ok => {
+				flash(ok ? 'Set as default for all users' : 'Saved locally, but server update failed');
+			});
+		} else {
+			flash('Selection saved');
+		}
+	}, [config, adminMode, adminToken, tokenVerified, flash]);
+
+	const handleCarCountChange = useCallback((count: number): void => {
+		if (!config) return;
+		const next = {...config, sounds: {...config.sounds}, carCount: count};
+		setConfig(next);
+		saveUserConfig(next);
+
+		if (adminMode && adminToken && tokenVerified) {
+			pushConfigToServer(next, adminToken).then(ok => {
+				flash(ok ? 'Car count set as default for all users' : 'Saved locally, but server update failed');
+			});
+		} else {
+			flash('Car count updated');
+		}
+	}, [config, adminMode, adminToken, tokenVerified, flash]);
 
 	const handlePlaySound = useCallback((entry: AssetEntry): void => {
 		if (audioRef.current) {
@@ -185,7 +223,6 @@ export default function SettingsPage(): React.ReactElement {
 			}
 
 			const url = `/data/assets/${entry.path}`;
-			console.log(`[Settings] Playing sound: ${url}`);
 			const audio = new Audio(url);
 			audio.addEventListener('ended', (): void => {
 				setPlayingId(null);
@@ -209,63 +246,53 @@ export default function SettingsPage(): React.ReactElement {
 		});
 	}, [flash]);
 
-	const verifyTokenWithServer = useCallback(async (token: string): Promise<boolean> => {
-		try {
-			const resp = await fetch(`/api/admin/verify?token=${encodeURIComponent(token)}`);
-			return resp.ok;
-		} catch (e) {
-			console.error('[Settings] Token verification failed:', e);
-			return false;
-		}
-	}, []);
-
-	const ensureAdminToken = useCallback(async (): Promise<string | null> => {
-		if (adminToken && tokenVerified) return adminToken;
-
-		const tokenToCheck = adminToken || promptAndStoreAdminToken();
-		if (!tokenToCheck) return null;
-
-		const valid = await verifyTokenWithServer(tokenToCheck);
-		if (!valid) {
-			try { sessionStorage.removeItem('metrorider-admin-token'); } catch (_e) { /* noop */ }
-			setAdminToken(null);
-			setTokenVerified(false);
-			flash('Invalid admin token');
-			return null;
+	const handleAdminToggle = useCallback(async (): Promise<void> => {
+		if (adminMode) {
+			setAdminMode(false);
+			flash('Admin mode disabled');
+			return;
 		}
 
-		setAdminToken(tokenToCheck);
-		setTokenVerified(true);
-		return tokenToCheck;
-	}, [adminToken, tokenVerified, verifyTokenWithServer]);
+		let token = adminToken;
+		if (!token || !tokenVerified) {
+			token = prompt('Enter admin token:');
+			if (!token) return;
 
-	const handleSaveAsDefault = useCallback(async (): Promise<void> => {
-		if (!config || !adminToken) return;
-		try {
-			const resp = await fetch(`/api/config?token=${adminToken}`, {
-				method: 'PUT',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify(config),
-			});
-			if (resp.ok) flash('Saved as server default');
-			else flash(`Save failed: ${resp.status}`);
-		} catch (e: unknown) {
-			const msg = e instanceof Error ? e.message : String(e);
-			console.error('[Settings] Save default failed:', msg);
-			flash('Save failed');
+			const valid = await verifyToken(token);
+			if (!valid) {
+				flash('Invalid admin token');
+				return;
+			}
+
+			try { sessionStorage.setItem('metrorider-admin-token', token); } catch (_e) { /* noop */ }
+			setAdminToken(token);
+			setTokenVerified(true);
 		}
-	}, [config, adminToken]);
+
+		setAdminMode(true);
+		flash('Admin mode enabled — selections now apply to all users');
+	}, [adminMode, adminToken, tokenVerified, flash]);
 
 	const handleUploadClick = useCallback(async (): Promise<void> => {
-		const token = await ensureAdminToken();
-		if (!token) {
-			flash('Upload cancelled — no admin token provided');
-			return;
+		let token = adminToken;
+		if (!token || !tokenVerified) {
+			token = prompt('Enter admin token to upload assets:');
+			if (!token) return;
+
+			const valid = await verifyToken(token);
+			if (!valid) {
+				flash('Invalid admin token');
+				return;
+			}
+
+			try { sessionStorage.setItem('metrorider-admin-token', token); } catch (_e) { /* noop */ }
+			setAdminToken(token);
+			setTokenVerified(true);
 		}
 		if (uploadRef.current) {
 			uploadRef.current.click();
 		}
-	}, [ensureAdminToken]);
+	}, [adminToken, tokenVerified, flash]);
 
 	const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
 		const file = e.target.files?.[0];
@@ -299,6 +326,7 @@ export default function SettingsPage(): React.ReactElement {
 			} else if (resp.status === 401 || resp.status === 403) {
 				try { sessionStorage.removeItem('metrorider-admin-token'); } catch (_e) { /* noop */ }
 				setAdminToken(null);
+				setTokenVerified(false);
 				flash('Invalid admin token. Please try again.');
 			} else {
 				flash(`Upload failed: ${resp.status}`);
@@ -309,13 +337,22 @@ export default function SettingsPage(): React.ReactElement {
 			flash('Upload failed');
 		}
 		if (uploadRef.current) uploadRef.current.value = '';
-	}, [activeCategory, adminToken]);
+	}, [activeCategory, adminToken, flash]);
 
 	const handleDelete = useCallback(async (entry: AssetEntry): Promise<void> => {
-		const token = await ensureAdminToken();
-		if (!token) {
-			flash('Delete cancelled — no admin token provided');
-			return;
+		let token = adminToken;
+		if (!token || !tokenVerified) {
+			token = prompt('Enter admin token to delete assets:');
+			if (!token) return;
+
+			const valid = await verifyToken(token);
+			if (!valid) {
+				flash('Invalid admin token');
+				return;
+			}
+			try { sessionStorage.setItem('metrorider-admin-token', token); } catch (_e) { /* noop */ }
+			setAdminToken(token);
+			setTokenVerified(true);
 		}
 		if (!confirm(`Delete "${entry.name}"?`)) return;
 		try {
@@ -326,6 +363,7 @@ export default function SettingsPage(): React.ReactElement {
 			} else if (resp.status === 401 || resp.status === 403) {
 				try { sessionStorage.removeItem('metrorider-admin-token'); } catch (_e) { /* noop */ }
 				setAdminToken(null);
+				setTokenVerified(false);
 				flash('Invalid admin token. Please try again.');
 			} else {
 				const body = await resp.json().catch((): {error: string} => ({error: `HTTP ${resp.status}`}));
@@ -336,7 +374,7 @@ export default function SettingsPage(): React.ReactElement {
 			console.error('[Settings] Delete failed:', msg);
 			flash('Delete failed');
 		}
-	}, [ensureAdminToken]);
+	}, [adminToken, tokenVerified, flash]);
 
 	if (error) {
 		return <div className="settings-page"><div className="settings-error">{error}</div></div>;
@@ -351,17 +389,26 @@ export default function SettingsPage(): React.ReactElement {
 	const isModelCategory = activeCat?.group === 'models';
 
 	return (
-		<div className="settings-page">
+		<div className={`settings-page ${adminMode ? 'admin-active' : ''}`}>
 			<header className="settings-header">
-				<a href="/" className="settings-back">← Back to Game</a>
+				<a href="/" className="settings-back">&larr; Back to Game</a>
 				<h1>MetroRider Settings</h1>
-				{isUrlAdmin && (
-					<div className="settings-admin-bar">
-						<span className="admin-badge">ADMIN</span>
-						<button className="btn btn-primary" onClick={handleSaveAsDefault}>Save as Server Default</button>
-					</div>
-				)}
+				<div className="settings-header-actions">
+					<button
+						className={`btn ${adminMode ? 'btn-admin-on' : 'btn-admin-off'}`}
+						onClick={handleAdminToggle}
+						title={adminMode ? 'Click to exit admin mode' : 'Enter admin mode to set defaults for all users'}
+					>
+						{adminMode ? 'ADMIN MODE ON' : 'Admin Mode'}
+					</button>
+				</div>
 			</header>
+
+			{adminMode && (
+				<div className="admin-banner">
+					Selections in this mode are saved as defaults for <strong>all users</strong>.
+				</div>
+			)}
 
 			{statusMsg && <div className="settings-toast">{statusMsg}</div>}
 
@@ -412,10 +459,7 @@ export default function SettingsPage(): React.ReactElement {
 							<select
 								value={config.carCount}
 								onChange={(e: React.ChangeEvent<HTMLSelectElement>): void => {
-									const next = {...config, sounds: {...config.sounds}, carCount: parseInt(e.target.value, 10)};
-									setConfig(next);
-									saveUserConfig(next);
-									flash('Car count updated');
+									handleCarCountChange(parseInt(e.target.value, 10));
 								}}
 							>
 								{[1, 2, 3, 4, 5, 6, 8].map(n => (
@@ -428,6 +472,7 @@ export default function SettingsPage(): React.ReactElement {
 					<div className="asset-grid">
 						{items.map(entry => {
 							const isSelected = entry.id === selectedId;
+							const isServerDefault = serverConfig && getSelectedId(serverConfig, activeCategory) === entry.id;
 							return (
 								<div
 									key={entry.id}
@@ -451,7 +496,7 @@ export default function SettingsPage(): React.ReactElement {
 													handlePlaySound(entry);
 												}}
 											>
-												{playingId === entry.id ? '■' : '▶'}
+												{playingId === entry.id ? '\u25A0' : '\u25B6'}
 											</button>
 										</div>
 									)}
@@ -460,6 +505,7 @@ export default function SettingsPage(): React.ReactElement {
 										<div className="asset-name">{entry.name}</div>
 										<div className="asset-source">{entry.source}</div>
 										{isSelected && <div className="asset-selected-badge">Selected</div>}
+										{isServerDefault && !isSelected && <div className="asset-default-badge">Server Default</div>}
 									</div>
 
 									{entry.type !== 'procedural' && (
@@ -471,7 +517,7 @@ export default function SettingsPage(): React.ReactElement {
 											}}
 											title="Delete (requires admin token)"
 										>
-											✕
+											&#x2715;
 										</button>
 									)}
 								</div>

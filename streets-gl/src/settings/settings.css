@@ -81,15 +81,72 @@ body {
 	gap: 10px;
 }
 
-.admin-badge {
+.settings-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.btn-admin-off {
+	background: rgba(255,255,255,0.06);
+	color: var(--text-secondary);
+	border: 1px solid var(--border);
+}
+
+.btn-admin-off:hover {
+	background: rgba(255,255,255,0.1);
+	color: var(--text-primary);
+}
+
+.btn-admin-on {
 	background: var(--danger);
 	color: #fff;
-	font-size: 10px;
 	font-weight: 800;
-	padding: 3px 8px;
-	border-radius: 4px;
-	letter-spacing: 0.8px;
-	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	animation: admin-pulse 2s infinite;
+}
+
+@keyframes admin-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); }
+	50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+}
+
+.admin-banner {
+	background: linear-gradient(90deg, #7f1d1d, #991b1b, #7f1d1d);
+	color: #fecaca;
+	text-align: center;
+	padding: 8px 16px;
+	font-size: 13px;
+	font-weight: 500;
+	border-bottom: 1px solid rgba(239,68,68,0.3);
+}
+
+.admin-banner strong {
+	color: #fff;
+}
+
+.settings-page.admin-active .settings-header {
+	background: linear-gradient(135deg, #1a0505, #2d0a0a);
+	border-bottom-color: rgba(239,68,68,0.25);
+}
+
+.settings-page.admin-active .settings-sidebar {
+	background: linear-gradient(180deg, #130505, #0f0303);
+	border-right-color: rgba(239,68,68,0.15);
+}
+
+.asset-default-badge {
+	margin-top: 8px;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	background: rgba(255,255,255,0.06);
+	color: var(--text-muted);
+	font-size: 11px;
+	font-weight: 600;
+	padding: 3px 10px;
+	border-radius: 20px;
+	letter-spacing: 0.3px;
 }
 
 .settings-toast {

@@ -213,4 +213,59 @@ export async function fetchMetroDreaminMap(url: string): Promise<MetroMapData> {
   throw new Error(`Failed to fetch MetroDreamin map after ${CORS_PROXIES.length} attempts. Last error: ${lastError?.message ?? 'unknown'}`);
 }
 
+export interface MDMapListEntry {
+  id: string;
+  title: string;
+  numLines: number;
+  numStations: number;
+}
+
+function extractUserId(url: string): string {
+  const match = url.match(/\/user\/([A-Za-z0-9_+/=%]+)$/);
+  if (!match) {
+    throw new Error('Invalid MetroDreamin user URL: expected format https://metrodreamin.com/user/<id>');
+  }
+  return match[1];
+}
+
+export function isUserUrl(url: string): boolean {
+  return url.includes('metrodreamin.com/user/');
+}
+
+export function isMapUrl(url: string): boolean {
+  return url.includes('metrodreamin.com/view/');
+}
+
+export async function fetchUserMaps(url: string): Promise<{username: string; maps: MDMapListEntry[]}> {
+  const userId = extractUserId(url);
+  const proxyUrl = `/api/metrodreamin/user/${userId}`;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await fetch(proxyUrl, {
+      signal: controller.signal,
+      headers: {'Accept': 'application/json'},
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json() as {username: string; maps: MDMapListEntry[]};
+
+    console.log(`[MetroDreaminImporter] User "${data.username}": found ${data.maps.length} maps`);
+    return data;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+}
+
+export function buildMapUrl(mapId: string): string {
+  return `https://metrodreamin.com/view/${mapId}`;
+}
+
 export { extractMapId, parseNextData, convertToMetroMapData };

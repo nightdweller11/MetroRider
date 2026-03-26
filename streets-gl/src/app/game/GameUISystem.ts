@@ -417,29 +417,68 @@ export default class GameUISystem extends System {
 		}
 	}
 
+	private static readonly SAVED_MAPS_KEY = 'metrorider-saved-maps';
+
+	private loadSavedMaps(): {url: string; name: string; ts: number; type?: 'map' | 'user'}[] {
+		try {
+			const raw = localStorage.getItem(GameUISystem.SAVED_MAPS_KEY);
+			if (raw) return JSON.parse(raw);
+		} catch (e) {
+			console.error('[GameUI] Failed to read saved maps:', e);
+		}
+		return [];
+	}
+
+	private saveMapEntry(url: string, name: string, type: 'map' | 'user' = 'map'): void {
+		try {
+			const maps = this.loadSavedMaps().filter(m => m.url !== url);
+			maps.unshift({url, name, ts: Date.now(), type});
+			if (maps.length > 50) maps.length = 50;
+			localStorage.setItem(GameUISystem.SAVED_MAPS_KEY, JSON.stringify(maps));
+		} catch (e) {
+			console.error('[GameUI] Failed to save map entry:', e);
+		}
+	}
+
+	private removeMapEntry(url: string): void {
+		try {
+			const maps = this.loadSavedMaps().filter(m => m.url !== url);
+			localStorage.setItem(GameUISystem.SAVED_MAPS_KEY, JSON.stringify(maps));
+		} catch (e) {
+			console.error('[GameUI] Failed to remove map entry:', e);
+		}
+	}
+
 	private createStartButton(trainSystem: TrainSystem): void {
+		const CARD_BG = 'rgba(0,0,0,0.88)';
+		const BTN_STYLE = `
+			padding: 10px 20px; border-radius: 8px; cursor: pointer;
+			font-size: 14px; font-weight: 500; text-align: center;
+			user-select: none; border: none; width: 100%; box-sizing: border-box;
+		`;
+
 		const startBtn = document.createElement('div');
 		startBtn.id = 'game-start-btn';
 		startBtn.style.cssText = `
 			position: absolute; bottom: 50%; left: 50%; transform: translate(-50%, 50%);
-			background: rgba(0,0,0,0.85); color: #fff; padding: 24px 32px;
+			background: ${CARD_BG}; color: #fff; padding: 24px 28px;
 			border-radius: 14px; font-size: 18px; font-weight: 600;
 			pointer-events: auto; backdrop-filter: blur(10px);
-			border: 1px solid rgba(255,255,255,0.2); text-align: center;
-			max-width: 380px; width: 90vw;
+			border: 1px solid rgba(255,255,255,0.15); text-align: center;
+			max-width: 460px; width: 92vw; max-height: 85vh; overflow-y: auto;
 		`;
 
 		const title = document.createElement('div');
 		title.textContent = '\uD83D\uDE87 MetroRider';
-		title.style.cssText = 'font-size: 22px; margin-bottom: 12px;';
+		title.style.cssText = 'font-size: 22px; margin-bottom: 8px;';
 
 		const subtitle = document.createElement('div');
-		subtitle.textContent = 'Load a MetroDreamin map or use the built-in Tel Aviv Metro';
+		subtitle.textContent = 'Load a MetroDreamin map or user profile, or play the built-in map';
 		subtitle.style.cssText = 'font-size: 12px; color: #aaa; margin-bottom: 16px;';
 
 		const urlInput = document.createElement('input');
 		urlInput.type = 'text';
-		urlInput.placeholder = 'Paste MetroDreamin URL...';
+		urlInput.placeholder = 'Paste MetroDreamin map or user URL...';
 		urlInput.style.cssText = `
 			width: 100%; padding: 10px 14px; border-radius: 8px;
 			border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.1);
@@ -448,25 +487,21 @@ export default class GameUISystem extends System {
 		`;
 
 		const loadBtn = document.createElement('div');
-		loadBtn.textContent = 'Load Map';
-		loadBtn.style.cssText = `
-			padding: 10px 20px; border-radius: 8px;
-			background: rgba(59, 130, 246, 0.8); color: #fff; cursor: pointer;
-			font-size: 14px; font-weight: 500; margin-bottom: 8px;
-			text-align: center; user-select: none;
-		`;
+		loadBtn.style.cssText = BTN_STYLE + 'background: rgba(59,130,246,0.8); color: #fff; margin-bottom: 8px;';
+		loadBtn.textContent = 'Load';
 
 		const playDefaultBtn = document.createElement('div');
 		playDefaultBtn.textContent = 'Play Tel Aviv Metro';
-		playDefaultBtn.style.cssText = `
-			padding: 10px 20px; border-radius: 8px;
-			background: rgba(255,255,255,0.15); color: #fff; cursor: pointer;
-			font-size: 14px; font-weight: 500; text-align: center;
-			user-select: none;
-		`;
+		playDefaultBtn.style.cssText = BTN_STYLE + 'background: rgba(255,255,255,0.12); color: #fff; margin-bottom: 4px;';
 
 		const statusEl = document.createElement('div');
 		statusEl.style.cssText = 'font-size: 11px; color: #aaa; margin-top: 10px; display: none;';
+
+		const savedSection = document.createElement('div');
+		savedSection.style.cssText = 'margin-top: 16px; text-align: left;';
+
+		const userMapsSection = document.createElement('div');
+		userMapsSection.style.cssText = 'margin-top: 12px; text-align: left; display: none;';
 
 		const startGameFlow = (): void => {
 			trainSystem.startGame();
@@ -481,10 +516,7 @@ export default class GameUISystem extends System {
 			this.updateLineColorIndicator(trainSystem);
 		};
 
-		loadBtn.addEventListener('click', async () => {
-			const url = urlInput.value.trim();
-			if (!url) return;
-
+		const loadMapFromUrl = async (url: string): Promise<void> => {
 			statusEl.style.display = 'block';
 			statusEl.textContent = 'Loading map...';
 
@@ -492,15 +524,219 @@ export default class GameUISystem extends System {
 				const {fetchMetroDreaminMap} = await import('./data/MetroDreaminImporter');
 				const mapData = await fetchMetroDreaminMap(url);
 				trainSystem.loadMap(mapData);
+				this.saveMapEntry(url, mapData.name);
 				statusEl.textContent = `Loaded: ${mapData.name}`;
 				setTimeout(startGameFlow, 500);
 			} catch (err) {
 				statusEl.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
 				console.error('[GameUI] Failed to load map:', err);
 			}
+		};
+
+		const showUserMaps = async (url: string): Promise<void> => {
+			statusEl.style.display = 'block';
+			statusEl.textContent = 'Loading user maps...';
+			userMapsSection.style.display = 'block';
+			userMapsSection.innerHTML = '';
+
+			try {
+				const {fetchUserMaps, buildMapUrl} = await import('./data/MetroDreaminImporter');
+				const {username, maps} = await fetchUserMaps(url);
+
+				statusEl.style.display = 'none';
+
+				if (maps.length === 0) {
+					statusEl.style.display = 'block';
+					statusEl.textContent = `No maps found for "${username}"`;
+					return;
+				}
+
+				this.saveMapEntry(url, `${username} (${maps.length} maps)`, 'user');
+				renderSavedMaps();
+
+				const header = document.createElement('div');
+				header.style.cssText = 'font-size: 13px; font-weight: 600; color: #ccc; margin-bottom: 8px;';
+				header.textContent = `${username}'s Maps (${maps.length})`;
+				userMapsSection.appendChild(header);
+
+				let searchInput: HTMLInputElement | null = null;
+				if (maps.length > 6) {
+					searchInput = document.createElement('input');
+					searchInput.type = 'text';
+					searchInput.placeholder = 'Search maps...';
+					searchInput.style.cssText = `
+						width: 100%; padding: 8px 12px; border-radius: 6px;
+						border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.08);
+						color: #fff; font-size: 13px; margin-bottom: 8px;
+						outline: none; box-sizing: border-box;
+					`;
+					userMapsSection.appendChild(searchInput);
+				}
+
+				const listContainer = document.createElement('div');
+				listContainer.style.cssText = 'max-height: 250px; overflow-y: auto;';
+				userMapsSection.appendChild(listContainer);
+
+				const renderList = (filter: string): void => {
+					listContainer.innerHTML = '';
+					const filtered = filter
+						? maps.filter(m => m.title.toLowerCase().includes(filter.toLowerCase()))
+						: maps;
+
+					if (filtered.length === 0) {
+						const empty = document.createElement('div');
+						empty.style.cssText = 'font-size: 12px; color: #666; padding: 12px; text-align: center;';
+						empty.textContent = 'No maps match your search';
+						listContainer.appendChild(empty);
+						return;
+					}
+
+					for (const map of filtered) {
+						const row = document.createElement('div');
+						row.style.cssText = `
+							padding: 10px 12px; margin-bottom: 4px; border-radius: 8px;
+							background: rgba(255,255,255,0.06); cursor: pointer;
+							transition: background 0.12s; border: 1px solid rgba(255,255,255,0.06);
+						`;
+						row.addEventListener('mouseenter', () => {
+							row.style.background = 'rgba(59,130,246,0.2)';
+							row.style.borderColor = 'rgba(59,130,246,0.4)';
+						});
+						row.addEventListener('mouseleave', () => {
+							row.style.background = 'rgba(255,255,255,0.06)';
+							row.style.borderColor = 'rgba(255,255,255,0.06)';
+						});
+
+						const mapTitle = document.createElement('div');
+						mapTitle.style.cssText = 'font-size: 13px; font-weight: 600; color: #eee;';
+						mapTitle.textContent = map.title;
+
+						const mapMeta = document.createElement('div');
+						mapMeta.style.cssText = 'font-size: 11px; color: #888; margin-top: 2px;';
+						mapMeta.textContent = `${map.numLines} lines, ${map.numStations} stations`;
+
+						row.appendChild(mapTitle);
+						row.appendChild(mapMeta);
+
+						row.addEventListener('click', () => {
+							const mapUrl = buildMapUrl(map.id);
+							loadMapFromUrl(mapUrl);
+						});
+
+						listContainer.appendChild(row);
+					}
+				};
+
+				renderList('');
+
+				if (searchInput) {
+					const si = searchInput;
+					si.addEventListener('input', () => {
+						renderList(si.value);
+					});
+				}
+
+			} catch (err) {
+				statusEl.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+				console.error('[GameUI] Failed to load user maps:', err);
+			}
+		};
+
+		const renderSavedMaps = (): void => {
+			savedSection.innerHTML = '';
+			const maps = this.loadSavedMaps();
+			if (maps.length === 0) return;
+
+			const header = document.createElement('div');
+			header.style.cssText = `
+				font-size: 11px; font-weight: 700; color: #888; margin-bottom: 8px;
+				text-transform: uppercase; letter-spacing: 1px;
+			`;
+			header.textContent = 'Recent';
+			savedSection.appendChild(header);
+
+			const list = document.createElement('div');
+			list.style.cssText = 'max-height: 180px; overflow-y: auto;';
+
+			for (const map of maps.slice(0, 20)) {
+				const isUser = map.type === 'user';
+				const row = document.createElement('div');
+				row.style.cssText = `
+					display: flex; align-items: center; justify-content: space-between;
+					padding: 8px 10px; margin-bottom: 3px; border-radius: 6px;
+					background: rgba(255,255,255,0.05); cursor: pointer;
+					transition: background 0.12s;
+				`;
+				row.addEventListener('mouseenter', () => { row.style.background = isUser ? 'rgba(168,85,247,0.15)' : 'rgba(59,130,246,0.15)'; });
+				row.addEventListener('mouseleave', () => { row.style.background = 'rgba(255,255,255,0.05)'; });
+
+				if (isUser) {
+					const tag = document.createElement('span');
+					tag.style.cssText = `
+						font-size: 10px; font-weight: 700; color: #a855f7; margin-right: 8px;
+						background: rgba(168,85,247,0.15); padding: 2px 6px; border-radius: 4px;
+						flex-shrink: 0;
+					`;
+					tag.textContent = 'USER';
+					row.appendChild(tag);
+				}
+
+				const nameEl = document.createElement('div');
+				nameEl.style.cssText = 'font-size: 13px; color: #ddd; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+				nameEl.textContent = map.name;
+				nameEl.title = map.name;
+
+				const removeBtn = document.createElement('div');
+				removeBtn.style.cssText = `
+					font-size: 12px; color: #666; cursor: pointer; margin-left: 8px;
+					padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+				`;
+				removeBtn.textContent = '\u2715';
+				removeBtn.title = 'Remove from recent';
+				removeBtn.addEventListener('mouseenter', () => { removeBtn.style.color = '#ef4444'; });
+				removeBtn.addEventListener('mouseleave', () => { removeBtn.style.color = '#666'; });
+				removeBtn.addEventListener('click', (ev) => {
+					ev.stopPropagation();
+					this.removeMapEntry(map.url);
+					renderSavedMaps();
+				});
+
+				row.appendChild(nameEl);
+				row.appendChild(removeBtn);
+
+				row.addEventListener('click', () => {
+					if (isUser) {
+						showUserMaps(map.url);
+					} else {
+						loadMapFromUrl(map.url);
+					}
+				});
+
+				list.appendChild(row);
+			}
+
+			savedSection.appendChild(list);
+		};
+
+		loadBtn.addEventListener('click', async () => {
+			const url = urlInput.value.trim();
+			if (!url) return;
+
+			const {isUserUrl, isMapUrl} = await import('./data/MetroDreaminImporter');
+
+			if (isUserUrl(url)) {
+				showUserMaps(url);
+			} else if (isMapUrl(url)) {
+				loadMapFromUrl(url);
+			} else {
+				statusEl.style.display = 'block';
+				statusEl.textContent = 'Unrecognized URL. Use a metrodreamin.com/view/ or /user/ link.';
+			}
 		});
 
 		playDefaultBtn.addEventListener('click', startGameFlow);
+
+		renderSavedMaps();
 
 		startBtn.appendChild(title);
 		startBtn.appendChild(subtitle);
@@ -508,6 +744,8 @@ export default class GameUISystem extends System {
 		startBtn.appendChild(loadBtn);
 		startBtn.appendChild(playDefaultBtn);
 		startBtn.appendChild(statusEl);
+		startBtn.appendChild(savedSection);
+		startBtn.appendChild(userMapsSection);
 		this.container.appendChild(startBtn);
 	}
 
