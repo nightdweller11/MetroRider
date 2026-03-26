@@ -6,17 +6,14 @@ import {v4 as uuidv4} from 'uuid';
 import {adminAuth} from '../middleware/adminAuth';
 
 const router = Router();
-const ASSETS_DIR = path.join(__dirname, '../../data/assets');
-const CATALOG_PATH = path.join(ASSETS_DIR, 'catalog.json');
+const ASSETS_DIR = path.join(__dirname, '../../../data/assets');
 
-const ALLOWED_MODEL_EXTS = ['.glb', '.gltf'];
-const ALLOWED_SOUND_EXTS = ['.mp3', '.ogg', '.wav'];
+const MODEL_EXTS = new Set(['.glb', '.gltf']);
+const SOUND_EXTS = new Set(['.mp3', '.ogg', '.wav']);
 
 const upload = multer({
 	storage: multer.diskStorage({
-		destination: (_req, _file, cb) => {
-			cb(null, '/tmp');
-		},
+		destination: (_req, _file, cb) => cb(null, '/tmp'),
 		filename: (_req, file, cb) => {
 			const ext = path.extname(file.originalname);
 			cb(null, `${uuidv4()}${ext}`);
@@ -25,21 +22,88 @@ const upload = multer({
 	limits: {fileSize: 50 * 1024 * 1024},
 });
 
-function readCatalog(): any {
+interface DiscoveredAsset {
+	id: string;
+	name: string;
+	path: string;
+	type: 'procedural' | 'gltf' | 'sample';
+	source: string;
+}
+
+function humanizeName(filename: string): string {
+	const stem = path.basename(filename, path.extname(filename));
+	return stem
+		.replace(/[-_]+/g, ' ')
+		.replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function scanDir(dir: string, extensions: Set<string>): string[] {
 	try {
-		return JSON.parse(fs.readFileSync(CATALOG_PATH, 'utf-8'));
-	} catch (err) {
-		console.error('[Assets] Error reading catalog:', err);
-		return {models: {trains: [], tracks: [], stations: []}, sounds: {horn: [], engine: [], rail: [], wind: [], brake: [], doorChime: [], stationChime: []}};
+		return fs.readdirSync(dir)
+			.filter(f => extensions.has(path.extname(f).toLowerCase()))
+			.sort();
+	} catch {
+		return [];
 	}
 }
 
-function writeCatalog(catalog: any): void {
-	fs.writeFileSync(CATALOG_PATH, JSON.stringify(catalog, null, 2), 'utf-8');
+function discoverModels(subcategory: string): DiscoveredAsset[] {
+	const dir = path.join(ASSETS_DIR, 'models', subcategory);
+	const files = scanDir(dir, MODEL_EXTS);
+	return files.map(f => ({
+		id: path.basename(f, path.extname(f)),
+		name: humanizeName(f),
+		path: `models/${subcategory}/${f}`,
+		type: 'gltf' as const,
+		source: 'filesystem',
+	}));
 }
 
+function discoverSounds(subcategory: string): DiscoveredAsset[] {
+	const dir = path.join(ASSETS_DIR, 'sounds', subcategory);
+	const files = scanDir(dir, SOUND_EXTS);
+	return files.map(f => ({
+		id: path.basename(f, path.extname(f)),
+		name: humanizeName(f),
+		path: `sounds/${subcategory}/${f}`,
+		type: 'sample' as const,
+		source: 'filesystem',
+	}));
+}
+
+const PROCEDURAL_MODEL: DiscoveredAsset = {
+	id: 'procedural-default',
+	name: 'Default (Procedural)',
+	path: '',
+	type: 'procedural',
+	source: 'Built-in',
+};
+
+const PROCEDURAL_SOUND: DiscoveredAsset = {
+	id: 'procedural',
+	name: 'Procedural (Synthesized)',
+	path: '',
+	type: 'procedural',
+	source: 'Built-in',
+};
+
 router.get('/list', (_req: Request, res: Response) => {
-	const catalog = readCatalog();
+	const catalog = {
+		models: {
+			trains: [PROCEDURAL_MODEL, ...discoverModels('trains')],
+			tracks: [PROCEDURAL_MODEL, ...discoverModels('tracks')],
+			stations: [PROCEDURAL_MODEL, ...discoverModels('stations')],
+		},
+		sounds: {
+			horn: [PROCEDURAL_SOUND, ...discoverSounds('horns')],
+			engine: [PROCEDURAL_SOUND, ...discoverSounds('engine')],
+			rail: [PROCEDURAL_SOUND, ...discoverSounds('rail')],
+			wind: [PROCEDURAL_SOUND, ...discoverSounds('wind')],
+			brake: [PROCEDURAL_SOUND, ...discoverSounds('brake')],
+			doorChime: [PROCEDURAL_SOUND, ...discoverSounds('doorChime')],
+			stationChime: [PROCEDURAL_SOUND, ...discoverSounds('stationChime')],
+		},
+	};
 	res.json(catalog);
 });
 
@@ -51,7 +115,7 @@ router.post('/upload', adminAuth, upload.single('file'), (req: Request, res: Res
 
 	const category = req.body.category as string;
 	const subcategory = req.body.subcategory as string;
-	const displayName = req.body.name as string || req.file.originalname;
+	const displayName = (req.body.name as string) || req.file.originalname;
 
 	if (!category || !subcategory) {
 		fs.unlinkSync(req.file.path);
@@ -63,14 +127,14 @@ router.post('/upload', adminAuth, upload.single('file'), (req: Request, res: Res
 	const isModel = category === 'models';
 	const isSound = category === 'sounds';
 
-	if (isModel && !ALLOWED_MODEL_EXTS.includes(ext)) {
+	if (isModel && !MODEL_EXTS.has(ext)) {
 		fs.unlinkSync(req.file.path);
-		res.status(400).json({error: `Invalid model format. Allowed: ${ALLOWED_MODEL_EXTS.join(', ')}`});
+		res.status(400).json({error: `Invalid model format. Allowed: ${[...MODEL_EXTS].join(', ')}`});
 		return;
 	}
-	if (isSound && !ALLOWED_SOUND_EXTS.includes(ext)) {
+	if (isSound && !SOUND_EXTS.has(ext)) {
 		fs.unlinkSync(req.file.path);
-		res.status(400).json({error: `Invalid sound format. Allowed: ${ALLOWED_SOUND_EXTS.join(', ')}`});
+		res.status(400).json({error: `Invalid sound format. Allowed: ${[...SOUND_EXTS].join(', ')}`});
 		return;
 	}
 	if (!isModel && !isSound) {
@@ -82,77 +146,54 @@ router.post('/upload', adminAuth, upload.single('file'), (req: Request, res: Res
 	const destDir = path.join(ASSETS_DIR, category, subcategory);
 	fs.mkdirSync(destDir, {recursive: true});
 
-	const destFilename = `${uuidv4()}${ext}`;
+	const safeName = displayName.replace(/[^a-zA-Z0-9_-]/g, '_');
+	const destFilename = `${safeName}${ext}`;
 	const destPath = path.join(destDir, destFilename);
-	fs.renameSync(req.file.path, destPath);
 
-	const assetId = `uploaded-${uuidv4().slice(0, 8)}`;
-	const relativePath = `${category}/${subcategory}/${destFilename}`;
-
-	const catalog = readCatalog();
-	const catalogCategory = isModel ? catalog.models : catalog.sounds;
-	if (!catalogCategory[subcategory]) {
-		catalogCategory[subcategory] = [];
+	if (fs.existsSync(destPath)) {
+		fs.unlinkSync(req.file.path);
+		res.status(409).json({error: `Asset "${destFilename}" already exists`});
+		return;
 	}
 
-	const entry = {
-		id: assetId,
-		name: displayName,
-		path: relativePath,
-		type: isModel ? 'gltf' : 'sample',
-		source: 'User Upload',
-		uploaded: true,
-	};
+	fs.renameSync(req.file.path, destPath);
 
-	catalogCategory[subcategory].push(entry);
-	writeCatalog(catalog);
-
+	const relativePath = `${category}/${subcategory}/${destFilename}`;
 	console.log(`[Assets] Admin uploaded ${category}/${subcategory}: ${displayName} -> ${relativePath}`);
-	res.json({ok: true, asset: entry});
+	res.json({ok: true, asset: {id: safeName, name: displayName, path: relativePath}});
 });
 
 router.delete('/:id', adminAuth, (req: Request, res: Response) => {
 	const assetId = req.params.id;
-	const catalog = readCatalog();
 
-	let found = false;
-	for (const categoryKey of ['models', 'sounds']) {
-		const category = (catalog as any)[categoryKey];
-		for (const subKey of Object.keys(category)) {
-			const list = category[subKey] as any[];
-			const idx = list.findIndex((a: any) => a.id === assetId);
-			if (idx >= 0) {
-				const asset = list[idx];
-				if (!asset.uploaded) {
-					res.status(400).json({error: 'Cannot delete bundled assets'});
+	const searchDirs = [
+		{base: 'models', subs: ['trains', 'tracks', 'stations']},
+		{base: 'sounds', subs: ['horns', 'engine', 'rail', 'wind', 'brake', 'doorChime', 'stationChime']},
+	];
+
+	for (const {base, subs} of searchDirs) {
+		const exts = base === 'models' ? MODEL_EXTS : SOUND_EXTS;
+		for (const sub of subs) {
+			const dir = path.join(ASSETS_DIR, base, sub);
+			for (const ext of exts) {
+				const filePath = path.join(dir, `${assetId}${ext}`);
+				if (fs.existsSync(filePath)) {
+					try {
+						fs.unlinkSync(filePath);
+						console.log(`[Assets] Admin deleted: ${filePath}`);
+						res.json({ok: true});
+					} catch (err) {
+						const msg = err instanceof Error ? err.message : String(err);
+						console.error(`[Assets] Error deleting ${filePath}: ${msg}`);
+						res.status(500).json({error: 'Failed to delete file'});
+					}
 					return;
 				}
-
-				const filePath = path.join(ASSETS_DIR, asset.path);
-				try {
-					if (fs.existsSync(filePath)) {
-						fs.unlinkSync(filePath);
-					}
-				} catch (err) {
-					console.error(`[Assets] Error deleting file ${filePath}:`, err);
-				}
-
-				list.splice(idx, 1);
-				writeCatalog(catalog);
-				found = true;
-				console.log(`[Assets] Admin deleted asset ${assetId}`);
-				break;
 			}
 		}
-		if (found) break;
 	}
 
-	if (!found) {
-		res.status(404).json({error: 'Asset not found'});
-		return;
-	}
-
-	res.json({ok: true});
+	res.status(404).json({error: 'Asset not found'});
 });
 
 export default router;

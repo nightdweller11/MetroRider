@@ -4,7 +4,7 @@ import * as path from 'path';
 import {adminAuth} from '../middleware/adminAuth';
 
 const router = Router();
-const CONFIG_PATH = path.join(__dirname, '../../data/config.json');
+const CONFIG_PATH = path.join(__dirname, '../../../data/config.json');
 
 function readConfig(): object {
 	try {
