@@ -18,7 +18,6 @@ export default class MapWorker {
 		reject: (reason?: any) => void;
 	}> = new Map();
 	private readonly terrainHeightCallback: (positions: Float64Array) => Float64Array;
-	private currentCorridorSegments: WorkerMessage.CorridorSegment[] = [];
 
 	public constructor(terrainHeightCallback: (positions: Float64Array) => Float64Array) {
 		this.terrainHeightCallback = terrainHeightCallback;
@@ -28,7 +27,6 @@ export default class MapWorker {
 	}
 
 	public sendCorridorSegments(segments: WorkerMessage.CorridorSegment[]): void {
-		this.currentCorridorSegments = segments;
 		this.sendMessage({
 			type: WorkerMessage.ToWorkerType.SetCorridorSegments,
 			tile: [0, 0],
@@ -47,7 +45,6 @@ export default class MapWorker {
 		this.sendMessage({
 			type: WorkerMessage.ToWorkerType.Start,
 			tile: [x, y],
-			corridorSegments: this.currentCorridorSegments,
 			...params
 		});
 

@@ -127,8 +127,40 @@ export default class TrainSystem extends System {
 		}
 	}
 
+	private static readonly COLLINEAR_THRESHOLD = Math.cos(5 * Math.PI / 180);
+
+	private static downsampleSegments(raw: WorkerMessage.CorridorSegment[]): WorkerMessage.CorridorSegment[] {
+		if (raw.length <= 1) return raw;
+
+		const result: WorkerMessage.CorridorSegment[] = [raw[0]];
+		let cur = raw[0];
+
+		for (let i = 1; i < raw.length; i++) {
+			const next = raw[i];
+			const cdx = cur.x2 - cur.x1, cdz = cur.z2 - cur.z1;
+			const ndx = next.x2 - next.x1, ndz = next.z2 - next.z1;
+			const cLen = Math.sqrt(cdx * cdx + cdz * cdz);
+			const nLen = Math.sqrt(ndx * ndx + ndz * ndz);
+
+			if (cLen > 1e-6 && nLen > 1e-6) {
+				const dot = (cdx * ndx + cdz * ndz) / (cLen * nLen);
+				const gap = Math.sqrt((next.x1 - cur.x2) ** 2 + (next.z1 - cur.z2) ** 2);
+				if (dot >= TrainSystem.COLLINEAR_THRESHOLD && gap < 1) {
+					cur = {x1: cur.x1, z1: cur.z1, x2: next.x2, z2: next.z2, radius: cur.radius};
+					result[result.length - 1] = cur;
+					continue;
+				}
+			}
+
+			result.push(next);
+			cur = next;
+		}
+
+		return result;
+	}
+
 	private updateCorridorSegments(): void {
-		const segments: WorkerMessage.CorridorSegment[] = [];
+		const rawSegments: WorkerMessage.CorridorSegment[] = [];
 		const CORRIDOR_RADIUS = 10;
 
 		for (const ls of this.lines) {
@@ -138,13 +170,16 @@ export default class TrainSystem extends System {
 				const [lng2, lat2] = points[i + 1];
 				const m1 = MathUtils.degrees2meters(lat1, lng1);
 				const m2 = MathUtils.degrees2meters(lat2, lng2);
-				segments.push({
+				rawSegments.push({
 					x1: m1.x, z1: m1.y,
 					x2: m2.x, z2: m2.y,
 					radius: CORRIDOR_RADIUS,
 				});
 			}
 		}
+
+		const segments = TrainSystem.downsampleSegments(rawSegments);
+		debugLog(`[TrainSystem] Corridor segments: ${rawSegments.length} raw -> ${segments.length} downsampled`);
 
 		this.sendCorridorToWorkers(segments);
 

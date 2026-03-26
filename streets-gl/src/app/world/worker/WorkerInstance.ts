@@ -14,11 +14,90 @@ import {ProjectedTextures} from "~/lib/tile-processing/tile3d/textures";
 
 const ctx: Worker = self as any;
 
+class SegmentGrid {
+	private readonly cellSize: number;
+	private readonly cells: Map<string, number[]> = new Map();
+	public readonly segments: WorkerMessage.CorridorSegment[];
+
+	public constructor(segments: WorkerMessage.CorridorSegment[], cellSize: number = 500) {
+		this.segments = segments;
+		this.cellSize = cellSize;
+		this.build();
+	}
+
+	private keyFor(cx: number, cz: number): string {
+		return `${cx},${cz}`;
+	}
+
+	private build(): void {
+		this.cells.clear();
+		for (let i = 0; i < this.segments.length; i++) {
+			const s = this.segments[i];
+			const minCX = Math.floor(Math.min(s.x1, s.x2) / this.cellSize);
+			const maxCX = Math.floor(Math.max(s.x1, s.x2) / this.cellSize);
+			const minCZ = Math.floor(Math.min(s.z1, s.z2) / this.cellSize);
+			const maxCZ = Math.floor(Math.max(s.z1, s.z2) / this.cellSize);
+			for (let cx = minCX; cx <= maxCX; cx++) {
+				for (let cz = minCZ; cz <= maxCZ; cz++) {
+					const key = this.keyFor(cx, cz);
+					let arr = this.cells.get(key);
+					if (!arr) {
+						arr = [];
+						this.cells.set(key, arr);
+					}
+					arr.push(i);
+				}
+			}
+		}
+	}
+
+	public queryRect(minX: number, minZ: number, maxX: number, maxZ: number): Set<number> {
+		const result = new Set<number>();
+		const cxMin = Math.floor(minX / this.cellSize);
+		const cxMax = Math.floor(maxX / this.cellSize);
+		const czMin = Math.floor(minZ / this.cellSize);
+		const czMax = Math.floor(maxZ / this.cellSize);
+		for (let cx = cxMin; cx <= cxMax; cx++) {
+			for (let cz = czMin; cz <= czMax; cz++) {
+				const arr = this.cells.get(this.keyFor(cx, cz));
+				if (arr) {
+					for (const idx of arr) result.add(idx);
+				}
+			}
+		}
+		return result;
+	}
+
+	public queryPoint(x: number, z: number, radius: number): number[] {
+		const result: number[] = [];
+		const cxMin = Math.floor((x - radius) / this.cellSize);
+		const cxMax = Math.floor((x + radius) / this.cellSize);
+		const czMin = Math.floor((z - radius) / this.cellSize);
+		const czMax = Math.floor((z + radius) / this.cellSize);
+		const seen = new Set<number>();
+		for (let cx = cxMin; cx <= cxMax; cx++) {
+			for (let cz = czMin; cz <= czMax; cz++) {
+				const arr = this.cells.get(this.keyFor(cx, cz));
+				if (arr) {
+					for (const idx of arr) {
+						if (!seen.has(idx)) {
+							seen.add(idx);
+							result.push(idx);
+						}
+					}
+				}
+			}
+		}
+		return result;
+	}
+}
+
 class WorkerInstance {
 	private static TileZoom: number = 16;
 	private requestTerrainHeight: boolean = true;
 	private straightSkeletonReady: boolean = false;
 	private corridorSegments: WorkerMessage.CorridorSegment[] = [];
+	private segmentGrid: SegmentGrid | null = null;
 	private debug: boolean = false;
 
 	public constructor(private readonly ctx: Worker) {
@@ -36,26 +115,21 @@ class WorkerInstance {
 			const x = data.tile[0];
 			const y = data.tile[1];
 
-		if (data.type === WorkerMessage.ToWorkerType.SetCorridorSegments) {
-			this.corridorSegments = data.corridorSegments ?? [];
-			if (data.debug !== undefined) this.debug = data.debug;
-			if (this.debug) {
-				console.log(`[Worker] Received ${this.corridorSegments.length} corridor segments`);
-				if (this.corridorSegments.length > 0) {
-					const s = this.corridorSegments[0];
-					console.log(`[Worker] First segment: (${s.x1.toFixed(1)}, ${s.z1.toFixed(1)}) -> (${s.x2.toFixed(1)}, ${s.z2.toFixed(1)}) radius=${s.radius}`);
-				}
-			}
-			return;
+	if (data.type === WorkerMessage.ToWorkerType.SetCorridorSegments) {
+		this.corridorSegments = data.corridorSegments ?? [];
+		this.segmentGrid = this.corridorSegments.length > 0
+			? new SegmentGrid(this.corridorSegments)
+			: null;
+		if (data.debug !== undefined) this.debug = data.debug;
+		if (this.debug) {
+			console.log(`[Worker] Received ${this.corridorSegments.length} corridor segments, grid built`);
 		}
+		return;
+	}
 
 			if (data.type === WorkerMessage.ToWorkerType.Start) {
 				this.requestTerrainHeight = data.isTerrainHeightEnabled;
 				if (data.debug !== undefined) this.debug = data.debug;
-
-				if (data.corridorSegments && data.corridorSegments.length > 0) {
-					this.corridorSegments = data.corridorSegments;
-				}
 
 				this.fetchTile(
 					x,
@@ -101,7 +175,7 @@ class WorkerInstance {
 	private static readonly RAILWAY_BASE_WIDTH = 2.5;
 
 	private injectSyntheticRailway(collection: Tile3DFeatureCollection, tileX: number, tileY: number): void {
-		if (this.corridorSegments.length === 0) return;
+		if (!this.segmentGrid || this.corridorSegments.length === 0) return;
 
 		const zoom = WorkerInstance.TileZoom;
 		const tileSize = WorkerInstance.WORLD_SIZE / (1 << zoom);
@@ -109,22 +183,20 @@ class WorkerInstance {
 		const mercatorScale = MathUtils.getMercatorScaleFactorForTile(tileX, tileY, zoom);
 		const margin = 20;
 
+		const tileMinX = tileOffset.x - margin;
+		const tileMaxX = tileOffset.x + tileSize + margin;
+		const tileMinZ = tileOffset.y - margin;
+		const tileMaxZ = tileOffset.y + tileSize + margin;
+		const nearbyIdxs = this.segmentGrid.queryRect(tileMinX, tileMinZ, tileMaxX, tileMaxZ);
+
 		const allLocalPoints: Vec2[] = [];
 
-		for (const seg of this.corridorSegments) {
+		for (const idx of nearbyIdxs) {
+			const seg = this.corridorSegments[idx];
 			const lx1 = seg.x1 - tileOffset.x;
 			const lz1 = seg.z1 - tileOffset.y;
 			const lx2 = seg.x2 - tileOffset.x;
 			const lz2 = seg.z2 - tileOffset.y;
-
-			const minX = Math.min(lx1, lx2);
-			const maxX = Math.max(lx1, lx2);
-			const minZ = Math.min(lz1, lz2);
-			const maxZ = Math.max(lz1, lz2);
-
-			if (maxX < -margin || minX > tileSize + margin || maxZ < -margin || minZ > tileSize + margin) {
-				continue;
-			}
 
 			if (allLocalPoints.length === 0) {
 				allLocalPoints.push(new Vec2(lx1, lz1));
@@ -167,22 +239,24 @@ class WorkerInstance {
 	private static readonly RAILWAY_ZINDICES = new Set([11, 12, 28]);
 
 	private applyCorridorClearing(collection: Tile3DFeatureCollection, tileX: number, tileY: number): void {
-		if (this.corridorSegments.length === 0) {
-			if (this.debug) {
-				console.warn(`[Worker] Tile ${tileX},${tileY}: NO corridor segments — clearing skipped`);
-			}
+		if (!this.segmentGrid || this.corridorSegments.length === 0) {
 			return;
 		}
 
 		const tileOffset = MathUtils.tile2meters(tileX, tileY + 1, WorkerInstance.TileZoom);
 		const origExtruded = collection.extruded.length;
+		const grid = this.segmentGrid;
+		const segments = this.corridorSegments;
+		const maxRadius = 15;
 
 		collection.extruded = collection.extruded.filter(feature => {
 			const bb = feature.boundingBox;
 			const centerX = (bb.min.x + bb.max.x) / 2 + tileOffset.x;
 			const centerZ = (bb.min.z + bb.max.z) / 2 + tileOffset.y;
 
-			for (const seg of this.corridorSegments) {
+			const nearby = grid.queryPoint(centerX, centerZ, maxRadius);
+			for (const idx of nearby) {
+				const seg = segments[idx];
 				const d = WorkerInstance.pointToSegmentDist(
 					centerX, centerZ,
 					seg.x1, seg.z1,

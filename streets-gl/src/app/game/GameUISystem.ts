@@ -8,6 +8,8 @@ import MapWorkerSystem from '../systems/MapWorkerSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 
 
+const DEFAULT_MAP_URL = 'https://metrodreamin.com/view/QVQ2V2ZIYVpyUFEzNE1acEVLcGhlVkdqR3BPMnwxNg%3D%3D';
+
 export default class GameUISystem extends System {
 	private container: HTMLElement | null = null;
 	private speedEl: HTMLElement | null = null;
@@ -491,7 +493,7 @@ export default class GameUISystem extends System {
 		loadBtn.textContent = 'Load';
 
 		const playDefaultBtn = document.createElement('div');
-		playDefaultBtn.textContent = 'Play Tel Aviv Metro';
+		playDefaultBtn.textContent = 'Play Sample Map (Tel Aviv)';
 		playDefaultBtn.style.cssText = BTN_STYLE + 'background: rgba(255,255,255,0.12); color: #fff; margin-bottom: 4px;';
 
 		const statusEl = document.createElement('div');
@@ -747,6 +749,8 @@ export default class GameUISystem extends System {
 		startBtn.appendChild(savedSection);
 		startBtn.appendChild(userMapsSection);
 		this.container.appendChild(startBtn);
+
+		loadMapFromUrl(DEFAULT_MAP_URL);
 	}
 
 	private createSettingsButton(): void {
