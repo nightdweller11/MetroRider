@@ -514,7 +514,7 @@ export default class GameUISystem extends System {
 	private createSettingsButton(): void {
 		const btn = document.createElement('div');
 		btn.style.cssText = `
-			position: absolute; top: 20px; right: 20px;
+			position: absolute; top: 20px; right: 76px;
 			width: 42px; height: 42px; border-radius: 10px;
 			background: rgba(0,0,0,0.65); color: #fff;
 			display: flex; align-items: center; justify-content: center;
@@ -523,7 +523,7 @@ export default class GameUISystem extends System {
 			pointer-events: auto; transition: background 0.15s;
 		`;
 		btn.textContent = '\u2699';
-		btn.title = 'Settings';
+		btn.title = 'Train & Sound Settings';
 		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
 		btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.65)'; });
 		btn.addEventListener('click', () => {

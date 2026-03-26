@@ -1,19 +1,11 @@
 import React from "react";
 import styles from './NavPanel.scss';
-import {FaMapMarkerAlt} from "react-icons/fa";
-import {AiOutlineInfo} from "react-icons/ai";
 import {IoSettingsOutline} from 'react-icons/io5';
 
 const buttons: {name: string; icon: React.ReactNode}[] = [
 	{
-		name: 'savedPlaces',
-		icon: <FaMapMarkerAlt size={24}/>
-	}, {
 		name: 'settings',
 		icon: <IoSettingsOutline size={24}/>
-	}, {
-		name: 'info',
-		icon: <AiOutlineInfo size={24}/>
 	}
 ];
 

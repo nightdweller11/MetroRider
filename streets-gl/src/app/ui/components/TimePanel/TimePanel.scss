@@ -1,5 +1,22 @@
 @import "../../styles/common.scss";
 
+.timeToggle {
+	position: absolute;
+	bottom: 16px;
+	left: 16px;
+	width: 42px;
+	height: 42px;
+	border-radius: 21px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	border: none;
+	user-select: none;
+	@extend %panel-bg;
+	@extend %panel-border;
+}
+
 .timePanel {
 	position: absolute;
 	bottom: 16px;
@@ -12,10 +29,26 @@
 	@extend %panel-border;
 	@extend %panel-border-radius;
 
-	&__header {
+	&__headerRow {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
 		margin: 0 0 12px 0;
+	}
+
+	&__header {
 		font-size: 18px;
 		font-weight: 600;
+	}
+
+	&__close {
+		background: transparent;
+		border: none;
+		font-size: 22px;
+		line-height: 1;
+		cursor: pointer;
+		padding: 0 0 0 12px;
 	}
 
 	&__presets {
@@ -27,6 +60,14 @@
 
 @include themify($themes) {
 	.timePanel {
+		color: themed('text-color');
+	}
+
+	.timePanel__close {
+		color: themed('text-color');
+	}
+
+	.timeToggle {
 		color: themed('text-color');
 	}
 }
