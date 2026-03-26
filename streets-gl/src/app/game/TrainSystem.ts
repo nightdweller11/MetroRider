@@ -23,6 +23,7 @@ import {InputHandler} from './physics/InputHandler';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
 import AudioSystem from './audio/AudioSystem';
+import {debugLog} from './debug';
 
 export interface TrainWorldPosition {
 	x: number;
@@ -83,7 +84,7 @@ export default class TrainSystem extends System {
 			this.selectLine(0);
 		}
 
-		console.log(`[TrainSystem] Loaded map with ${this.lines.length} lines`);
+		debugLog(`[TrainSystem] Loaded map with ${this.lines.length} lines`);
 	}
 
 	public selectLine(idx: number): void {
@@ -110,7 +111,7 @@ export default class TrainSystem extends System {
 			this.pendingCameraMove = {lat: firstStation.lat, lng: firstStation.lng};
 		}
 
-		console.log(`[TrainSystem] Selected line "${ls.parsed.name}" (${ls.track.totalLength.toFixed(0)}m)`);
+		debugLog(`[TrainSystem] Selected line "${ls.parsed.name}" (${ls.track.totalLength.toFixed(0)}m)`);
 	}
 
 	private sendCorridorToWorkers(segments: WorkerMessage.CorridorSegment[]): void {
@@ -120,7 +121,7 @@ export default class TrainSystem extends System {
 		mapWorkerSystem.setCorridorSegments(segments);
 		if (segments.length > 0) {
 			const s = segments[0];
-			console.log(`[TrainSystem] Sent ${segments.length} corridor segments to workers. First: (${s.x1.toFixed(1)},${s.z1.toFixed(1)})->(${s.x2.toFixed(1)},${s.z2.toFixed(1)}) r=${s.radius}`);
+			debugLog(`[TrainSystem] Sent ${segments.length} corridor segments to workers. First: (${s.x1.toFixed(1)},${s.z1.toFixed(1)})->(${s.x2.toFixed(1)},${s.z2.toFixed(1)}) r=${s.radius}`);
 		} else {
 			console.warn('[TrainSystem] Sent 0 corridor segments (no lines loaded?)');
 		}
@@ -150,12 +151,12 @@ export default class TrainSystem extends System {
 		const tileSystem = this.systemManager.getSystem(TileSystem);
 		if (tileSystem) {
 			tileSystem.purgeTiles();
-			console.log('[TrainSystem] Purged tiles to apply corridor clearing');
+			debugLog('[TrainSystem] Purged tiles to apply corridor clearing');
 		}
 
 		setTimeout((): void => {
 			this.sendCorridorToWorkers(segments);
-			console.log('[TrainSystem] Re-sent corridor segments (delayed safety)');
+			debugLog('[TrainSystem] Re-sent corridor segments (delayed safety)');
 		}, 500);
 	}
 
@@ -174,13 +175,13 @@ export default class TrainSystem extends System {
 			this.pendingCameraMove = null;
 		}
 
-		console.log('[TrainSystem] Game started');
+		debugLog('[TrainSystem] Game started');
 	}
 
 	public stopGame(): void {
 		this.gameActive = false;
 		this.input.disable();
-		console.log('[TrainSystem] Game stopped');
+		debugLog('[TrainSystem] Game stopped');
 	}
 
 	public goToStation(lineIdx: number, stationIdx: number, dir: number): void {

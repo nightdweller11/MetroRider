@@ -1,6 +1,7 @@
 import Vec2 from "~/lib/math/Vec2";
 import {WorkerMessage} from "~/app/world/worker/WorkerMessage";
 import Tile3DBuffers from "~/lib/tile-processing/tile3d/buffers/Tile3DBuffers";
+import {isDebugEnabled} from "~/app/game/debug";
 
 export interface TileRequestParams {
 	overpassEndpoint: string;
@@ -32,6 +33,7 @@ export default class MapWorker {
 			type: WorkerMessage.ToWorkerType.SetCorridorSegments,
 			tile: [0, 0],
 			corridorSegments: segments,
+			debug: isDebugEnabled(),
 		});
 	}
 

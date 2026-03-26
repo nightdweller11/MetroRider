@@ -106,6 +106,10 @@ export default class PBFVectorFeatureProvider implements FeatureProvider<VectorF
 			method: 'GET'
 		});
 
+		if (response.status === 404) {
+			return {layers: new Map()};
+		}
+
 		if (response.status !== 200) {
 			throw new Error(`Failed to fetch tile: ${response.status}`);
 		}

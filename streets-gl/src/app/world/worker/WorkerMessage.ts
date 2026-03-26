@@ -22,6 +22,7 @@ export namespace WorkerMessage {
 		isTerrainHeightEnabled?: boolean;
 		height?: Float64Array;
 		corridorSegments?: CorridorSegment[];
+		debug?: boolean;
 	}
 
 	export enum FromWorkerType {

@@ -19,6 +19,7 @@ class WorkerInstance {
 	private requestTerrainHeight: boolean = true;
 	private straightSkeletonReady: boolean = false;
 	private corridorSegments: WorkerMessage.CorridorSegment[] = [];
+	private debug: boolean = false;
 
 	public constructor(private readonly ctx: Worker) {
 		this.addEventListeners();
@@ -37,16 +38,20 @@ class WorkerInstance {
 
 		if (data.type === WorkerMessage.ToWorkerType.SetCorridorSegments) {
 			this.corridorSegments = data.corridorSegments ?? [];
-			console.log(`[Worker] Received ${this.corridorSegments.length} corridor segments`);
-			if (this.corridorSegments.length > 0) {
-				const s = this.corridorSegments[0];
-				console.log(`[Worker] First segment: (${s.x1.toFixed(1)}, ${s.z1.toFixed(1)}) -> (${s.x2.toFixed(1)}, ${s.z2.toFixed(1)}) radius=${s.radius}`);
+			if (data.debug !== undefined) this.debug = data.debug;
+			if (this.debug) {
+				console.log(`[Worker] Received ${this.corridorSegments.length} corridor segments`);
+				if (this.corridorSegments.length > 0) {
+					const s = this.corridorSegments[0];
+					console.log(`[Worker] First segment: (${s.x1.toFixed(1)}, ${s.z1.toFixed(1)}) -> (${s.x2.toFixed(1)}, ${s.z2.toFixed(1)}) radius=${s.radius}`);
+				}
 			}
 			return;
 		}
 
 			if (data.type === WorkerMessage.ToWorkerType.Start) {
 				this.requestTerrainHeight = data.isTerrainHeightEnabled;
+				if (data.debug !== undefined) this.debug = data.debug;
 
 				if (data.corridorSegments && data.corridorSegments.length > 0) {
 					this.corridorSegments = data.corridorSegments;
@@ -154,37 +159,28 @@ class WorkerInstance {
 			collection.projected.push(builder.getGeometry());
 		}
 
-		console.log(`[Worker] Tile ${tileX},${tileY}: injected synthetic railway (${allLocalPoints.length} points)`);
+		if (this.debug) {
+			console.log(`[Worker] Tile ${tileX},${tileY}: injected synthetic railway (${allLocalPoints.length} points)`);
+		}
 	}
 
 	private static readonly RAILWAY_ZINDICES = new Set([11, 12, 28]);
 
 	private applyCorridorClearing(collection: Tile3DFeatureCollection, tileX: number, tileY: number): void {
 		if (this.corridorSegments.length === 0) {
-			console.warn(`[Worker] Tile ${tileX},${tileY}: NO corridor segments — clearing skipped (race condition?)`);
+			if (this.debug) {
+				console.warn(`[Worker] Tile ${tileX},${tileY}: NO corridor segments — clearing skipped`);
+			}
 			return;
 		}
 
 		const tileOffset = MathUtils.tile2meters(tileX, tileY + 1, WorkerInstance.TileZoom);
 		const origExtruded = collection.extruded.length;
-		let loggedSample = false;
 
 		collection.extruded = collection.extruded.filter(feature => {
 			const bb = feature.boundingBox;
 			const centerX = (bb.min.x + bb.max.x) / 2 + tileOffset.x;
 			const centerZ = (bb.min.z + bb.max.z) / 2 + tileOffset.y;
-
-			if (!loggedSample) {
-				const s = this.corridorSegments[0];
-				console.log(
-					`[Worker] Tile ${tileX},${tileY} coord check: ` +
-					`tileOffset=(${tileOffset.x.toFixed(1)}, ${tileOffset.y.toFixed(1)}) ` +
-					`bbLocal=(${bb.min.x.toFixed(1)},${bb.min.z.toFixed(1)})-(${bb.max.x.toFixed(1)},${bb.max.z.toFixed(1)}) ` +
-					`center=(${centerX.toFixed(1)}, ${centerZ.toFixed(1)}) ` +
-					`seg0=(${s.x1.toFixed(1)},${s.z1.toFixed(1)})-(${s.x2.toFixed(1)},${s.z2.toFixed(1)})`
-				);
-				loggedSample = true;
-			}
 
 			for (const seg of this.corridorSegments) {
 				const d = WorkerInstance.pointToSegmentDist(
@@ -199,13 +195,14 @@ class WorkerInstance {
 			return true;
 		});
 
-		const removedExtruded = origExtruded - collection.extruded.length;
-
-		console.log(
-			`[Worker] Tile ${tileX},${tileY}: corridor clearing removed ` +
-			`${removedExtruded}/${origExtruded} extruded ` +
-			`(${this.corridorSegments.length} segments, railway features preserved)`
-		);
+		if (this.debug) {
+			const removedExtruded = origExtruded - collection.extruded.length;
+			console.log(
+				`[Worker] Tile ${tileX},${tileY}: corridor clearing removed ` +
+				`${removedExtruded}/${origExtruded} extruded ` +
+				`(${this.corridorSegments.length} segments)`
+			);
+		}
 	}
 
 	private static pointToSegmentDist(

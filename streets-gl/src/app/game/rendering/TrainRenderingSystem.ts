@@ -7,6 +7,7 @@ import {buildTrainCarGeometry, buildTrackGeometry, buildStationGeometry, Geometr
 import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
+import {debugLog} from '~/app/game/debug';
 
 const TRACK_HEIGHT_OFFSET = 0.05;
 const TARGET_CAR_WIDTH = 3.0;
@@ -44,7 +45,7 @@ export default class TrainRenderingSystem extends System {
 
 		const config = assetConfig.getConfig();
 		if (config.trainModel !== this.lastTrainModelId) {
-			console.log(`[TrainRenderingSystem] Config changed: model ${this.lastTrainModelId} -> ${config.trainModel}`);
+			debugLog(`[TrainRenderingSystem] Config changed: model ${this.lastTrainModelId} -> ${config.trainModel}`);
 			const trainSystem = this.systemManager.getSystem(TrainSystem);
 			const ls = trainSystem?.getCurrentLine();
 			if (ls) {
@@ -83,7 +84,7 @@ export default class TrainRenderingSystem extends System {
 
 		if (modelId !== 'procedural-default') {
 			if (!catalog) {
-				console.log(`[TrainRenderingSystem] Catalog not loaded yet, will retry for model: ${modelId}`);
+				debugLog(`[TrainRenderingSystem] Catalog not loaded yet, will retry for model: ${modelId}`);
 				this.pendingModelRebuild = true;
 				this.applyTrainBuffers(buildTrainCarGeometry(color));
 				return;
@@ -96,13 +97,13 @@ export default class TrainRenderingSystem extends System {
 					if (cached) {
 						const assembled = this.assembleMultiCar(cached, carCount);
 						this.applyTrainBuffers(assembled);
-						console.log(`[TrainRenderingSystem] Applied cached model: ${modelId} (${carCount} cars)`);
+						debugLog(`[TrainRenderingSystem] Applied cached model: ${modelId} (${carCount} cars)`);
 						return;
 					}
 				}
 
 				const url = assetConfig ? assetConfig.getAssetUrl(entry.path) : `/data/assets/${entry.path}`;
-				console.log(`[TrainRenderingSystem] Loading GLB model: ${modelId} from ${url}`);
+				debugLog(`[TrainRenderingSystem] Loading GLB model: ${modelId} from ${url}`);
 				this.loadGLBModel(url, modelId, color, carCount);
 				return;
 			} else {
@@ -139,7 +140,7 @@ export default class TrainRenderingSystem extends System {
 				this.glbCache.set(modelId, singleCar);
 				const assembled = this.assembleMultiCar(singleCar, carCount);
 				this.applyTrainBuffers(assembled);
-				console.log(`[TrainRenderingSystem] Loaded GLB: ${modelId} (${singleCar.position.length / 3} verts/car, ${carCount} cars)`);
+				debugLog(`[TrainRenderingSystem] Loaded GLB: ${modelId} (${singleCar.position.length / 3} verts/car, ${carCount} cars)`);
 			} else {
 				console.error(`[TrainRenderingSystem] Failed to parse GLB: ${modelId}`);
 				this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
@@ -380,7 +381,7 @@ export default class TrainRenderingSystem extends System {
 		const scaledW = modelWidth * scale;
 		const scaledH = (maxY - minY) * scale;
 		const scaledL = (maxZ - minZ) * scale;
-		console.log(`[TrainRenderingSystem] Model: raw ${modelWidth.toFixed(2)}x${(maxY-minY).toFixed(2)}x${(maxZ-minZ).toFixed(2)}, scaled ${scaledW.toFixed(1)}x${scaledH.toFixed(1)}x${scaledL.toFixed(1)} (scale=${scale.toFixed(2)})`);
+		debugLog(`[TrainRenderingSystem] Model: raw ${modelWidth.toFixed(2)}x${(maxY-minY).toFixed(2)}x${(maxZ-minZ).toFixed(2)}, scaled ${scaledW.toFixed(1)}x${scaledH.toFixed(1)}x${scaledL.toFixed(1)} (scale=${scale.toFixed(2)})`);
 
 		for (let i = 0; i < vertCount; i++) {
 			positions[i * 3] = (positions[i * 3] - centerX) * scale;
@@ -525,7 +526,7 @@ export default class TrainRenderingSystem extends System {
 
 				if (pixels) {
 					result.set(i, pixels);
-					console.log(`[TrainRenderingSystem] Loaded texture ${i}: ${pixels.width}x${pixels.height}`);
+					debugLog(`[TrainRenderingSystem] Loaded texture ${i}: ${pixels.width}x${pixels.height}`);
 				}
 			} catch (err) {
 				console.error(`[TrainRenderingSystem] Failed to load texture ${i}:`, err);
@@ -781,7 +782,7 @@ export default class TrainRenderingSystem extends System {
 		const config = assetConfig.getConfig();
 		const currentModelId = config.trainModel || 'procedural-default';
 		if (currentModelId !== this.lastTrainModelId) {
-			console.log(`[TrainRenderingSystem] Poll detected model change: ${this.lastTrainModelId} -> ${currentModelId}`);
+			debugLog(`[TrainRenderingSystem] Poll detected model change: ${this.lastTrainModelId} -> ${currentModelId}`);
 			const ls = trainSystem.getCurrentLine();
 			if (ls) {
 				this.rebuildTrainMesh(ls.parsed.color);
@@ -799,7 +800,7 @@ export default class TrainRenderingSystem extends System {
 		const h = this.getTerrainHeight(m.x, m.y);
 
 		if (Math.abs(h - this.lastTerrainSample) > 0.5) {
-			console.log(`[TrainRenderingSystem] Terrain changed (${this.lastTerrainSample.toFixed(1)} -> ${h.toFixed(1)}), rebuilding`);
+			debugLog(`[TrainRenderingSystem] Terrain changed (${this.lastTerrainSample.toFixed(1)} -> ${h.toFixed(1)}), rebuilding`);
 			this.lastTerrainSample = h;
 			this.rebuildAll();
 		} else if (h !== 0) {
