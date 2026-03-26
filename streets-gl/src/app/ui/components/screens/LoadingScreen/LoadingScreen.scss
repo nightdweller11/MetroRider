@@ -24,10 +24,11 @@
 	flex-direction: column;
 	text-align: center;
 
-	&__title {
-		font-size: 36px;
-		font-weight: bold;
+	&__logo {
+		width: 320px;
+		height: auto;
 		margin: 0 0 32px 0;
+		object-fit: contain;
 	}
 
 	&__progressBar {
@@ -49,10 +50,5 @@
 	&__filePath {
 		font-size: 12px;
 		color: #9b9b9b;
-	}
-
-	&__info {
-		margin: 32px 0 0 0;
-		font-size: 14px;
 	}
 }
