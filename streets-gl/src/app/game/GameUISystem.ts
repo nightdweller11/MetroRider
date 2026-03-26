@@ -518,9 +518,16 @@ export default class GameUISystem extends System {
 			this.updateLineColorIndicator(trainSystem);
 		};
 
-		const loadMapFromUrl = async (url: string): Promise<void> => {
+		let defaultMapReady = false;
+
+		const playBtn = document.createElement('div');
+		playBtn.style.cssText = BTN_STYLE + 'background: rgba(34,197,94,0.7); color: #fff; margin-bottom: 10px; font-size: 16px; font-weight: 600; display: none;';
+		playBtn.addEventListener('click', startGameFlow);
+
+		const loadMapFromUrl = async (url: string, autoStart: boolean = true): Promise<void> => {
 			statusEl.style.display = 'block';
 			statusEl.textContent = 'Loading map...';
+			playBtn.style.display = 'none';
 
 			try {
 				const {fetchMetroDreaminMap} = await import('./data/MetroDreaminImporter');
@@ -528,10 +535,19 @@ export default class GameUISystem extends System {
 				trainSystem.loadMap(mapData);
 				this.saveMapEntry(url, mapData.name);
 				statusEl.textContent = `Loaded: ${mapData.name}`;
-				setTimeout(startGameFlow, 500);
+
+				if (autoStart) {
+					setTimeout(startGameFlow, 500);
+				} else {
+					defaultMapReady = true;
+					playBtn.textContent = `\u25B6  Play: ${mapData.name}`;
+					playBtn.style.display = 'block';
+				}
 			} catch (err) {
 				statusEl.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
 				console.error('[GameUI] Failed to load map:', err);
+				playBtn.textContent = '\u25B6  Play Sample Map (Tel Aviv)';
+				playBtn.style.display = 'block';
 			}
 		};
 
@@ -742,15 +758,16 @@ export default class GameUISystem extends System {
 
 		startBtn.appendChild(title);
 		startBtn.appendChild(subtitle);
+		startBtn.appendChild(playBtn);
+		startBtn.appendChild(statusEl);
 		startBtn.appendChild(urlInput);
 		startBtn.appendChild(loadBtn);
 		startBtn.appendChild(playDefaultBtn);
-		startBtn.appendChild(statusEl);
 		startBtn.appendChild(savedSection);
 		startBtn.appendChild(userMapsSection);
 		this.container.appendChild(startBtn);
 
-		loadMapFromUrl(DEFAULT_MAP_URL);
+		loadMapFromUrl(DEFAULT_MAP_URL, false);
 	}
 
 	private createSettingsButton(): void {
