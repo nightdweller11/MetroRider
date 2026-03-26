@@ -5,9 +5,6 @@ import multer from 'multer';
 import {v4 as uuidv4} from 'uuid';
 import {adminAuth} from '../middleware/adminAuth';
 
-const router = Router();
-const ASSETS_DIR = path.join(__dirname, '../../../data/assets');
-
 const MODEL_EXTS = new Set(['.glb', '.gltf']);
 const SOUND_EXTS = new Set(['.mp3', '.ogg', '.wav']);
 
@@ -47,30 +44,6 @@ function scanDir(dir: string, extensions: Set<string>): string[] {
 	}
 }
 
-function discoverModels(subcategory: string): DiscoveredAsset[] {
-	const dir = path.join(ASSETS_DIR, 'models', subcategory);
-	const files = scanDir(dir, MODEL_EXTS);
-	return files.map(f => ({
-		id: path.basename(f, path.extname(f)),
-		name: humanizeName(f),
-		path: `models/${subcategory}/${f}`,
-		type: 'gltf' as const,
-		source: 'filesystem',
-	}));
-}
-
-function discoverSounds(subcategory: string): DiscoveredAsset[] {
-	const dir = path.join(ASSETS_DIR, 'sounds', subcategory);
-	const files = scanDir(dir, SOUND_EXTS);
-	return files.map(f => ({
-		id: path.basename(f, path.extname(f)),
-		name: humanizeName(f),
-		path: `sounds/${subcategory}/${f}`,
-		type: 'sample' as const,
-		source: 'filesystem',
-	}));
-}
-
 const PROCEDURAL_MODEL: DiscoveredAsset = {
 	id: 'procedural-default',
 	name: 'Default (Procedural)',
@@ -87,113 +60,142 @@ const PROCEDURAL_SOUND: DiscoveredAsset = {
 	source: 'Built-in',
 };
 
-router.get('/list', (_req: Request, res: Response) => {
-	const catalog = {
-		models: {
-			trains: [PROCEDURAL_MODEL, ...discoverModels('trains')],
-			tracks: [PROCEDURAL_MODEL, ...discoverModels('tracks')],
-			stations: [PROCEDURAL_MODEL, ...discoverModels('stations')],
-		},
-		sounds: {
-			horn: [PROCEDURAL_SOUND, ...discoverSounds('horns')],
-			engine: [PROCEDURAL_SOUND, ...discoverSounds('engine')],
-			rail: [PROCEDURAL_SOUND, ...discoverSounds('rail')],
-			wind: [PROCEDURAL_SOUND, ...discoverSounds('wind')],
-			brake: [PROCEDURAL_SOUND, ...discoverSounds('brake')],
-			doorChime: [PROCEDURAL_SOUND, ...discoverSounds('doorChime')],
-			stationChime: [PROCEDURAL_SOUND, ...discoverSounds('stationChime')],
-		},
-	};
-	res.json(catalog);
-});
+export function createAssetsRouter(dataDir: string): Router {
+	const router = Router();
+	const assetsDir = path.join(dataDir, 'assets');
 
-router.post('/upload', adminAuth, upload.single('file'), (req: Request, res: Response) => {
-	if (!req.file) {
-		res.status(400).json({error: 'No file uploaded'});
-		return;
+	function discoverModels(subcategory: string): DiscoveredAsset[] {
+		const dir = path.join(assetsDir, 'models', subcategory);
+		const files = scanDir(dir, MODEL_EXTS);
+		return files.map(f => ({
+			id: path.basename(f, path.extname(f)),
+			name: humanizeName(f),
+			path: `models/${subcategory}/${f}`,
+			type: 'gltf' as const,
+			source: 'filesystem',
+		}));
 	}
 
-	const category = req.body.category as string;
-	const subcategory = req.body.subcategory as string;
-	const displayName = (req.body.name as string) || req.file.originalname;
-
-	if (!category || !subcategory) {
-		fs.unlinkSync(req.file.path);
-		res.status(400).json({error: 'category and subcategory are required'});
-		return;
+	function discoverSounds(subcategory: string): DiscoveredAsset[] {
+		const dir = path.join(assetsDir, 'sounds', subcategory);
+		const files = scanDir(dir, SOUND_EXTS);
+		return files.map(f => ({
+			id: path.basename(f, path.extname(f)),
+			name: humanizeName(f),
+			path: `sounds/${subcategory}/${f}`,
+			type: 'sample' as const,
+			source: 'filesystem',
+		}));
 	}
 
-	const ext = path.extname(req.file.originalname).toLowerCase();
-	const isModel = category === 'models';
-	const isSound = category === 'sounds';
+	router.get('/list', (_req: Request, res: Response) => {
+		const catalog = {
+			models: {
+				trains: [PROCEDURAL_MODEL, ...discoverModels('trains')],
+				tracks: [PROCEDURAL_MODEL, ...discoverModels('tracks')],
+				stations: [PROCEDURAL_MODEL, ...discoverModels('stations')],
+			},
+			sounds: {
+				horn: [PROCEDURAL_SOUND, ...discoverSounds('horns')],
+				engine: [PROCEDURAL_SOUND, ...discoverSounds('engine')],
+				rail: [PROCEDURAL_SOUND, ...discoverSounds('rail')],
+				wind: [PROCEDURAL_SOUND, ...discoverSounds('wind')],
+				brake: [PROCEDURAL_SOUND, ...discoverSounds('brake')],
+				doorChime: [PROCEDURAL_SOUND, ...discoverSounds('doorChime')],
+				stationChime: [PROCEDURAL_SOUND, ...discoverSounds('stationChime')],
+			},
+		};
+		res.json(catalog);
+	});
 
-	if (isModel && !MODEL_EXTS.has(ext)) {
-		fs.unlinkSync(req.file.path);
-		res.status(400).json({error: `Invalid model format. Allowed: ${[...MODEL_EXTS].join(', ')}`});
-		return;
-	}
-	if (isSound && !SOUND_EXTS.has(ext)) {
-		fs.unlinkSync(req.file.path);
-		res.status(400).json({error: `Invalid sound format. Allowed: ${[...SOUND_EXTS].join(', ')}`});
-		return;
-	}
-	if (!isModel && !isSound) {
-		fs.unlinkSync(req.file.path);
-		res.status(400).json({error: 'category must be "models" or "sounds"'});
-		return;
-	}
+	router.post('/upload', adminAuth, upload.single('file'), (req: Request, res: Response) => {
+		if (!req.file) {
+			res.status(400).json({error: 'No file uploaded'});
+			return;
+		}
 
-	const destDir = path.join(ASSETS_DIR, category, subcategory);
-	fs.mkdirSync(destDir, {recursive: true});
+		const category = req.body.category as string;
+		const subcategory = req.body.subcategory as string;
+		const displayName = (req.body.name as string) || req.file.originalname;
 
-	const safeName = displayName.replace(/[^a-zA-Z0-9_-]/g, '_');
-	const destFilename = `${safeName}${ext}`;
-	const destPath = path.join(destDir, destFilename);
+		if (!category || !subcategory) {
+			fs.unlinkSync(req.file.path);
+			res.status(400).json({error: 'category and subcategory are required'});
+			return;
+		}
 
-	if (fs.existsSync(destPath)) {
-		fs.unlinkSync(req.file.path);
-		res.status(409).json({error: `Asset "${destFilename}" already exists`});
-		return;
-	}
+		const ext = path.extname(req.file.originalname).toLowerCase();
+		const isModel = category === 'models';
+		const isSound = category === 'sounds';
 
-	fs.renameSync(req.file.path, destPath);
+		if (isModel && !MODEL_EXTS.has(ext)) {
+			fs.unlinkSync(req.file.path);
+			res.status(400).json({error: `Invalid model format. Allowed: ${[...MODEL_EXTS].join(', ')}`});
+			return;
+		}
+		if (isSound && !SOUND_EXTS.has(ext)) {
+			fs.unlinkSync(req.file.path);
+			res.status(400).json({error: `Invalid sound format. Allowed: ${[...SOUND_EXTS].join(', ')}`});
+			return;
+		}
+		if (!isModel && !isSound) {
+			fs.unlinkSync(req.file.path);
+			res.status(400).json({error: 'category must be "models" or "sounds"'});
+			return;
+		}
 
-	const relativePath = `${category}/${subcategory}/${destFilename}`;
-	console.log(`[Assets] Admin uploaded ${category}/${subcategory}: ${displayName} -> ${relativePath}`);
-	res.json({ok: true, asset: {id: safeName, name: displayName, path: relativePath}});
-});
+		const destDir = path.join(assetsDir, category, subcategory);
+		fs.mkdirSync(destDir, {recursive: true});
 
-router.delete('/:id', adminAuth, (req: Request, res: Response) => {
-	const assetId = req.params.id;
+		const safeName = displayName.replace(/[^a-zA-Z0-9_-]/g, '_');
+		const destFilename = `${safeName}${ext}`;
+		const destPath = path.join(destDir, destFilename);
 
-	const searchDirs = [
-		{base: 'models', subs: ['trains', 'tracks', 'stations']},
-		{base: 'sounds', subs: ['horns', 'engine', 'rail', 'wind', 'brake', 'doorChime', 'stationChime']},
-	];
+		if (fs.existsSync(destPath)) {
+			fs.unlinkSync(req.file.path);
+			res.status(409).json({error: `Asset "${destFilename}" already exists`});
+			return;
+		}
 
-	for (const {base, subs} of searchDirs) {
-		const exts = base === 'models' ? MODEL_EXTS : SOUND_EXTS;
-		for (const sub of subs) {
-			const dir = path.join(ASSETS_DIR, base, sub);
-			for (const ext of exts) {
-				const filePath = path.join(dir, `${assetId}${ext}`);
-				if (fs.existsSync(filePath)) {
-					try {
-						fs.unlinkSync(filePath);
-						console.log(`[Assets] Admin deleted: ${filePath}`);
-						res.json({ok: true});
-					} catch (err) {
-						const msg = err instanceof Error ? err.message : String(err);
-						console.error(`[Assets] Error deleting ${filePath}: ${msg}`);
-						res.status(500).json({error: 'Failed to delete file'});
+		fs.renameSync(req.file.path, destPath);
+
+		const relativePath = `${category}/${subcategory}/${destFilename}`;
+		console.log(`[Assets] Admin uploaded ${category}/${subcategory}: ${displayName} -> ${relativePath}`);
+		res.json({ok: true, asset: {id: safeName, name: displayName, path: relativePath}});
+	});
+
+	router.delete('/:id', adminAuth, (req: Request, res: Response) => {
+		const assetId = req.params.id;
+
+		const searchDirs = [
+			{base: 'models', subs: ['trains', 'tracks', 'stations']},
+			{base: 'sounds', subs: ['horns', 'engine', 'rail', 'wind', 'brake', 'doorChime', 'stationChime']},
+		];
+
+		for (const {base, subs} of searchDirs) {
+			const exts = base === 'models' ? MODEL_EXTS : SOUND_EXTS;
+			for (const sub of subs) {
+				const dir = path.join(assetsDir, base, sub);
+				for (const ext of exts) {
+					const filePath = path.join(dir, `${assetId}${ext}`);
+					if (fs.existsSync(filePath)) {
+						try {
+							fs.unlinkSync(filePath);
+							console.log(`[Assets] Admin deleted: ${filePath}`);
+							res.json({ok: true});
+						} catch (err) {
+							const msg = err instanceof Error ? err.message : String(err);
+							console.error(`[Assets] Error deleting ${filePath}: ${msg}`);
+							res.status(500).json({error: 'Failed to delete file'});
+						}
+						return;
 					}
-					return;
 				}
 			}
 		}
-	}
 
-	res.status(404).json({error: 'Asset not found'});
-});
+		res.status(404).json({error: 'Asset not found'});
+	});
 
-export default router;
+	return router;
+}

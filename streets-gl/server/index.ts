@@ -6,13 +6,14 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import https from 'https';
-import configRouter from './routes/config';
-import assetsRouter from './routes/assets';
+import {createConfigRouter} from './routes/config';
+import {createAssetsRouter} from './routes/assets';
 import {getAdminToken} from './middleware/adminAuth';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const BUILD_DIR = path.join(__dirname, '..', '..', 'build');
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
 
 app.use(cors());
 app.use(express.json());
@@ -21,8 +22,8 @@ app.get('/api/health', (_req, res) => {
 	res.json({status: 'ok', timestamp: Date.now()});
 });
 
-app.use('/api/config', configRouter);
-app.use('/api/assets', assetsRouter);
+app.use('/api/config', createConfigRouter(DATA_DIR));
+app.use('/api/assets', createAssetsRouter(DATA_DIR));
 
 app.get('/api/admin/verify', (req, res) => {
 	const token = (req.query.token as string) || req.headers.authorization?.replace('Bearer ', '');
@@ -33,7 +34,7 @@ app.get('/api/admin/verify', (req, res) => {
 	res.json({valid: true});
 });
 
-app.use('/data/assets', express.static(path.join(__dirname, '..', '..', 'data', 'assets')));
+app.use('/data/assets', express.static(path.join(DATA_DIR, 'assets')));
 
 app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 	const systemId = req.params.systemId;
@@ -109,6 +110,7 @@ app.get('/{*path}', (_req, res) => {
 
 app.listen(PORT, () => {
 	console.log(`[MetroRider Server] Running on http://localhost:${PORT}`);
+	console.log(`[MetroRider Server] DATA_DIR: ${DATA_DIR}`);
 	console.log(`[MetroRider Server] Admin token: ${getAdminToken()}`);
 	console.log(`[MetroRider Server] Admin URL: http://localhost:${PORT}?admin=${getAdminToken()}`);
 });

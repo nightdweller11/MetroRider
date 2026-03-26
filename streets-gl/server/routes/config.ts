@@ -3,19 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import {adminAuth} from '../middleware/adminAuth';
 
-const router = Router();
-const CONFIG_PATH = path.join(__dirname, '../../../data/config.json');
-
-function readConfig(): object {
-	try {
-		const raw = fs.readFileSync(CONFIG_PATH, 'utf-8');
-		return JSON.parse(raw);
-	} catch (err) {
-		console.error('[Config] Error reading config:', err);
-		return getDefaultConfig();
-	}
-}
-
 function getDefaultConfig(): object {
 	return {
 		trainModel: 'procedural-default',
@@ -33,27 +20,42 @@ function getDefaultConfig(): object {
 	};
 }
 
-router.get('/', (_req: Request, res: Response) => {
-	const config = readConfig();
-	res.json(config);
-});
+export function createConfigRouter(dataDir: string): Router {
+	const router = Router();
+	const configPath = path.join(dataDir, 'config.json');
 
-router.put('/', adminAuth, (req: Request, res: Response) => {
-	const newConfig = req.body;
-	if (!newConfig || typeof newConfig !== 'object') {
-		res.status(400).json({error: 'Invalid config payload'});
-		return;
+	function readConfig(): object {
+		try {
+			const raw = fs.readFileSync(configPath, 'utf-8');
+			return JSON.parse(raw);
+		} catch (err) {
+			console.error('[Config] Error reading config:', err);
+			return getDefaultConfig();
+		}
 	}
 
-	try {
-		fs.mkdirSync(path.dirname(CONFIG_PATH), {recursive: true});
-		fs.writeFileSync(CONFIG_PATH, JSON.stringify(newConfig, null, 2), 'utf-8');
-		console.log('[Config] Config updated by admin');
-		res.json({ok: true, config: newConfig});
-	} catch (err) {
-		console.error('[Config] Error writing config:', err);
-		res.status(500).json({error: 'Failed to write config'});
-	}
-});
+	router.get('/', (_req: Request, res: Response) => {
+		const config = readConfig();
+		res.json(config);
+	});
 
-export default router;
+	router.put('/', adminAuth, (req: Request, res: Response) => {
+		const newConfig = req.body;
+		if (!newConfig || typeof newConfig !== 'object') {
+			res.status(400).json({error: 'Invalid config payload'});
+			return;
+		}
+
+		try {
+			fs.mkdirSync(path.dirname(configPath), {recursive: true});
+			fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf-8');
+			console.log('[Config] Config updated by admin');
+			res.json({ok: true, config: newConfig});
+		} catch (err) {
+			console.error('[Config] Error writing config:', err);
+			res.status(500).json({error: 'Failed to write config'});
+		}
+	});
+
+	return router;
+}
