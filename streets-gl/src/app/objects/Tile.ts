@@ -265,6 +265,14 @@ export default class Tile extends Object3D {
 			this.huggingMesh = null;
 		}
 
+		if (this.terrainMaskMesh) {
+			this.terrainMaskMesh.delete();
+			this.terrainMaskMesh = null;
+		}
+
+		this.instanceBuffers.clear();
+		this.labelBuffersList.length = 0;
+
 		if (this.parent) {
 			this.parent.remove(this);
 		}

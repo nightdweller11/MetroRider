@@ -178,7 +178,7 @@ export default class TileSystem extends System {
 			this.cameraFrustum.fov !== camera.fov ||
 			this.cameraFrustum.aspect !== camera.aspect
 		) {
-			this.cameraFrustum = new Frustum(camera.fov, camera.aspect, 1, 8000);
+			this.cameraFrustum = new Frustum(camera.fov, camera.aspect, 1, Config.TileFrustumFar);
 			this.cameraFrustum.updateViewSpaceVertices();
 		}
 
@@ -353,7 +353,9 @@ export default class TileSystem extends System {
 			return b.distance - a.distance;
 		});
 
-		const tilesToRemove = Math.min(tileList.length, this.tiles.size - Config.MaxConcurrentTiles);
+		const tilesToRemove = Config.AggressiveEviction
+			? tileList.length
+			: Math.min(tileList.length, this.tiles.size - Config.MaxConcurrentTiles);
 
 		for (let i = 0; i < tilesToRemove; i++) {
 			this.removeTile(tileList[i].tile.x, tileList[i].tile.y);

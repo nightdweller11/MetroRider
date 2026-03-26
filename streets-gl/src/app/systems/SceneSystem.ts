@@ -39,6 +39,7 @@ export default class SceneSystem extends System {
 	public scene: Object3D;
 	public objects: SceneObjects;
 	public pivotDelta: Vec2 = new Vec2();
+	private mergedBufferCache: Map<string, Float32Array> = new Map();
 
 	public postInit(): void {
 		this.initScene();
@@ -257,8 +258,24 @@ export default class SceneSystem extends System {
 			instancedObject.updateMatrix();
 			instancedObject.updateMatrixWorld();
 
-			const mergedBuffer = Utils.mergeTypedArrays(Float32Array, buffers);
-			instancedObject.setInstancesInterleavedBuffer(mergedBuffer);
+			let totalLength = 0;
+			for (let i = 0; i < buffers.length; i++) {
+				totalLength += buffers[i].length;
+			}
+
+			let merged = this.mergedBufferCache.get(name);
+			if (!merged || merged.length !== totalLength) {
+				merged = new Float32Array(totalLength);
+				this.mergedBufferCache.set(name, merged);
+			}
+
+			let offset = 0;
+			for (let i = 0; i < buffers.length; i++) {
+				merged.set(buffers[i], offset);
+				offset += buffers[i].length;
+			}
+
+			instancedObject.setInstancesInterleavedBuffer(merged);
 		}
 	}
 

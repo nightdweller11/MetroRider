@@ -1,10 +1,41 @@
 import {SettingsSchema, SettingsSchemaRangeScale} from "~/app/settings/SettingsSchema";
 
+function detectLowMemoryMode(): boolean {
+	try {
+		if (typeof window !== 'undefined' && window.location.search.includes('mobile=true')) {
+			return true;
+		}
+
+		if (typeof navigator !== 'undefined') {
+			const hasTouch = navigator.maxTouchPoints > 0;
+			const smallScreen = typeof screen !== 'undefined' && (screen.width < 1024 || screen.height < 1024);
+			if (hasTouch && smallScreen) {
+				return true;
+			}
+
+			const mem = (navigator as any).deviceMemory;
+			if (typeof mem === 'number' && mem < 8) {
+				return true;
+			}
+		}
+	} catch {
+		// safe fallback
+	}
+	return false;
+}
+
+const _lowMemory = detectLowMemoryMode();
+
 const Config = {
+	LowMemoryMode: _lowMemory,
 	TileSize: /*40075016.68 / (1 << 16)*/ 611.4962158203125,
-	MaxConcurrentTiles: 150,
+	MaxConcurrentTiles: _lowMemory ? 40 : 150,
+	TileFrustumFar: _lowMemory ? 2000 : 8000,
+	AggressiveEviction: _lowMemory,
 	MaxTilesPerWorker: 1,
-	WorkersCount: Math.min(4, navigator.hardwareConcurrency),
+	WorkersCount: _lowMemory
+		? Math.min(2, navigator.hardwareConcurrency)
+		: Math.min(4, navigator.hardwareConcurrency),
 	StartPosition: {lat: 32.0795, lon: 34.7920, pitch: 45, yaw: 0, distance: 2000},
 	MinCameraDistance: 10,
 	MaxCameraDistance: 4000,
@@ -78,14 +109,14 @@ const Config = {
 			label: 'Shadows',
 			status: ['off', 'low', 'medium', 'high'],
 			statusLabels: ['Disabled', 'Low', 'Medium', 'High'],
-			statusDefault: 'medium',
+			statusDefault: _lowMemory ? 'off' : 'medium',
 			category: 'graphics'
 		},
 		taa: {
 			label: 'TAA',
 			status: ['off', 'on'],
 			statusLabels: ['Disabled', 'Enabled'],
-			statusDefault: 'on',
+			statusDefault: _lowMemory ? 'off' : 'on',
 			category: 'graphics'
 		},
 		dof: {
@@ -117,7 +148,7 @@ const Config = {
 			label: 'Bloom',
 			status: ['off', 'on'],
 			statusLabels: ['Disabled', 'Enabled'],
-			statusDefault: 'on',
+			statusDefault: _lowMemory ? 'off' : 'on',
 			category: 'graphics'
 		},
 		ssr: {
@@ -131,7 +162,7 @@ const Config = {
 			label: 'Screen-space ambient occlusion',
 			status: ['off', 'on'],
 			statusLabels: ['Disabled', 'Enabled'],
-			statusDefault: 'on',
+			statusDefault: _lowMemory ? 'off' : 'on',
 			category: 'graphics'
 		}
 	} as SettingsSchema,

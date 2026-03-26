@@ -60,16 +60,18 @@ export default class MapWorker {
 
 	private async processMessage(e: MessageEvent): Promise<void> {
 		const data = e.data as WorkerMessage.FromWorker;
-		const tilePosition = new Vec2(data.tile[0], data.tile[1]);
-		const tileInProgress = this.tilesInProgress.get(`${tilePosition.x},${tilePosition.y}`);
+		const tileKey = `${data.tile[0]},${data.tile[1]}`;
+		const tileInProgress = this.tilesInProgress.get(tileKey);
 
 		switch (data.type) {
 			case WorkerMessage.FromWorkerType.Success:
 				this.queueLength--;
+				this.tilesInProgress.delete(tileKey);
 				tileInProgress.resolve(data.payload);
 				break;
 			case WorkerMessage.FromWorkerType.Error:
 				this.queueLength--;
+				this.tilesInProgress.delete(tileKey);
 				tileInProgress.reject(data.payload);
 				break;
 			case WorkerMessage.FromWorkerType.RequestHeight:
@@ -78,7 +80,7 @@ export default class MapWorker {
 
 				this.sendMessage({
 					type: WorkerMessage.ToWorkerType.Height,
-					tile: [tilePosition.x, tilePosition.y],
+					tile: [data.tile[0], data.tile[1]],
 					height: heightArray
 				}, [heightArray.buffer]);
 				break;
