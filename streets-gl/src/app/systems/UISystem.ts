@@ -9,7 +9,7 @@ import MapTimeSystem from "~/app/systems/MapTimeSystem";
 import PickingSystem from "~/app/systems/PickingSystem";
 import SettingsSystem from "~/app/systems/SettingsSystem";
 import SettingsStorageDecorator from "~/app/settings/SettingsStorageDecorator";
-import Utils from "~/app/Utils";
+
 import TileLoadingSystem, {OverpassEndpoint} from "~/app/systems/TileLoadingSystem";
 import UISystemState from "~/app/ui/UISystemState";
 import RenderGraphSnapshot from "~/app/ui/RenderGraphSnapshot";
@@ -71,13 +71,6 @@ export default class UISystem extends System {
 
 		this.state.settingsSchema = this.systemManager.getSystem(SettingsSystem).schema;
 
-		this.detectMobile();
-	}
-
-	private detectMobile(): void {
-		if (Utils.isMobileBrowser() || !window.matchMedia("(pointer: fine)").matches) {
-			alert('Mobile devices and touch devices are not supported. Please use a computer with a mouse and keyboard.');
-		}
 	}
 
 	private updateDOM(): void {
