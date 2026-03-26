@@ -6,4 +6,4 @@ build
 coverage
 server/dist
 .env
-data/
+/data/

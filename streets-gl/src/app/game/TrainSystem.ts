@@ -36,6 +36,7 @@ export interface TrainWorldPosition {
 export interface LineState {
 	parsed: ParsedLine;
 	track: TrackData;
+	realStationDists: number[];
 }
 
 export default class TrainSystem extends System {
@@ -67,10 +68,16 @@ export default class TrainSystem extends System {
 	public loadMap(data: MetroMapData): void {
 		const parsed = parseMetroMap(data);
 
-		this.lines = parsed.map(line => ({
-			parsed: line,
-			track: buildTrackData(line.allPoints),
-		}));
+		this.lines = parsed.map(line => {
+			const track = buildTrackData(line.allPoints);
+			const realStationDists: number[] = [];
+			for (let i = 0; i < line.allPoints.length; i++) {
+				if (!line.allPoints[i].isWaypoint) {
+					realStationDists.push(track.stationDists[i]);
+				}
+			}
+			return {parsed: line, track, realStationDists};
+		});
 
 		if (this.lines.length > 0) {
 			this.selectLine(0);
@@ -89,7 +96,7 @@ export default class TrainSystem extends System {
 		const ls = this.lines[idx];
 
 		this.physicsState = createTrainPhysicsState(
-			ls.track.stationDists[0] + 60
+			ls.realStationDists[0] + 60
 		);
 		this.stationManager.reset();
 
@@ -187,7 +194,7 @@ export default class TrainSystem extends System {
 		const stations = ls.parsed.stations;
 		if (stationIdx < 0 || stationIdx >= stations.length) return;
 
-		this.physicsState.trainDist = ls.track.stationDists[stationIdx] + 10;
+		this.physicsState.trainDist = ls.realStationDists[stationIdx] + 10;
 		this.physicsState.trainSpeed = 0;
 		this.physicsState.direction = dir;
 		this.physicsState.doorsOpen = false;
@@ -342,7 +349,7 @@ export default class TrainSystem extends System {
 
 	private updateStationState(ls: LineState): void {
 		this.stationState = this.stationManager.update(
-			ls.track,
+			ls.realStationDists,
 			ls.parsed.stations,
 			this.physicsState.trainDist,
 			this.physicsState.trainSpeed,

@@ -1,5 +1,4 @@
 import type { StationData } from './RouteParser';
-import type { TrackData } from './TrackBuilder';
 
 const STATION_STOP_DIST = 40;
 
@@ -25,7 +24,7 @@ export class StationManager {
   }
 
   public update(
-    track: TrackData,
+    stationDists: number[],
     stations: StationData[],
     trainDist: number,
     trainSpeed: number,
@@ -36,15 +35,15 @@ export class StationManager {
     let nextStIdx = -1;
     let nextStDist = Infinity;
 
-    for (let i = 0; i < track.stationDists.length; i++) {
-      const d = Math.abs(trainDist - track.stationDists[i]);
+    for (let i = 0; i < stationDists.length; i++) {
+      const d = Math.abs(trainDist - stationDists[i]);
       if (d < nearestStDist) {
         nearestStDist = d;
         nearestStIdx = i;
       }
       const ahead = direction === 1
-        ? track.stationDists[i] - trainDist
-        : trainDist - track.stationDists[i];
+        ? stationDists[i] - trainDist
+        : trainDist - stationDists[i];
       if (ahead > 10 && ahead < nextStDist) {
         nextStDist = ahead;
         nextStIdx = i;

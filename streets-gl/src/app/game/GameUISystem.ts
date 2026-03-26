@@ -13,8 +13,10 @@ export default class GameUISystem extends System {
 	private speedEl: HTMLElement | null = null;
 	private stationEl: HTMLElement | null = null;
 	private directionEl: HTMLElement | null = null;
+	private lineColorEl: HTMLElement | null = null;
 	private cameraEl: HTMLElement | null = null;
 	private lineListEl: HTMLElement | null = null;
+	private stationPanelEl: HTMLElement | null = null;
 	private debugEl: HTMLElement | null = null;
 	private debugVisible: boolean = false;
 	private initialized: boolean = false;
@@ -71,6 +73,12 @@ export default class GameUISystem extends System {
 			display: none; min-width: 200px;
 		`;
 
+		this.lineColorEl = document.createElement('div');
+		this.lineColorEl.style.cssText = `
+			width: 100%; height: 4px; border-radius: 2px;
+			margin-bottom: 6px; display: none;
+		`;
+
 		this.stationEl = document.createElement('div');
 		this.stationEl.style.cssText = 'font-size: 16px; font-weight: 600;';
 		this.stationEl.textContent = '';
@@ -79,6 +87,7 @@ export default class GameUISystem extends System {
 		this.directionEl.style.cssText = 'font-size: 12px; color: #aaa; margin-top: 4px;';
 		this.directionEl.textContent = '';
 
+		wrap.appendChild(this.lineColorEl);
 		wrap.appendChild(this.stationEl);
 		wrap.appendChild(this.directionEl);
 		this.container.appendChild(wrap);
@@ -206,15 +215,206 @@ export default class GameUISystem extends System {
 			const label = document.createElement('span');
 			label.textContent = ls.parsed.name;
 
+			const arrow = document.createElement('span');
+			arrow.style.cssText = 'margin-left: auto; opacity: 0.5; font-size: 10px;';
+			arrow.textContent = '\u25B6';
+
 			btn.appendChild(swatch);
 			btn.appendChild(label);
+			btn.appendChild(arrow);
 			btn.addEventListener('click', () => {
-				trainSystem.selectLine(idx);
-				const camSystem = this.systemManager.getSystem(GameCameraSystem);
-				if (camSystem) camSystem.snapToTrain();
+				this.showStationPanel(trainSystem, idx);
 			});
 			this.lineListEl.appendChild(btn);
 		});
+	}
+
+	private showStationPanel(trainSystem: TrainSystem, lineIdx: number): void {
+		if (this.lineListEl) this.lineListEl.style.display = 'none';
+
+		if (this.stationPanelEl) {
+			this.stationPanelEl.remove();
+		}
+
+		const ls = trainSystem.lines[lineIdx];
+		if (!ls) {
+			console.error(`[GameUI] Invalid line index for station panel: ${lineIdx}`);
+			return;
+		}
+
+		const stations = ls.parsed.stations;
+		let selectedDir = 1;
+
+		const panel = document.createElement('div');
+		panel.style.cssText = `
+			position: absolute; top: 70px; right: 20px;
+			width: 260px; max-height: calc(100vh - 120px);
+			background: rgba(0,0,0,0.85); border-radius: 12px;
+			backdrop-filter: blur(12px); pointer-events: auto;
+			border: 1px solid rgba(255,255,255,0.12);
+			display: flex; flex-direction: column; overflow: hidden;
+		`;
+
+		const header = document.createElement('div');
+		header.style.cssText = `
+			padding: 12px 14px; display: flex; align-items: center; gap: 8px;
+			border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;
+		`;
+
+		const backBtn = document.createElement('div');
+		backBtn.style.cssText = `
+			cursor: pointer; font-size: 16px; color: #aaa; padding: 2px 4px;
+			border-radius: 4px; transition: color 0.15s;
+		`;
+		backBtn.textContent = '\u25C0';
+		backBtn.title = 'Back to lines';
+		backBtn.addEventListener('mouseenter', () => { backBtn.style.color = '#fff'; });
+		backBtn.addEventListener('mouseleave', () => { backBtn.style.color = '#aaa'; });
+		backBtn.addEventListener('click', () => {
+			this.hideStationPanel();
+		});
+
+		const colorBar = document.createElement('div');
+		colorBar.style.cssText = `
+			width: 12px; height: 12px; border-radius: 50%;
+			background: ${ls.parsed.color}; flex-shrink: 0;
+		`;
+
+		const lineName = document.createElement('div');
+		lineName.style.cssText = 'color: #fff; font-size: 13px; font-weight: 600;';
+		lineName.textContent = ls.parsed.name;
+
+		header.appendChild(backBtn);
+		header.appendChild(colorBar);
+		header.appendChild(lineName);
+
+		const dirSection = document.createElement('div');
+		dirSection.style.cssText = `
+			padding: 8px 14px; display: flex; gap: 6px;
+			border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;
+		`;
+
+		const firstStation = stations[0]?.name ?? '?';
+		const lastStation = stations[stations.length - 1]?.name ?? '?';
+
+		const styleDirBtns = (): void => {
+			dirSection.querySelectorAll('div[data-dir]').forEach(b => {
+				const el = b as HTMLElement;
+				const d = parseInt(el.dataset.dir ?? '1');
+				if (d === selectedDir) {
+					el.style.background = 'rgba(59, 130, 246, 0.5)';
+					el.style.color = '#fff';
+					el.style.border = '1px solid rgba(59, 130, 246, 0.6)';
+				} else {
+					el.style.background = 'rgba(255,255,255,0.06)';
+					el.style.color = '#aaa';
+					el.style.border = '1px solid rgba(255,255,255,0.08)';
+				}
+			});
+		};
+
+		const createDirBtn = (dir: number, terminalName: string): HTMLElement => {
+			const btn = document.createElement('div');
+			btn.dataset.dir = String(dir);
+			btn.style.cssText = `
+				flex: 1; padding: 6px 8px; border-radius: 6px;
+				font-size: 10px; text-align: center; cursor: pointer;
+				user-select: none; transition: all 0.15s; line-height: 1.3;
+			`;
+
+			const arrow = dir === 1 ? '\u2192' : '\u2190';
+			btn.innerHTML = `<div style="font-size: 12px;">${arrow}</div><div>${terminalName}</div>`;
+
+			btn.addEventListener('click', () => {
+				selectedDir = dir;
+				styleDirBtns();
+			});
+
+			return btn;
+		};
+
+		dirSection.appendChild(createDirBtn(1, lastStation));
+		dirSection.appendChild(createDirBtn(-1, firstStation));
+		styleDirBtns();
+
+		const stationList = document.createElement('div');
+		stationList.style.cssText = `
+			flex: 1; overflow-y: auto; padding: 6px 0;
+			scrollbar-width: thin;
+			scrollbar-color: rgba(255,255,255,0.15) transparent;
+		`;
+
+		stations.forEach((st, stIdx) => {
+			const row = document.createElement('div');
+			row.style.cssText = `
+				padding: 8px 14px; cursor: pointer; color: #ddd;
+				font-size: 12px; display: flex; align-items: center; gap: 8px;
+				transition: background 0.12s; user-select: none;
+			`;
+			row.addEventListener('mouseenter', () => {
+				row.style.background = 'rgba(255,255,255,0.08)';
+			});
+			row.addEventListener('mouseleave', () => {
+				row.style.background = 'transparent';
+			});
+
+			const dot = document.createElement('div');
+			dot.style.cssText = `
+				width: 8px; height: 8px; border-radius: 50%;
+				border: 2px solid ${ls.parsed.color}; flex-shrink: 0;
+				background: transparent;
+			`;
+
+			const name = document.createElement('span');
+			name.textContent = st.name;
+
+			row.appendChild(dot);
+			row.appendChild(name);
+
+			row.addEventListener('click', () => {
+				trainSystem.goToStation(lineIdx, stIdx, selectedDir);
+				if (!trainSystem.gameActive) {
+					trainSystem.startGame();
+					const camSystem = this.systemManager.getSystem(GameCameraSystem);
+					if (camSystem) {
+						camSystem.activate();
+					}
+					const startBtnEl = document.getElementById('game-start-btn');
+					if (startBtnEl) startBtnEl.style.display = 'none';
+					this.showGameUI();
+					this.rebuildLineList(trainSystem);
+				}
+				const camSystem = this.systemManager.getSystem(GameCameraSystem);
+				if (camSystem) camSystem.snapToTrain();
+				this.hideStationPanel();
+				this.updateLineColorIndicator(trainSystem);
+			});
+
+			stationList.appendChild(row);
+		});
+
+		panel.appendChild(header);
+		panel.appendChild(dirSection);
+		panel.appendChild(stationList);
+
+		this.stationPanelEl = panel;
+		this.container.appendChild(panel);
+	}
+
+	private hideStationPanel(): void {
+		if (this.stationPanelEl) {
+			this.stationPanelEl.remove();
+			this.stationPanelEl = null;
+		}
+		if (this.lineListEl) this.lineListEl.style.display = 'flex';
+	}
+
+	private updateLineColorIndicator(trainSystem: TrainSystem): void {
+		const ls = trainSystem.getCurrentLine();
+		if (this.lineColorEl && ls) {
+			this.lineColorEl.style.background = ls.parsed.color;
+			this.lineColorEl.style.display = 'block';
+		}
 	}
 
 	private createStartButton(trainSystem: TrainSystem): void {
@@ -278,6 +478,7 @@ export default class GameUISystem extends System {
 			startBtn.style.display = 'none';
 			this.showGameUI();
 			this.rebuildLineList(trainSystem);
+			this.updateLineColorIndicator(trainSystem);
 		};
 
 		loadBtn.addEventListener('click', async () => {
@@ -371,11 +572,26 @@ export default class GameUISystem extends System {
 		}
 
 		if (this.stationEl && trainSystem.stationState) {
-			this.stationEl.textContent = trainSystem.stationState.stationName;
+			const ss = trainSystem.stationState;
+			if (ss.arriving) {
+				this.stationEl.textContent = ss.stationName;
+			} else if (ss.nextStationIdx >= 0) {
+				this.stationEl.textContent = `Next: ${ss.stationName}`;
+			} else {
+				this.stationEl.textContent = ss.stationName;
+			}
 		}
 
 		if (this.directionEl) {
-			this.directionEl.textContent = `→ ${trainSystem.getTerminalName()}`;
+			this.directionEl.textContent = `\u2192 ${trainSystem.getTerminalName()}`;
+		}
+
+		if (this.lineColorEl) {
+			const ls = trainSystem.getCurrentLine();
+			if (ls && this.lineColorEl.style.display === 'none') {
+				this.lineColorEl.style.background = ls.parsed.color;
+				this.lineColorEl.style.display = 'block';
+			}
 		}
 
 		if (this.debugVisible && this.debugEl) {
