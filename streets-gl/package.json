@@ -67,11 +67,13 @@
 	"dependencies": {
 		"@loaders.gl/core": "^3.2.10",
 		"@loaders.gl/gltf": "^3.2.10",
+		"@types/adm-zip": "^0.5.8",
 		"@types/cors": "^2.8.19",
 		"@types/express": "^5.0.6",
 		"@types/multer": "^2.1.0",
 		"@types/three": "^0.183.1",
 		"@types/uuid": "^10.0.0",
+		"adm-zip": "^0.5.16",
 		"astronomy-bundle": "^7.5.5",
 		"cors": "^2.8.6",
 		"d3": "^7.6.1",

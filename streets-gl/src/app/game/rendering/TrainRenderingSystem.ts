@@ -6,10 +6,12 @@ import TrainMeshObject from './TrainMeshObject';
 import {buildTrainCarGeometry, buildTrackGeometry, buildStationGeometry, GeometryBuffers} from './TrainGeometry';
 import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
+import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
 import {debugLog} from '~/app/game/debug';
 
 const TRACK_HEIGHT_OFFSET = 0.05;
+const STATION_PLATFORM_OFFSET = 7;
 const TARGET_CAR_WIDTH = 3.0;
 const DEFAULT_CAR_COUNT = 3;
 const CAR_GAP = 0.5;
@@ -24,6 +26,7 @@ export default class TrainRenderingSystem extends System {
 	private lastTerrainSample: number = 0;
 	private terrainSettled: boolean = false;
 	private lastTrainModelId: string = '';
+	private lastStationModelId: string = '';
 	private glbCache: Map<string, GeometryBuffers> = new Map();
 	private catalogReady: boolean = false;
 	private pendingModelRebuild: boolean = false;
@@ -44,12 +47,20 @@ export default class TrainRenderingSystem extends System {
 		if (!assetConfig) return;
 
 		const config = assetConfig.getConfig();
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const ls = trainSystem?.getCurrentLine();
+
 		if (config.trainModel !== this.lastTrainModelId) {
-			debugLog(`[TrainRenderingSystem] Config changed: model ${this.lastTrainModelId} -> ${config.trainModel}`);
-			const trainSystem = this.systemManager.getSystem(TrainSystem);
-			const ls = trainSystem?.getCurrentLine();
+			debugLog(`[TrainRenderingSystem] Config changed: train model ${this.lastTrainModelId} -> ${config.trainModel}`);
 			if (ls) {
 				this.rebuildTrainMesh(ls.parsed.color);
+			}
+		}
+
+		if (config.stationModel !== this.lastStationModelId) {
+			debugLog(`[TrainRenderingSystem] Config changed: station model ${this.lastStationModelId} -> ${config.stationModel}`);
+			if (trainSystem) {
+				this.rebuildStations(trainSystem);
 			}
 		}
 	}
@@ -744,28 +755,187 @@ export default class TrainRenderingSystem extends System {
 		const ls = trainSystem.getCurrentLine();
 		if (!ls) return;
 
-		const stations = ls.parsed.stations;
-		for (let si = 0; si < stations.length; si++) {
-			const station = stations[si];
-			const pos = MathUtils.degrees2meters(station.lat, station.lng);
-			const h = this.getTerrainHeight(pos.x, pos.y);
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const config = assetConfig?.getConfig();
+		const catalog = assetConfig?.getCatalog();
+		const modelId = config?.stationModel || 'procedural-default';
+		this.lastStationModelId = modelId;
 
-			let stationHeading = 0;
-			const nextSt = stations[Math.min(si + 1, stations.length - 1)];
-			const prevSt = stations[Math.max(0, si - 1)];
-			if (nextSt !== station) {
-				stationHeading = Math.PI / 2 - MathUtils.toRad(bearing(station.lat, station.lng, nextSt.lat, nextSt.lng));
-			} else if (prevSt !== station) {
-				stationHeading = Math.PI / 2 - MathUtils.toRad(bearing(prevSt.lat, prevSt.lng, station.lat, station.lng));
+		if (modelId !== 'procedural-default' && catalog) {
+			const entry = catalog.models.stations.find(e => e.id === modelId);
+			if (entry?.path) {
+				const cacheKey = `station:${modelId}`;
+				const cached = this.glbCache.get(cacheKey);
+				if (cached) {
+					this.placeStationGLBs(trainSystem, ls, cached);
+					return;
+				}
+
+				const url = assetConfig ? assetConfig.getAssetUrl(entry.path) : `/data/assets/${entry.path}`;
+				debugLog(`[TrainRenderingSystem] Loading station GLB: ${modelId} from ${url}`);
+				this.loadStationGLBModel(url, modelId, trainSystem, ls);
+				return;
+			} else {
+				console.warn(`[TrainRenderingSystem] No path for station model: ${modelId}, falling back to procedural`);
 			}
+		}
+
+		this.placeProceduralStations(ls);
+	}
+
+	private placeProceduralStations(ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]}): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		if (!sceneSystem) return;
+
+		const track = ls.track;
+		const stations = ls.parsed.stations;
+		const realDists = ls.realStationDists;
+
+		for (let si = 0; si < stations.length; si++) {
+			const dist = realDists[si] ?? 0;
+
+			const splinePos = getPositionAtDistance(track.spline.points, track.cumDist, dist);
+			const splineNext = getPositionAtDistance(track.spline.points, track.cumDist, dist + 5);
+			const tangentBearing = bearing(splinePos.lat, splinePos.lng, splineNext.lat, splineNext.lng);
+			const stationHeading = Math.PI / 2 - MathUtils.toRad(tangentBearing);
+
+			const trackCenter = MathUtils.degrees2meters(splinePos.lat, splinePos.lng);
+			const perpX = Math.cos(stationHeading);
+			const perpZ = -Math.sin(stationHeading);
+			const offsetX = trackCenter.x + perpX * STATION_PLATFORM_OFFSET;
+			const offsetZ = trackCenter.y + perpZ * STATION_PLATFORM_OFFSET;
+
+			const h = this.getTerrainHeight(offsetX, offsetZ);
 
 			const stationBuf = buildStationGeometry(
-				pos.x, h + TRACK_HEIGHT_OFFSET, pos.y,
+				offsetX, h + TRACK_HEIGHT_OFFSET, offsetZ,
 				stationHeading,
 				ls.parsed.color,
 			);
 
 			const meshObj = new TrainMeshObject(stationBuf);
+			sceneSystem.objects.wrapper.add(meshObj);
+			this.stationMeshes.push(meshObj);
+		}
+	}
+
+	private async loadStationGLBModel(
+		url: string, modelId: string,
+		trainSystem: TrainSystem,
+		ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]},
+	): Promise<void> {
+		try {
+			const response = await fetch(url);
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status} loading ${url}`);
+			}
+			const arrayBuffer = await response.arrayBuffer();
+			const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+			const parsed = await this.parseGLBWithTextures(arrayBuffer, baseUrl);
+
+			if (parsed) {
+				const cacheKey = `station:${modelId}`;
+				this.glbCache.set(cacheKey, parsed);
+				this.placeStationGLBs(trainSystem, ls, parsed);
+				debugLog(`[TrainRenderingSystem] Loaded station GLB: ${modelId} (${parsed.position.length / 3} verts)`);
+			} else {
+				console.error(`[TrainRenderingSystem] Failed to parse station GLB: ${modelId}, using procedural`);
+				this.placeProceduralStations(ls);
+			}
+		} catch (err) {
+			console.error(`[TrainRenderingSystem] Failed to load station GLB ${modelId}:`, err);
+			this.placeProceduralStations(ls);
+		}
+	}
+
+	private placeStationGLBs(
+		trainSystem: TrainSystem,
+		ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]},
+		glbBuffers: GeometryBuffers,
+	): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		if (!sceneSystem) return;
+
+		const track = ls.track;
+		const stations = ls.parsed.stations;
+		const realDists = ls.realStationDists;
+
+		const vertCount = glbBuffers.position.length / 3;
+		let minX = Infinity, maxX = -Infinity;
+		let minZ = Infinity, maxZ = -Infinity;
+		let minY = Infinity, maxY = -Infinity;
+		for (let i = 0; i < vertCount; i++) {
+			const vx = glbBuffers.position[i * 3];
+			const vy = glbBuffers.position[i * 3 + 1];
+			const vz = glbBuffers.position[i * 3 + 2];
+			if (vx < minX) minX = vx; if (vx > maxX) maxX = vx;
+			if (vy < minY) minY = vy; if (vy > maxY) maxY = vy;
+			if (vz < minZ) minZ = vz; if (vz > maxZ) maxZ = vz;
+		}
+
+		const modelWidth = maxX - minX;
+		const modelLength = maxZ - minZ;
+		const targetLength = 40;
+		const scaleFactor = modelLength > 0.01 ? targetLength / modelLength : 1;
+
+		for (let si = 0; si < stations.length; si++) {
+			const dist = realDists[si] ?? 0;
+
+			const splinePos = getPositionAtDistance(track.spline.points, track.cumDist, dist);
+			const splineNext = getPositionAtDistance(track.spline.points, track.cumDist, dist + 5);
+			const tangentBearing = bearing(splinePos.lat, splinePos.lng, splineNext.lat, splineNext.lng);
+			const stationHeading = Math.PI / 2 - MathUtils.toRad(tangentBearing);
+
+			const trackCenter = MathUtils.degrees2meters(splinePos.lat, splinePos.lng);
+			const perpX = Math.cos(stationHeading);
+			const perpZ = -Math.sin(stationHeading);
+			const worldX = trackCenter.x + perpX * STATION_PLATFORM_OFFSET;
+			const worldZ = trackCenter.y + perpZ * STATION_PLATFORM_OFFSET;
+			const h = this.getTerrainHeight(worldX, worldZ) + TRACK_HEIGHT_OFFSET;
+
+			const cosH = Math.cos(stationHeading);
+			const sinH = Math.sin(stationHeading);
+
+			const positions: number[] = [];
+			const normals: number[] = [];
+			const colors: number[] = [];
+			const indices: number[] = [];
+
+			const cx = (minX + maxX) / 2;
+			const cz = (minZ + maxZ) / 2;
+
+			for (let i = 0; i < vertCount; i++) {
+				const lx = (glbBuffers.position[i * 3] - cx) * scaleFactor;
+				const ly = glbBuffers.position[i * 3 + 1] * scaleFactor;
+				const lz = (glbBuffers.position[i * 3 + 2] - cz) * scaleFactor;
+
+				const rx = lx * cosH + lz * sinH;
+				const rz = -lx * sinH + lz * cosH;
+
+				positions.push(worldX + rx, h + ly, worldZ + rz);
+
+				const nx = glbBuffers.normal[i * 3];
+				const ny = glbBuffers.normal[i * 3 + 1];
+				const nz = glbBuffers.normal[i * 3 + 2];
+				normals.push(nx * cosH + nz * sinH, ny, -nx * sinH + nz * cosH);
+
+				colors.push(
+					glbBuffers.color[i * 3],
+					glbBuffers.color[i * 3 + 1],
+					glbBuffers.color[i * 3 + 2],
+				);
+			}
+
+			for (let i = 0; i < glbBuffers.indices.length; i++) {
+				indices.push(glbBuffers.indices[i]);
+			}
+
+			const meshObj = new TrainMeshObject({
+				position: new Float32Array(positions),
+				normal: new Float32Array(normals),
+				color: new Float32Array(colors),
+				indices: new Uint32Array(indices),
+			});
 			sceneSystem.objects.wrapper.add(meshObj);
 			this.stationMeshes.push(meshObj);
 		}
@@ -822,13 +992,19 @@ export default class TrainRenderingSystem extends System {
 		if (!assetConfig) return;
 
 		const config = assetConfig.getConfig();
-		const currentModelId = config.trainModel || 'procedural-default';
-		if (currentModelId !== this.lastTrainModelId) {
-			debugLog(`[TrainRenderingSystem] Poll detected model change: ${this.lastTrainModelId} -> ${currentModelId}`);
+		const currentTrainModelId = config.trainModel || 'procedural-default';
+		if (currentTrainModelId !== this.lastTrainModelId) {
+			debugLog(`[TrainRenderingSystem] Poll detected train model change: ${this.lastTrainModelId} -> ${currentTrainModelId}`);
 			const ls = trainSystem.getCurrentLine();
 			if (ls) {
 				this.rebuildTrainMesh(ls.parsed.color);
 			}
+		}
+
+		const currentStationModelId = config.stationModel || 'procedural-default';
+		if (currentStationModelId !== this.lastStationModelId) {
+			debugLog(`[TrainRenderingSystem] Poll detected station model change: ${this.lastStationModelId} -> ${currentStationModelId}`);
+			this.rebuildStations(trainSystem);
 		}
 	}
 

@@ -280,49 +280,116 @@ export function buildStationGeometry(
 	const fwdX = sinH, fwdZ = cosH;
 	const rightX = cosH, rightZ = -sinH;
 
-	const PLATFORM_LENGTH = 30;
-	const PLATFORM_WIDTH = 8;
-	const PLATFORM_HEIGHT = 0.5;
+	const PLATFORM_LENGTH = 40;
+	const PLATFORM_WIDTH = 4;
+	const PLATFORM_HEIGHT = 0.6;
 
+	// Platform slab (concrete)
 	appendOrientedBox(positions, normals, colors, indices,
 		x, y + PLATFORM_HEIGHT / 2, z,
 		rightX, 0, rightZ,
 		0, 1, 0,
 		fwdX, 0, fwdZ,
 		PLATFORM_WIDTH, PLATFORM_HEIGHT, PLATFORM_LENGTH,
-		0.7, 0.7, 0.7);
+		0.75, 0.73, 0.70);
 
+	// Yellow safety line along the track-side edge
+	const safetyLineOffset = -PLATFORM_WIDTH / 2 + 0.3;
 	appendOrientedBox(positions, normals, colors, indices,
-		x, y + PLATFORM_HEIGHT + 0.04, z,
+		x + rightX * safetyLineOffset, y + PLATFORM_HEIGHT + 0.02, z + rightZ * safetyLineOffset,
 		rightX, 0, rightZ,
 		0, 1, 0,
 		fwdX, 0, fwdZ,
-		PLATFORM_WIDTH, 0.08, PLATFORM_LENGTH,
+		0.5, 0.04, PLATFORM_LENGTH,
+		0.95, 0.85, 0.15);
+
+	// Line color stripe along the outer edge
+	const stripeOffset = PLATFORM_WIDTH / 2 - 0.2;
+	appendOrientedBox(positions, normals, colors, indices,
+		x + rightX * stripeOffset, y + PLATFORM_HEIGHT + 0.02, z + rightZ * stripeOffset,
+		rightX, 0, rightZ,
+		0, 1, 0,
+		fwdX, 0, fwdZ,
+		0.3, 0.04, PLATFORM_LENGTH,
 		r, g, b);
 
-	const CANOPY_HEIGHT = 4;
-	const CANOPY_WIDTH = PLATFORM_WIDTH + 2;
-	const CANOPY_LENGTH = PLATFORM_LENGTH * 0.6;
+	// Canopy (covers center ~60% of platform)
+	const CANOPY_HEIGHT = 3.5;
+	const CANOPY_WIDTH = PLATFORM_WIDTH + 0.8;
+	const CANOPY_LENGTH = PLATFORM_LENGTH * 0.55;
 
 	appendOrientedBox(positions, normals, colors, indices,
 		x, y + CANOPY_HEIGHT, z,
 		rightX, 0, rightZ,
 		0, 1, 0,
 		fwdX, 0, fwdZ,
-		CANOPY_WIDTH, 0.15, CANOPY_LENGTH,
-		r * 0.8, g * 0.8, b * 0.8);
+		CANOPY_WIDTH, 0.12, CANOPY_LENGTH,
+		r * 0.7, g * 0.7, b * 0.7);
 
-	const hw = CANOPY_WIDTH / 2 - 0.5;
-	const hl = CANOPY_LENGTH / 2 - 1;
-	const offsets: [number, number][] = [[-hw, -hl], [-hw, hl], [hw, -hl], [hw, hl]];
-	for (const [rOff, fOff] of offsets) {
+	// Canopy support pillars (4 pillars along the outer edge)
+	const pillarEdge = PLATFORM_WIDTH / 2 - 0.2;
+	const pillarSpacing = CANOPY_LENGTH / 2 - 1.5;
+	const pillarPositions: [number, number][] = [
+		[pillarEdge, -pillarSpacing], [pillarEdge, pillarSpacing],
+		[pillarEdge, -pillarSpacing * 0.4], [pillarEdge, pillarSpacing * 0.4],
+	];
+	for (const [rOff, fOff] of pillarPositions) {
 		const px = x + rightX * rOff + fwdX * fOff;
 		const pz = z + rightZ * rOff + fwdZ * fOff;
-		appendBox(positions, normals, colors, indices,
-			px, y + CANOPY_HEIGHT / 2, pz,
-			0.3, CANOPY_HEIGHT, 0.3,
-			0.4, 0.4, 0.4);
+		appendOrientedBox(positions, normals, colors, indices,
+			px, y + (CANOPY_HEIGHT + PLATFORM_HEIGHT) / 2, pz,
+			rightX, 0, rightZ,
+			0, 1, 0,
+			fwdX, 0, fwdZ,
+			0.15, CANOPY_HEIGHT - PLATFORM_HEIGHT, 0.15,
+			0.45, 0.45, 0.45);
 	}
+
+	// Benches (3 along the platform, on the outer half)
+	const benchOffset = PLATFORM_WIDTH / 2 - 0.8;
+	const benchSpacing = CANOPY_LENGTH * 0.35;
+	for (let bi = -1; bi <= 1; bi++) {
+		const bx = x + rightX * benchOffset + fwdX * (bi * benchSpacing);
+		const bz = z + rightZ * benchOffset + fwdZ * (bi * benchSpacing);
+		// Seat
+		appendOrientedBox(positions, normals, colors, indices,
+			bx, y + PLATFORM_HEIGHT + 0.4, bz,
+			rightX, 0, rightZ,
+			0, 1, 0,
+			fwdX, 0, fwdZ,
+			0.5, 0.06, 1.8,
+			0.35, 0.25, 0.15);
+		// Backrest
+		appendOrientedBox(positions, normals, colors, indices,
+			bx + rightX * 0.2, y + PLATFORM_HEIGHT + 0.6, bz + rightZ * 0.2,
+			rightX, 0, rightZ,
+			0, 1, 0,
+			fwdX, 0, fwdZ,
+			0.06, 0.35, 1.8,
+			0.35, 0.25, 0.15);
+		// Legs (2)
+		for (const legOff of [-0.7, 0.7]) {
+			const lx = bx + fwdX * legOff;
+			const lz = bz + fwdZ * legOff;
+			appendOrientedBox(positions, normals, colors, indices,
+				lx, y + PLATFORM_HEIGHT + 0.2, lz,
+				rightX, 0, rightZ,
+				0, 1, 0,
+				fwdX, 0, fwdZ,
+				0.5, 0.4, 0.06,
+				0.3, 0.3, 0.3);
+		}
+	}
+
+	// Platform edge curb (slightly raised track-side edge)
+	const curbOffset = -PLATFORM_WIDTH / 2 + 0.1;
+	appendOrientedBox(positions, normals, colors, indices,
+		x + rightX * curbOffset, y + PLATFORM_HEIGHT + 0.06, z + rightZ * curbOffset,
+		rightX, 0, rightZ,
+		0, 1, 0,
+		fwdX, 0, fwdZ,
+		0.15, 0.12, PLATFORM_LENGTH,
+		0.65, 0.63, 0.60);
 
 	return {
 		position: new Float32Array(positions),

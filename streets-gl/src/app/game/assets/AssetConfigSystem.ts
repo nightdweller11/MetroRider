@@ -50,7 +50,7 @@ const LOCAL_STORAGE_KEY = 'metrorider-user-config';
 const DEFAULT_CONFIG: AssetConfig = {
 	trainModel: 'procedural-default',
 	trackModel: 'procedural-default',
-	stationModel: 'procedural-default',
+	stationModel: 'station-platform-basic',
 	carCount: 3,
 	sounds: {
 		horn: 'procedural',

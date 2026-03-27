@@ -12,7 +12,7 @@
     "resolveJsonModule": true,
     "declaration": false,
     "sourceMap": true,
-    "types": ["node", "express", "cors", "multer", "uuid", "supertest"]
+    "types": ["node", "express", "cors", "multer", "uuid", "supertest", "adm-zip"]
   },
   "include": ["./**/*.ts"],
   "exclude": ["node_modules", "dist"]

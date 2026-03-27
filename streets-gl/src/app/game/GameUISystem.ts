@@ -18,10 +18,14 @@ export default class GameUISystem extends System {
 	private lineColorEl: HTMLElement | null = null;
 	private cameraEl: HTMLElement | null = null;
 	private lineListEl: HTMLElement | null = null;
+	private lineListWrap: HTMLElement | null = null;
+	private lineListToggle: HTMLElement | null = null;
+	private lineListExpanded: boolean = true;
 	private stationPanelEl: HTMLElement | null = null;
 	private debugEl: HTMLElement | null = null;
 	private debugVisible: boolean = false;
 	private initialized: boolean = false;
+	private mobile: boolean = false;
 
 	public postInit(): void {
 		this.systemManager.onSystemReady(TrainSystem, (trainSystem) => {
@@ -34,6 +38,9 @@ export default class GameUISystem extends System {
 		if (assetConfig) {
 			(window as any).__assetConfigSystem = assetConfig;
 		}
+
+		this.mobile = window.innerWidth <= 768 || ('ontouchstart' in window && window.innerWidth <= 1024);
+		this.lineListExpanded = !this.mobile;
 
 		this.container = document.createElement('div');
 		this.container.id = 'game-hud';
@@ -57,24 +64,42 @@ export default class GameUISystem extends System {
 
 	private createSpeedometer(): void {
 		this.speedEl = document.createElement('div');
-		this.speedEl.style.cssText = `
-			position: absolute; top: 20px; left: 20px;
-			background: rgba(0,0,0,0.7); color: #fff; padding: 12px 18px;
-			border-radius: 10px; font-size: 20px; font-weight: 600;
-			backdrop-filter: blur(10px); display: none;
-		`;
+		if (this.mobile) {
+			this.speedEl.style.cssText = `
+				position: absolute; top: 8px; left: 8px;
+				background: rgba(0,0,0,0.7); color: #fff; padding: 6px 10px;
+				border-radius: 8px; font-size: 14px; font-weight: 600;
+				backdrop-filter: blur(10px); display: none;
+			`;
+		} else {
+			this.speedEl.style.cssText = `
+				position: absolute; top: 20px; left: 20px;
+				background: rgba(0,0,0,0.7); color: #fff; padding: 12px 18px;
+				border-radius: 10px; font-size: 20px; font-weight: 600;
+				backdrop-filter: blur(10px); display: none;
+			`;
+		}
 		this.speedEl.textContent = '0 km/h';
 		this.container.appendChild(this.speedEl);
 	}
 
 	private createStationInfo(): void {
 		const wrap = document.createElement('div');
-		wrap.style.cssText = `
-			position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
-			background: rgba(0,0,0,0.7); color: #fff; padding: 10px 20px;
-			border-radius: 10px; text-align: center; backdrop-filter: blur(10px);
-			display: none; min-width: 200px;
-		`;
+		if (this.mobile) {
+			wrap.style.cssText = `
+				position: absolute; top: 8px; left: 70px; right: 52px;
+				background: rgba(0,0,0,0.7); color: #fff; padding: 6px 12px;
+				border-radius: 8px; text-align: center; backdrop-filter: blur(10px);
+				display: none; overflow: hidden;
+			`;
+		} else {
+			wrap.style.cssText = `
+				position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+				background: rgba(0,0,0,0.7); color: #fff; padding: 10px 20px;
+				border-radius: 10px; text-align: center; backdrop-filter: blur(10px);
+				display: none; min-width: 200px; max-width: calc(100vw - 360px);
+			`;
+		}
 
 		this.lineColorEl = document.createElement('div');
 		this.lineColorEl.style.cssText = `
@@ -83,11 +108,15 @@ export default class GameUISystem extends System {
 		`;
 
 		this.stationEl = document.createElement('div');
-		this.stationEl.style.cssText = 'font-size: 16px; font-weight: 600;';
+		this.stationEl.style.cssText = this.mobile
+			? 'font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+			: 'font-size: 16px; font-weight: 600;';
 		this.stationEl.textContent = '';
 
 		this.directionEl = document.createElement('div');
-		this.directionEl.style.cssText = 'font-size: 12px; color: #aaa; margin-top: 4px;';
+		this.directionEl.style.cssText = this.mobile
+			? 'font-size: 10px; color: #aaa; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+			: 'font-size: 12px; color: #aaa; margin-top: 4px;';
 		this.directionEl.textContent = '';
 
 		wrap.appendChild(this.lineColorEl);
@@ -98,20 +127,34 @@ export default class GameUISystem extends System {
 	}
 
 	private createControls(trainSystem: TrainSystem): void {
+		const m = this.mobile;
+		const btnSize = m ? 40 : 52;
+		const btnRadius = m ? 10 : 12;
+		const fontSize = m ? 17 : 22;
+		const gap = m ? 6 : 8;
+
 		const controlsWrap = document.createElement('div');
-		controlsWrap.style.cssText = `
-			position: absolute; bottom: 30px; right: 20px;
-			display: flex; flex-direction: row; gap: 8px; align-items: flex-end;
-			pointer-events: auto;
-		`;
+		if (m) {
+			controlsWrap.style.cssText = `
+				position: absolute; bottom: 12px; right: 8px;
+				display: flex; flex-direction: column; gap: ${gap}px; align-items: center;
+				pointer-events: auto;
+			`;
+		} else {
+			controlsWrap.style.cssText = `
+				position: absolute; bottom: 30px; right: 20px;
+				display: flex; flex-direction: row; gap: ${gap}px; align-items: flex-end;
+				pointer-events: auto;
+			`;
+		}
 
 		const createBtn = (emoji: string, tooltip: string): HTMLElement => {
 			const btn = document.createElement('div');
 			btn.style.cssText = `
-				width: 52px; height: 52px; border-radius: 12px;
+				width: ${btnSize}px; height: ${btnSize}px; border-radius: ${btnRadius}px;
 				background: rgba(0,0,0,0.65); color: #fff;
 				display: flex; align-items: center; justify-content: center;
-				font-size: 22px; cursor: pointer; user-select: none;
+				font-size: ${fontSize}px; cursor: pointer; user-select: none;
 				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
 				transition: background 0.15s;
 			`;
@@ -126,8 +169,6 @@ export default class GameUISystem extends System {
 			return btn;
 		};
 
-		const col1 = document.createElement('div');
-		col1.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
 		const accelBtn = createBtn('\u25B2', 'Accelerate');
 		const brakeBtn = createBtn('\u25BC', 'Brake');
 
@@ -143,11 +184,7 @@ export default class GameUISystem extends System {
 		};
 		bindPress(accelBtn, 'throttle');
 		bindPress(brakeBtn, 'brake');
-		col1.appendChild(accelBtn);
-		col1.appendChild(brakeBtn);
 
-		const col2 = document.createElement('div');
-		col2.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
 		const hornBtn = createBtn('\uD83D\uDD0A', 'Horn');
 		const reverseBtn = createBtn('\u21BA', 'Reverse');
 		hornBtn.addEventListener('mousedown', () => {
@@ -160,11 +197,7 @@ export default class GameUISystem extends System {
 			if (audioSystem) audioSystem.playHorn();
 		});
 		reverseBtn.addEventListener('click', () => trainSystem.reverseDirection());
-		col2.appendChild(hornBtn);
-		col2.appendChild(reverseBtn);
 
-		const col3 = document.createElement('div');
-		col3.style.cssText = 'display: flex; flex-direction: column; gap: 8px;';
 		const doorsBtn = createBtn('\u229F', 'Doors');
 		doorsBtn.addEventListener('click', () => trainSystem.toggleDoors());
 
@@ -173,27 +206,100 @@ export default class GameUISystem extends System {
 			const camSystem = this.systemManager.getSystem(GameCameraSystem);
 			if (camSystem) camSystem.cycleMode();
 		});
-		col3.appendChild(doorsBtn);
-		col3.appendChild(this.cameraEl);
 
-		controlsWrap.appendChild(col1);
-		controlsWrap.appendChild(col2);
-		controlsWrap.appendChild(col3);
+		if (m) {
+			const row1 = document.createElement('div');
+			row1.style.cssText = `display: flex; flex-direction: row; gap: ${gap}px;`;
+			row1.appendChild(accelBtn);
+			row1.appendChild(hornBtn);
+			row1.appendChild(doorsBtn);
+
+			const row2 = document.createElement('div');
+			row2.style.cssText = `display: flex; flex-direction: row; gap: ${gap}px;`;
+			row2.appendChild(brakeBtn);
+			row2.appendChild(reverseBtn);
+			row2.appendChild(this.cameraEl);
+
+			controlsWrap.appendChild(row1);
+			controlsWrap.appendChild(row2);
+		} else {
+			const col1 = document.createElement('div');
+			col1.style.cssText = `display: flex; flex-direction: column; gap: ${gap}px;`;
+			col1.appendChild(accelBtn);
+			col1.appendChild(brakeBtn);
+
+			const col2 = document.createElement('div');
+			col2.style.cssText = `display: flex; flex-direction: column; gap: ${gap}px;`;
+			col2.appendChild(hornBtn);
+			col2.appendChild(reverseBtn);
+
+			const col3 = document.createElement('div');
+			col3.style.cssText = `display: flex; flex-direction: column; gap: ${gap}px;`;
+			col3.appendChild(doorsBtn);
+			col3.appendChild(this.cameraEl);
+
+			controlsWrap.appendChild(col1);
+			controlsWrap.appendChild(col2);
+			controlsWrap.appendChild(col3);
+		}
+
 		this.container.appendChild(controlsWrap);
 	}
 
 	private createLineSelector(trainSystem: TrainSystem): void {
+		const m = this.mobile;
+		const topOffset = m ? 44 : 70;
+
+		this.lineListWrap = document.createElement('div');
+		this.lineListWrap.style.cssText = `
+			position: absolute; top: ${topOffset}px; right: ${m ? 8 : 20}px;
+			pointer-events: auto; display: flex; flex-direction: column; align-items: flex-end;
+		`;
+
+		this.lineListToggle = document.createElement('div');
+		this.lineListToggle.style.cssText = `
+			width: ${m ? 32 : 36}px; height: ${m ? 32 : 36}px; border-radius: 8px;
+			background: rgba(0,0,0,0.65); color: #fff;
+			display: flex; align-items: center; justify-content: center;
+			font-size: ${m ? 14 : 16}px; cursor: pointer; user-select: none;
+			backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+			margin-bottom: 4px; transition: background 0.15s;
+		`;
+		this.lineListToggle.title = 'Toggle line list';
+		this.lineListToggle.addEventListener('mouseenter', () => {
+			if (this.lineListToggle) this.lineListToggle.style.background = 'rgba(255,255,255,0.2)';
+		});
+		this.lineListToggle.addEventListener('mouseleave', () => {
+			if (this.lineListToggle) this.lineListToggle.style.background = 'rgba(0,0,0,0.65)';
+		});
+		this.lineListToggle.addEventListener('click', () => {
+			this.lineListExpanded = !this.lineListExpanded;
+			this.applyLineListVisibility();
+		});
+
 		this.lineListEl = document.createElement('div');
 		this.lineListEl.style.cssText = `
-			position: absolute; top: 70px; right: 20px;
 			display: flex; flex-direction: column; gap: 4px;
-			pointer-events: auto; max-height: calc(100vh - 250px);
+			max-height: calc(100vh - ${topOffset + 50}px);
 			overflow-y: auto; scrollbar-width: thin;
 			scrollbar-color: rgba(255,255,255,0.15) transparent;
 		`;
 
+		this.lineListWrap.appendChild(this.lineListToggle);
+		this.lineListWrap.appendChild(this.lineListEl);
+
 		this.rebuildLineList(trainSystem);
-		this.container.appendChild(this.lineListEl);
+		this.applyLineListVisibility();
+		this.container.appendChild(this.lineListWrap);
+	}
+
+	private applyLineListVisibility(): void {
+		if (this.lineListEl) {
+			this.lineListEl.style.display = this.lineListExpanded ? 'flex' : 'none';
+		}
+		if (this.lineListToggle) {
+			this.lineListToggle.textContent = this.lineListExpanded ? '\u25B2' : '\u25BC';
+		}
 	}
 
 	private rebuildLineList(trainSystem: TrainSystem): void {
@@ -233,7 +339,7 @@ export default class GameUISystem extends System {
 	}
 
 	private showStationPanel(trainSystem: TrainSystem, lineIdx: number): void {
-		if (this.lineListEl) this.lineListEl.style.display = 'none';
+		if (this.lineListWrap) this.lineListWrap.style.display = 'none';
 
 		if (this.stationPanelEl) {
 			this.stationPanelEl.remove();
@@ -245,13 +351,14 @@ export default class GameUISystem extends System {
 			return;
 		}
 
+		const m = this.mobile;
 		const stations = ls.parsed.stations;
 		let selectedDir = 1;
 
 		const panel = document.createElement('div');
 		panel.style.cssText = `
-			position: absolute; top: 70px; right: 20px;
-			width: 260px; max-height: calc(100vh - 120px);
+			position: absolute; top: ${m ? 44 : 70}px; right: ${m ? 8 : 20}px;
+			width: ${m ? 220 : 260}px; max-height: calc(100vh - ${m ? 100 : 120}px);
 			background: rgba(0,0,0,0.85); border-radius: 12px;
 			backdrop-filter: blur(12px); pointer-events: auto;
 			border: 1px solid rgba(255,255,255,0.12);
@@ -409,7 +516,8 @@ export default class GameUISystem extends System {
 			this.stationPanelEl.remove();
 			this.stationPanelEl = null;
 		}
-		if (this.lineListEl) this.lineListEl.style.display = 'flex';
+		if (this.lineListWrap) this.lineListWrap.style.display = 'flex';
+		this.applyLineListVisibility();
 	}
 
 	private updateLineColorIndicator(trainSystem: TrainSystem): void {
@@ -791,13 +899,15 @@ export default class GameUISystem extends System {
 	}
 
 	private createSettingsButton(): void {
+		const m = this.mobile;
+		const size = m ? 34 : 42;
 		const btn = document.createElement('div');
 		btn.style.cssText = `
-			position: absolute; top: 20px; right: 76px;
-			width: 42px; height: 42px; border-radius: 10px;
+			position: absolute; top: ${m ? 6 : 20}px; right: ${m ? 50 : 76}px;
+			width: ${size}px; height: ${size}px; border-radius: ${m ? 8 : 10}px;
 			background: rgba(0,0,0,0.65); color: #fff;
 			display: flex; align-items: center; justify-content: center;
-			font-size: 20px; cursor: pointer; user-select: none;
+			font-size: ${m ? 16 : 20}px; cursor: pointer; user-select: none;
 			backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
 			pointer-events: auto; transition: background 0.15s;
 		`;
@@ -812,14 +922,16 @@ export default class GameUISystem extends System {
 	}
 
 	private createMapSelectionButton(trainSystem: TrainSystem): void {
+		const m = this.mobile;
+		const size = m ? 34 : 42;
 		const btn = document.createElement('div');
 		btn.id = 'game-map-select-btn';
 		btn.style.cssText = `
-			position: absolute; top: 20px; right: 126px;
-			width: 42px; height: 42px; border-radius: 10px;
+			position: absolute; top: ${m ? 6 : 20}px; right: ${m ? 90 : 126}px;
+			width: ${size}px; height: ${size}px; border-radius: ${m ? 8 : 10}px;
 			background: rgba(0,0,0,0.65); color: #fff;
 			display: flex; align-items: center; justify-content: center;
-			font-size: 18px; cursor: pointer; user-select: none;
+			font-size: ${m ? 14 : 18}px; cursor: pointer; user-select: none;
 			backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
 			pointer-events: auto; transition: background 0.15s;
 		`;
@@ -848,7 +960,7 @@ export default class GameUISystem extends System {
 
 		if (this.speedEl) this.speedEl.style.display = 'none';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'none';
-		if (this.lineListEl) this.lineListEl.style.display = 'none';
+		if (this.lineListWrap) this.lineListWrap.style.display = 'none';
 		this.hideStationPanel();
 
 		const startBtn = document.getElementById('game-start-btn');
@@ -882,7 +994,8 @@ export default class GameUISystem extends System {
 	private showGameUI(): void {
 		if (this.speedEl) this.speedEl.style.display = 'block';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'block';
-		if (this.lineListEl) this.lineListEl.style.display = 'flex';
+		if (this.lineListWrap) this.lineListWrap.style.display = 'flex';
+		this.applyLineListVisibility();
 	}
 
 	private debugFrameCounter: number = 0;

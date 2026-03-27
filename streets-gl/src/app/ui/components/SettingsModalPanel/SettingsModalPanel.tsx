@@ -76,7 +76,7 @@ const SettingsModalPanel: React.FC<{
 				/>
 			</ModalCategoryContainer>
 			<ModalCategoryContainer>
-				<ModalCategory label={'Overpass API'}>
+				<ModalCategory label={'Overpass API (Experimental)'}>
 					<div className={settingStyles.settingsRow}>
 						<div className={settingStyles.settingsRow__title}>Enhanced building data</div>
 						<div className={settingStyles.settingsRow__body}>

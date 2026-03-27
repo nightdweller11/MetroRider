@@ -8,6 +8,7 @@ import fs from 'fs';
 import https from 'https';
 import {createConfigRouter} from './routes/config';
 import {createAssetsRouter} from './routes/assets';
+import {createSketchfabRouter} from './routes/sketchfab';
 import {getAdminToken} from './middleware/adminAuth';
 
 const app = express();
@@ -24,6 +25,7 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/config', createConfigRouter(DATA_DIR));
 app.use('/api/assets', createAssetsRouter(DATA_DIR));
+app.use('/api/sketchfab', createSketchfabRouter(DATA_DIR));
 
 app.get('/api/admin/verify', (req, res) => {
 	const token = (req.query.token as string) || req.headers.authorization?.replace('Bearer ', '');

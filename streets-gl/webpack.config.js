@@ -64,13 +64,15 @@ module.exports = (env, argv) => {
 		devServer: {
 			port: 8080,
 			hot: true,
-			proxy: [{context: ['/api', '/data/assets'], target: 'http://localhost:3001'}],
-			historyApiFallback: {
-				rewrites: [
-					{from: /^\/settings\.html$/, to: '/settings.html'},
-					{from: /^\/settings$/, to: '/settings.html'},
-				],
-			},
+		proxy: [{context: ['/api', '/data/assets'], target: 'http://localhost:3001'}],
+		historyApiFallback: {
+			rewrites: [
+				{from: /^\/settings\.html$/, to: '/settings.html'},
+				{from: /^\/settings$/, to: '/settings.html'},
+				{from: /^\/admin\/sketchfab\.html$/, to: '/admin/sketchfab.html'},
+				{from: /^\/admin\/sketchfab$/, to: '/admin/sketchfab.html'},
+			],
+		},
 		},
 		devtool: mode === 'production' ? undefined : 'inline-source-map',
 		plugins: [
@@ -116,6 +118,31 @@ module.exports = (env, argv) => {
 			new HtmlWebpackPlugin({
 				filename: 'settings.html',
 				template: './src/settings/settings.html',
+				minify: mode === 'production'
+			}),
+		],
+		module: {
+			rules: [
+				...sharedRules(mode).filter(r => !String(r.test).includes('\\.css')),
+				{test: /\.css$/i, use: ['style-loader', 'css-loader']},
+			]
+		},
+		resolve: sharedResolve
+	},
+	{
+		mode,
+		entry: './src/admin/SketchfabApp.tsx',
+		output: {
+			filename: './js/admin-sketchfab.[contenthash].js',
+			path: path.resolve(__dirname, 'build')
+		},
+		performance: {maxEntrypointSize: 2000000, maxAssetSize: 2000000},
+		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020'})]},
+		devtool: mode === 'production' ? undefined : 'inline-source-map',
+		plugins: [
+			new HtmlWebpackPlugin({
+				filename: 'admin/sketchfab.html',
+				template: './src/admin/sketchfab.html',
 				minify: mode === 'production'
 			}),
 		],
