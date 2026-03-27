@@ -26,16 +26,14 @@ function getBbox(x: number, y: number, zoom: number): string {
 const getBuildingsRequestBody = (x: number, y: number, zoom: number): string => {
 	const bbox = getBbox(x, y, zoom);
 	return `
-		[out:json][timeout:25];
+		[out:json][timeout:12];
 		(
 			way["building"](${bbox});
 			relation["building"](${bbox});
-			way["building:part"](${bbox});
-			node["natural"="tree"](${bbox});
 		);
 		out body qt;
 		>>;
-		out body qt;
+		out skel qt;
 	`;
 };
 
@@ -70,12 +68,14 @@ interface ServerHealth {
 	avgResponseMs: number;
 }
 
-const MIN_REQUEST_INTERVAL_MS = 3000;
-const BASE_COOLDOWN_MS = 10000;
+const MIN_REQUEST_INTERVAL_MS = 1000;
+const BASE_COOLDOWN_MS = 5000;
 const MAX_COOLDOWN_MS = 300000;
-const MAX_RETRIES_PER_REQUEST = 2;
-const REQUEST_TIMEOUT_MS = 30000;
-const MAX_CONCURRENT_PER_SERVER = 1;
+const DEAD_SERVER_COOLDOWN_MS = 600000;
+const DEAD_SERVER_THRESHOLD = 3;
+const MAX_RETRIES_PER_REQUEST = 3;
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_CONCURRENT_PER_SERVER = 2;
 
 const serverHealthMap: Map<string, ServerHealth> = new Map();
 let roundRobinCounter = 0;
@@ -108,19 +108,21 @@ function markServerSuccess(url: string, responseMs: number): void {
 		: health.avgResponseMs * 0.7 + responseMs * 0.3;
 }
 
-function markServerFailure(url: string): void {
+function markServerFailure(url: string, error?: string): void {
 	const health = getServerHealth(url);
 	health.consecutiveFailures++;
 	health.activeRequests = Math.max(0, health.activeRequests - 1);
-	const backoff = Math.min(
-		BASE_COOLDOWN_MS * Math.pow(2, health.consecutiveFailures - 1),
-		MAX_COOLDOWN_MS
-	);
+
+	const isDead = health.consecutiveFailures >= DEAD_SERVER_THRESHOLD;
+	const backoff = isDead
+		? DEAD_SERVER_COOLDOWN_MS
+		: Math.min(BASE_COOLDOWN_MS * Math.pow(2, health.consecutiveFailures - 1), MAX_COOLDOWN_MS);
+
 	health.cooldownUntil = Date.now() + backoff;
+	const hostname = new URL(url).hostname;
 	console.warn(
-		`[Overpass] Server ${url} failed (${health.consecutiveFailures}x), ` +
-		`cooldown ${Math.round(backoff / 1000)}s, ` +
-		`success rate: ${health.totalSuccesses}/${health.totalRequests}`
+		`[Overpass] ${hostname} failed (${health.consecutiveFailures}x): ${error || 'unknown'}` +
+		(isDead ? ` — server disabled for ${Math.round(backoff / 60000)}min` : ` — cooldown ${Math.round(backoff / 1000)}s`)
 	);
 }
 
@@ -322,23 +324,23 @@ export default class OverpassVectorFeatureProvider extends VectorFeatureProvider
 					return result;
 				} catch (err) {
 					const msg = err instanceof Error ? err.message : String(err);
-					errors.push(`${url}: ${msg}`);
-					markServerFailure(url);
+					errors.push(`${new URL(url).hostname}: ${msg}`);
+					markServerFailure(url, msg);
 				}
 			}
 
 			if (attempt < MAX_RETRIES_PER_REQUEST - 1) {
-				const backoff = BASE_COOLDOWN_MS * Math.pow(2, attempt);
+				const retryDelay = 2000 * (attempt + 1);
 				console.warn(
-					`[Overpass] All ${this.overpassURLs.length} servers failed on attempt ${attempt + 1}/${MAX_RETRIES_PER_REQUEST}, ` +
-					`retrying in ${Math.round(backoff / 1000)}s`
+					`[Overpass] All servers failed on attempt ${attempt + 1}/${MAX_RETRIES_PER_REQUEST}, ` +
+					`retrying in ${Math.round(retryDelay / 1000)}s`
 				);
-				await new Promise(r => setTimeout(r, backoff));
+				await new Promise(r => setTimeout(r, retryDelay));
 			}
 		}
 
 		throw new Error(
-			`[Overpass] All ${this.overpassURLs.length} servers failed after ${MAX_RETRIES_PER_REQUEST} attempts. ` +
+			`[Overpass] All servers failed after ${MAX_RETRIES_PER_REQUEST} attempts. ` +
 			`Errors: ${errors.join(' | ')}`
 		);
 	}

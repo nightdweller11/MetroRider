@@ -23,8 +23,6 @@ import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
 
-console.log('[BOOT] localStorage.length:', localStorage.length, '| cookie length:', document.cookie.length);
-
 class App {
 	private loop = (deltaTime: number): void => this.update(deltaTime);
 	private time = 0;
