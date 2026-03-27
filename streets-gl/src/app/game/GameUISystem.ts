@@ -26,6 +26,7 @@ export default class GameUISystem extends System {
 	private debugVisible: boolean = false;
 	private initialized: boolean = false;
 	private mobile: boolean = false;
+	private mobileTopBtns: HTMLElement[] = [];
 
 	public postInit(): void {
 		this.systemManager.onSystemReady(TrainSystem, (trainSystem) => {
@@ -56,19 +57,35 @@ export default class GameUISystem extends System {
 		this.createLineSelector(trainSystem);
 		this.createSettingsButton();
 		this.createMapSelectionButton(trainSystem);
+		if (this.mobile) {
+			this.createMobileTopStrip();
+		}
 		this.createStartButton(trainSystem);
 		this.createDebugOverlay();
 
 		this.initialized = true;
 	}
 
+	private createMobileTopStrip(): void {
+		const strip = document.createElement('div');
+		strip.style.cssText = `
+			position: absolute; top: 4px; right: 4px;
+			display: flex; flex-direction: column; gap: 4px;
+			pointer-events: auto; align-items: center;
+		`;
+		for (const btn of this.mobileTopBtns) {
+			strip.appendChild(btn);
+		}
+		this.container.appendChild(strip);
+	}
+
 	private createSpeedometer(): void {
 		this.speedEl = document.createElement('div');
 		if (this.mobile) {
 			this.speedEl.style.cssText = `
-				position: absolute; top: 8px; left: 8px;
-				background: rgba(0,0,0,0.7); color: #fff; padding: 6px 10px;
-				border-radius: 8px; font-size: 14px; font-weight: 600;
+				position: absolute; top: 4px; left: 4px;
+				background: rgba(0,0,0,0.7); color: #fff; padding: 4px 8px;
+				border-radius: 6px; font-size: 13px; font-weight: 600;
 				backdrop-filter: blur(10px); display: none;
 			`;
 		} else {
@@ -87,9 +104,9 @@ export default class GameUISystem extends System {
 		const wrap = document.createElement('div');
 		if (this.mobile) {
 			wrap.style.cssText = `
-				position: absolute; top: 8px; left: 70px; right: 52px;
-				background: rgba(0,0,0,0.7); color: #fff; padding: 6px 12px;
-				border-radius: 8px; text-align: center; backdrop-filter: blur(10px);
+				position: absolute; top: 30px; left: 4px; right: 48px;
+				background: rgba(0,0,0,0.7); color: #fff; padding: 4px 10px;
+				border-radius: 6px; text-align: center; backdrop-filter: blur(10px);
 				display: none; overflow: hidden;
 			`;
 		} else {
@@ -103,19 +120,19 @@ export default class GameUISystem extends System {
 
 		this.lineColorEl = document.createElement('div');
 		this.lineColorEl.style.cssText = `
-			width: 100%; height: 4px; border-radius: 2px;
-			margin-bottom: 6px; display: none;
+			width: 100%; height: 3px; border-radius: 2px;
+			margin-bottom: 4px; display: none;
 		`;
 
 		this.stationEl = document.createElement('div');
 		this.stationEl.style.cssText = this.mobile
-			? 'font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+			? 'font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
 			: 'font-size: 16px; font-weight: 600;';
 		this.stationEl.textContent = '';
 
 		this.directionEl = document.createElement('div');
 		this.directionEl.style.cssText = this.mobile
-			? 'font-size: 10px; color: #aaa; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
+			? 'font-size: 10px; color: #aaa; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'
 			: 'font-size: 12px; color: #aaa; margin-top: 4px;';
 		this.directionEl.textContent = '';
 
@@ -248,7 +265,7 @@ export default class GameUISystem extends System {
 
 	private createLineSelector(trainSystem: TrainSystem): void {
 		const m = this.mobile;
-		const topOffset = m ? 44 : 70;
+		const topOffset = m ? 60 : 70;
 
 		this.lineListWrap = document.createElement('div');
 		this.lineListWrap.style.cssText = `
@@ -357,7 +374,7 @@ export default class GameUISystem extends System {
 
 		const panel = document.createElement('div');
 		panel.style.cssText = `
-			position: absolute; top: ${m ? 44 : 70}px; right: ${m ? 8 : 20}px;
+			position: absolute; top: ${m ? 60 : 70}px; right: ${m ? 8 : 20}px;
 			width: ${m ? 220 : 260}px; max-height: calc(100vh - ${m ? 100 : 120}px);
 			background: rgba(0,0,0,0.85); border-radius: 12px;
 			backdrop-filter: blur(12px); pointer-events: auto;
@@ -900,17 +917,28 @@ export default class GameUISystem extends System {
 
 	private createSettingsButton(): void {
 		const m = this.mobile;
-		const size = m ? 34 : 42;
+		const size = m ? 32 : 42;
 		const btn = document.createElement('div');
-		btn.style.cssText = `
-			position: absolute; top: ${m ? 6 : 20}px; right: ${m ? 50 : 76}px;
-			width: ${size}px; height: ${size}px; border-radius: ${m ? 8 : 10}px;
-			background: rgba(0,0,0,0.65); color: #fff;
-			display: flex; align-items: center; justify-content: center;
-			font-size: ${m ? 16 : 20}px; cursor: pointer; user-select: none;
-			backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
-			pointer-events: auto; transition: background 0.15s;
-		`;
+		if (m) {
+			btn.style.cssText = `
+				width: ${size}px; height: ${size}px; border-radius: 8px;
+				background: rgba(0,0,0,0.65); color: #fff;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 15px; cursor: pointer; user-select: none;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+				transition: background 0.15s;
+			`;
+		} else {
+			btn.style.cssText = `
+				position: absolute; top: 20px; right: 76px;
+				width: ${size}px; height: ${size}px; border-radius: 10px;
+				background: rgba(0,0,0,0.65); color: #fff;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 20px; cursor: pointer; user-select: none;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+				pointer-events: auto; transition: background 0.15s;
+			`;
+		}
 		btn.textContent = '\u2699';
 		btn.title = 'Train & Sound Settings';
 		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
@@ -918,23 +946,39 @@ export default class GameUISystem extends System {
 		btn.addEventListener('click', () => {
 			window.location.href = '/settings.html';
 		});
-		this.container.appendChild(btn);
+
+		if (m) {
+			this.mobileTopBtns.push(btn);
+		} else {
+			this.container.appendChild(btn);
+		}
 	}
 
 	private createMapSelectionButton(trainSystem: TrainSystem): void {
 		const m = this.mobile;
-		const size = m ? 34 : 42;
+		const size = m ? 32 : 42;
 		const btn = document.createElement('div');
 		btn.id = 'game-map-select-btn';
-		btn.style.cssText = `
-			position: absolute; top: ${m ? 6 : 20}px; right: ${m ? 90 : 126}px;
-			width: ${size}px; height: ${size}px; border-radius: ${m ? 8 : 10}px;
-			background: rgba(0,0,0,0.65); color: #fff;
-			display: flex; align-items: center; justify-content: center;
-			font-size: ${m ? 14 : 18}px; cursor: pointer; user-select: none;
-			backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
-			pointer-events: auto; transition: background 0.15s;
-		`;
+		if (m) {
+			btn.style.cssText = `
+				width: ${size}px; height: ${size}px; border-radius: 8px;
+				background: rgba(0,0,0,0.65); color: #fff;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 14px; cursor: pointer; user-select: none;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+				transition: background 0.15s;
+			`;
+		} else {
+			btn.style.cssText = `
+				position: absolute; top: 20px; right: 126px;
+				width: ${size}px; height: ${size}px; border-radius: 10px;
+				background: rgba(0,0,0,0.65); color: #fff;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 18px; cursor: pointer; user-select: none;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+				pointer-events: auto; transition: background 0.15s;
+			`;
+		}
 		btn.textContent = '\uD83D\uDDFA';
 		btn.title = 'Change Map';
 		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
@@ -947,7 +991,12 @@ export default class GameUISystem extends System {
 				this.returnToMapSelection(trainSystem);
 			}
 		});
-		this.container.appendChild(btn);
+
+		if (m) {
+			this.mobileTopBtns.push(btn);
+		} else {
+			this.container.appendChild(btn);
+		}
 	}
 
 	private returnToMapSelection(trainSystem: TrainSystem): void {

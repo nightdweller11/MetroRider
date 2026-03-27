@@ -37,14 +37,14 @@
 
 @media (max-width: 768px) {
 	.nav {
-		top: 6px;
-		right: 6px;
+		top: 4px;
+		right: 4px;
 
 		&__icon {
-			width: 36px;
-			height: 36px;
-			padding: 7px;
-			border-radius: 18px;
+			width: 32px;
+			height: 32px;
+			padding: 6px;
+			border-radius: 8px;
 		}
 	}
 }
