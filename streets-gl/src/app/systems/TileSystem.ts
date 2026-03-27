@@ -54,6 +54,12 @@ export default class TileSystem extends System {
 				this.enableTerrainHeight = isEnabled;
 			}
 		}, true);
+
+		settings.onChange('performanceMode', ({statusValue}) => {
+			const isLow = statusValue === 'on';
+			Config.applyPerformanceMode(isLow);
+			this.cameraFrustum = null;
+		}, true);
 	}
 
 	public addTile(x: number, y: number): void {

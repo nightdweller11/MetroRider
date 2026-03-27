@@ -9,7 +9,9 @@ function detectLowMemoryMode(): boolean {
 		if (typeof navigator !== 'undefined') {
 			const hasTouch = navigator.maxTouchPoints > 0;
 			const smallScreen = typeof screen !== 'undefined' && (screen.width < 1024 || screen.height < 1024);
-			if (hasTouch && smallScreen) {
+			const isIPad = hasTouch && /Macintosh/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1;
+
+			if (isIPad || (hasTouch && smallScreen)) {
 				return true;
 			}
 
@@ -26,8 +28,16 @@ function detectLowMemoryMode(): boolean {
 
 const _lowMemory = detectLowMemoryMode();
 
+function applyPerformanceMode(low: boolean): void {
+	Config.LowMemoryMode = low;
+	Config.MaxConcurrentTiles = low ? 40 : 150;
+	Config.TileFrustumFar = low ? 2000 : 8000;
+	Config.AggressiveEviction = low;
+}
+
 const Config = {
 	LowMemoryMode: _lowMemory,
+	applyPerformanceMode,
 	TileSize: /*40075016.68 / (1 << 16)*/ 611.4962158203125,
 	MaxConcurrentTiles: _lowMemory ? 40 : 150,
 	TileFrustumFar: _lowMemory ? 2000 : 8000,
@@ -78,6 +88,13 @@ const Config = {
 	SlippyMapZoomFactor: 0.001,
 	SlippyMapFetchBatchSize: 4,
 	SettingsSchema: {
+		performanceMode: {
+			label: 'Performance mode',
+			status: ['off', 'on'],
+			statusLabels: ['Standard', 'Low memory (mobile/tablet)'],
+			statusDefault: _lowMemory ? 'on' : 'off',
+			category: 'general'
+		},
 		fov: {
 			label: 'Vertical field of view',
 			selectRange: [5, 120, 1],
