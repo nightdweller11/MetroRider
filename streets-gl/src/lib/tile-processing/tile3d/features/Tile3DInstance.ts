@@ -3,7 +3,7 @@ import AABB3D from "~/lib/math/AABB3D";
 
 export type Tile3DInstanceType = 'tree' | 'adColumn' | 'transmissionTower' | 'utilityPole' | 'wire' | 'hydrant'
 	| 'trackedCrane' | 'towerCrane' | 'bench' | 'picnicTable' | 'busStop' | 'windTurbine' | 'shrubbery'
-	| 'memorial' | 'statueSmall' | 'statueBig' | 'sculpture';
+	| 'memorial' | 'statueSmall' | 'statueBig' | 'sculpture' | 'streetLamp' | 'trafficSignal' | 'bollard';
 
 export enum InstanceStructure {
 	Generic,
@@ -178,7 +178,24 @@ export const Tile3DInstanceLODConfig: Record<Tile3DInstanceType, LODConfig> = {
 		LOD1MaxDistance: 0,
 		LOD1Fraction: 0,
 	},
-	// power lines, etc.
+	streetLamp: {
+		structure: InstanceStructure.Generic,
+		LOD0MaxDistance: 1500,
+		LOD1MaxDistance: 0,
+		LOD1Fraction: 0,
+	},
+	trafficSignal: {
+		structure: InstanceStructure.Generic,
+		LOD0MaxDistance: 1500,
+		LOD1MaxDistance: 0,
+		LOD1Fraction: 0,
+	},
+	bollard: {
+		structure: InstanceStructure.Generic,
+		LOD0MaxDistance: 800,
+		LOD1MaxDistance: 0,
+		LOD1Fraction: 0,
+	},
 };
 
 export default interface Tile3DInstance extends Tile3DFeature {

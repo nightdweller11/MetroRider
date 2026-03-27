@@ -1,5 +1,5 @@
 import {atom, atomFamily, RecoilState} from "recoil";
-import {bidirectionalSyncEffect, StateStorage} from "~/app/ui/state/utils";
+import {bidirectionalSyncEffect, readOnlySyncEffect, StateStorage} from "~/app/ui/state/utils";
 import {SettingsObjectEntry} from "~/app/settings/SettingsObject";
 import {SettingsSchema} from "~/app/settings/SettingsSchema";
 import {OverpassEndpoint} from "~/app/systems/TileLoadingSystem";
@@ -19,6 +19,7 @@ export interface AtomsCollection {
 	settingsObject: (param: string) => RecoilState<SettingsObjectEntry>;
 	settingsSchema: RecoilState<SettingsSchema>;
 	overpassEndpoints: RecoilState<OverpassEndpoint[]>;
+	useOverpassForBuildings: RecoilState<boolean>;
 	dataTimestamp: RecoilState<Date>;
 }
 
@@ -69,7 +70,7 @@ export const getAtoms = (
 		}),
 		settingsObject: atomFamily({
 			key: 'settingsObject',
-			effects: (key: string) => [bidirectionalSyncEffect(key, settingsStorage)]
+			effects: (key: string) => [readOnlySyncEffect(key, settingsStorage)]
 		}),
 		settingsSchema: atom({
 			key: 'settingsSchema',
@@ -78,6 +79,10 @@ export const getAtoms = (
 		overpassEndpoints: atom({
 			key: 'overpassEndpoints',
 			effects: [bidirectionalSyncEffect('overpassEndpoints', commonStorage)]
+		}),
+		useOverpassForBuildings: atom({
+			key: 'useOverpassForBuildings',
+			effects: [bidirectionalSyncEffect('useOverpassForBuildings', commonStorage)]
 		}),
 		dataTimestamp: atom({
 			key: 'dataTimestamp',

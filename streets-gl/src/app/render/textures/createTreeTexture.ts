@@ -7,7 +7,7 @@ export default function createTreeTexture(renderer: AbstractRenderer): AbstractT
 	return renderer.createTexture2DArray({
 		width: 512,
 		height: 512,
-		depth: 5 * 2,
+		depth: 7 * 2,
 		anisotropy: 16,
 		data: [
 			ResourceLoader.get('treeBeechDiffuse'),
@@ -24,6 +24,12 @@ export default function createTreeTexture(renderer: AbstractRenderer): AbstractT
 
 			ResourceLoader.get('treeOakDiffuse'),
 			ResourceLoader.get('treeOakNormal'),
+
+			ResourceLoader.get('treePalmDiffuse'),
+			ResourceLoader.get('treePalmNormal'),
+
+			ResourceLoader.get('treeCypressDiffuse'),
+			ResourceLoader.get('treeCypressNormal'),
 		],
 		minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
 		magFilter: RendererTypes.MagFilter.Linear,

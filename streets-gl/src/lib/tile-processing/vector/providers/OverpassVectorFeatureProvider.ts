@@ -13,42 +13,177 @@ import {getCollectionFromVectorFeatures} from "~/lib/tile-processing/vector/util
 
 const TileRequestMargin = 0.05;
 
-const getRequestBody = (x: number, y: number, zoom: number): string => {
+export type OverpassQueryMode = 'full' | 'buildings';
+
+function getBbox(x: number, y: number, zoom: number): string {
 	const position = [
 		MathUtils.tile2degrees(x - TileRequestMargin, y + 1 + TileRequestMargin, zoom),
 		MathUtils.tile2degrees(x + 1 + TileRequestMargin, y - TileRequestMargin, zoom)
 	];
-	const bbox = position[0].lat + ',' + position[0].lon + ',' + position[1].lat + ',' + position[1].lon;
+	return position[0].lat + ',' + position[0].lon + ',' + position[1].lat + ',' + position[1].lon;
+}
+
+const getBuildingsRequestBody = (x: number, y: number, zoom: number): string => {
+	const bbox = getBbox(x, y, zoom);
 	return `
-		[out:json][timeout:30];
+		[out:json][timeout:25];
 		(
-			node(${bbox});
-			way(${bbox});
-			rel["type"~"^(multipolygon|building)"](${bbox});
-			//rel["type"="building"](br); // this is SLOW
-			
-			// Make sure that we have all parts of each building in the result
-			(
-				relation["building"](${bbox});
-				>;
-				way["building"](${bbox});
-			) ->.buildingOutlines;
-			way["building:part"](area.buildingOutlines);
-			
-			// Make sure that each powerline node knows about all the powerline segments it is connected to
-			//way[power=line](${bbox})->.powerline;
-			//way(around.powerline:0)[power=line];
+			way["building"](${bbox});
+			relation["building"](${bbox});
+			way["building:part"](${bbox});
+			node["natural"="tree"](${bbox});
 		);
-		
 		out body qt;
 		>>;
 		out body qt;
 	`;
 };
 
+const getFullRequestBody = (x: number, y: number, zoom: number): string => {
+	const bbox = getBbox(x, y, zoom);
+	return `
+		[out:json][timeout:30];
+		(
+			node(${bbox});
+			way(${bbox});
+			rel["type"~"^(multipolygon|building)"](${bbox});
+			(
+				relation["building"](${bbox});
+				>;
+				way["building"](${bbox});
+			) ->.buildingOutlines;
+			way["building:part"](area.buildingOutlines);
+		);
+		out body qt;
+		>>;
+		out body qt;
+	`;
+};
+
+interface ServerHealth {
+	consecutiveFailures: number;
+	cooldownUntil: number;
+	lastRequestTime: number;
+	activeRequests: number;
+	totalRequests: number;
+	totalSuccesses: number;
+	avgResponseMs: number;
+}
+
+const MIN_REQUEST_INTERVAL_MS = 3000;
+const BASE_COOLDOWN_MS = 10000;
+const MAX_COOLDOWN_MS = 300000;
+const MAX_RETRIES_PER_REQUEST = 2;
+const REQUEST_TIMEOUT_MS = 30000;
+const MAX_CONCURRENT_PER_SERVER = 1;
+
+const serverHealthMap: Map<string, ServerHealth> = new Map();
+let roundRobinCounter = 0;
+
+function getServerHealth(url: string): ServerHealth {
+	let health = serverHealthMap.get(url);
+	if (!health) {
+		health = {
+			consecutiveFailures: 0,
+			cooldownUntil: 0,
+			lastRequestTime: 0,
+			activeRequests: 0,
+			totalRequests: 0,
+			totalSuccesses: 0,
+			avgResponseMs: 0,
+		};
+		serverHealthMap.set(url, health);
+	}
+	return health;
+}
+
+function markServerSuccess(url: string, responseMs: number): void {
+	const health = getServerHealth(url);
+	health.consecutiveFailures = 0;
+	health.cooldownUntil = 0;
+	health.activeRequests = Math.max(0, health.activeRequests - 1);
+	health.totalSuccesses++;
+	health.avgResponseMs = health.avgResponseMs === 0
+		? responseMs
+		: health.avgResponseMs * 0.7 + responseMs * 0.3;
+}
+
+function markServerFailure(url: string): void {
+	const health = getServerHealth(url);
+	health.consecutiveFailures++;
+	health.activeRequests = Math.max(0, health.activeRequests - 1);
+	const backoff = Math.min(
+		BASE_COOLDOWN_MS * Math.pow(2, health.consecutiveFailures - 1),
+		MAX_COOLDOWN_MS
+	);
+	health.cooldownUntil = Date.now() + backoff;
+	console.warn(
+		`[Overpass] Server ${url} failed (${health.consecutiveFailures}x), ` +
+		`cooldown ${Math.round(backoff / 1000)}s, ` +
+		`success rate: ${health.totalSuccesses}/${health.totalRequests}`
+	);
+}
+
+function markRequestStart(url: string): void {
+	const health = getServerHealth(url);
+	health.activeRequests++;
+	health.totalRequests++;
+	health.lastRequestTime = Date.now();
+}
+
+function isServerAvailable(url: string): boolean {
+	const health = getServerHealth(url);
+	if (Date.now() < health.cooldownUntil) {
+		return false;
+	}
+	if (health.activeRequests >= MAX_CONCURRENT_PER_SERVER) {
+		return false;
+	}
+	return true;
+}
+
+function getRateLimitDelay(url: string): number {
+	const health = getServerHealth(url);
+	const elapsed = Date.now() - health.lastRequestTime;
+	return Math.max(0, MIN_REQUEST_INTERVAL_MS - elapsed);
+}
+
+function scoreServer(url: string): number {
+	const health = getServerHealth(url);
+	let score = 0;
+
+	score += health.consecutiveFailures * 1000;
+	score += health.activeRequests * 500;
+
+	if (health.avgResponseMs > 0) {
+		score += health.avgResponseMs * 0.1;
+	}
+
+	return score;
+}
+
+function sortEndpointsByHealth(urls: string[]): string[] {
+	return [...urls].sort((a, b) => scoreServer(a) - scoreServer(b));
+}
+
+function pickServerRoundRobin(urls: string[]): string[] {
+	if (urls.length <= 1) return urls;
+
+	const offset = roundRobinCounter++ % urls.length;
+	return [...urls.slice(offset), ...urls.slice(0, offset)];
+}
+
 export default class OverpassVectorFeatureProvider extends VectorFeatureProvider {
-	public constructor(private readonly overpassURL: string) {
+	private readonly overpassURLs: string[];
+	private queryMode: OverpassQueryMode = 'buildings';
+
+	public constructor(overpassEndpoints: string | string[]) {
 		super();
+		this.overpassURLs = Array.isArray(overpassEndpoints) ? overpassEndpoints : [overpassEndpoints];
+	}
+
+	public setQueryMode(mode: OverpassQueryMode): void {
+		this.queryMode = mode;
 	}
 
 	public async getCollection(
@@ -63,7 +198,7 @@ export default class OverpassVectorFeatureProvider extends VectorFeatureProvider
 		}
 	): Promise<VectorFeatureCollection> {
 		const tileOrigin = MathUtils.tile2meters(x, y + 1, zoom);
-		const overpassData = await OverpassVectorFeatureProvider.fetchOverpassTile(x, y, zoom, this.overpassURL);
+		const overpassData = await this.fetchWithFailover(x, y, zoom);
 
 		const nodeHandlersMap: Map<number, OSMNodeHandler> = new Map();
 		const wayHandlersMap: Map<number, OSMWayHandler> = new Map();
@@ -129,7 +264,7 @@ export default class OverpassVectorFeatureProvider extends VectorFeatureProvider
 				}
 
 				if (!handler) {
-					console.error();
+					console.error(`[Overpass] Missing handler for member ${memberId}`);
 					continue;
 				}
 
@@ -149,6 +284,65 @@ export default class OverpassVectorFeatureProvider extends VectorFeatureProvider
 		return collection;
 	}
 
+	private async fetchWithFailover(
+		x: number, y: number, zoom: number
+	): Promise<OverpassDataObject> {
+		const body = this.queryMode === 'buildings'
+			? getBuildingsRequestBody(x, y, zoom)
+			: getFullRequestBody(x, y, zoom);
+		const errors: string[] = [];
+
+		for (let attempt = 0; attempt < MAX_RETRIES_PER_REQUEST; attempt++) {
+			const healthSorted = sortEndpointsByHealth(this.overpassURLs);
+			const ordered = attempt === 0
+				? pickServerRoundRobin(healthSorted)
+				: healthSorted;
+
+			for (const url of ordered) {
+				if (!isServerAvailable(url)) {
+					continue;
+				}
+
+				const delay = getRateLimitDelay(url);
+				if (delay > 0) {
+					await new Promise(r => setTimeout(r, delay));
+				}
+
+				try {
+					markRequestStart(url);
+					const startTime = Date.now();
+					const result = await OverpassVectorFeatureProvider.fetchOverpassTile(url, body);
+					const elapsed = Date.now() - startTime;
+					markServerSuccess(url, elapsed);
+					const hostname = new URL(url).hostname;
+					console.log(
+						`[Overpass] ${hostname} responded in ${elapsed}ms ` +
+						`(${result.elements?.length ?? 0} elements, mode=${this.queryMode})`
+					);
+					return result;
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err);
+					errors.push(`${url}: ${msg}`);
+					markServerFailure(url);
+				}
+			}
+
+			if (attempt < MAX_RETRIES_PER_REQUEST - 1) {
+				const backoff = BASE_COOLDOWN_MS * Math.pow(2, attempt);
+				console.warn(
+					`[Overpass] All ${this.overpassURLs.length} servers failed on attempt ${attempt + 1}/${MAX_RETRIES_PER_REQUEST}, ` +
+					`retrying in ${Math.round(backoff / 1000)}s`
+				);
+				await new Promise(r => setTimeout(r, backoff));
+			}
+		}
+
+		throw new Error(
+			`[Overpass] All ${this.overpassURLs.length} servers failed after ${MAX_RETRIES_PER_REQUEST} attempts. ` +
+			`Errors: ${errors.join(' | ')}`
+		);
+	}
+
 	private static getFeaturesFromHandlers(handlers: OSMHandler[]): VectorFeature[] {
 		const features: VectorFeature[] = [];
 
@@ -160,16 +354,41 @@ export default class OverpassVectorFeatureProvider extends VectorFeatureProvider
 	}
 
 	private static async fetchOverpassTile(
-		x: number,
-		y: number,
-		zoom: number,
-		overpassURL: string
+		overpassURL: string,
+		body: string
 	): Promise<OverpassDataObject> {
-		const response = await fetch(overpassURL, {
-			method: 'POST',
-			body: getRequestBody(x, y, zoom)
-		});
-		return await response.json() as OverpassDataObject;
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+		try {
+			const response = await fetch(overpassURL, {
+				method: 'POST',
+				body,
+				signal: controller.signal,
+			});
+
+			if (response.status === 429) {
+				throw new Error(`Rate limited (429)`);
+			}
+			if (response.status === 504) {
+				throw new Error(`Server too busy (504)`);
+			}
+			if (response.status === 403) {
+				throw new Error(`Forbidden (403)`);
+			}
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+
+			return await response.json() as OverpassDataObject;
+		} catch (err) {
+			if (err instanceof DOMException && err.name === 'AbortError') {
+				throw new Error(`Request timed out after ${REQUEST_TIMEOUT_MS}ms`);
+			}
+			throw err;
+		} finally {
+			clearTimeout(timeout);
+		}
 	}
 
 	private static classifyElements(elements: (NodeElement | WayElement | RelationElement)[]): {

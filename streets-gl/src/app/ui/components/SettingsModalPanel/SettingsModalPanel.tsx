@@ -9,6 +9,7 @@ import Endpoints from "~/app/ui/components/ModalPanel/Endpoints";
 import SettingGroup, {SettingsGroupStructure} from "~/app/ui/components/SettingsModalPanel/SettingGroup";
 import ModalButtonRow from "~/app/ui/components/ModalPanel/ModalButtonRow";
 import {AiOutlinePlus, AiOutlineUndo} from "react-icons/ai";
+import settingStyles from "~/app/ui/components/SettingsModalPanel/Setting.scss";
 
 const SettingsModalPanel: React.FC<{
 	onClose: () => void;
@@ -17,6 +18,7 @@ const SettingsModalPanel: React.FC<{
 	const actions = useContext(ActionsContext);
 	const schema = useRecoilValue(atoms.settingsSchema);
 	const endpoints = useRecoilValue(atoms.overpassEndpoints);
+	const useOverpass = useRecoilValue(atoms.useOverpassForBuildings);
 	const setEndpoints = actions.setOverpassEndpoints;
 	const endpointsRef = useRef(null);
 
@@ -73,8 +75,23 @@ const SettingsModalPanel: React.FC<{
 					]}
 				/>
 			</ModalCategoryContainer>
-			{/*<ModalCategoryContainer>
-				<ModalCategory label={'Overpass endpoints'}>
+			<ModalCategoryContainer>
+				<ModalCategory label={'Overpass API'}>
+					<div className={settingStyles.settingsRow}>
+						<div className={settingStyles.settingsRow__title}>Enhanced building data</div>
+						<div className={settingStyles.settingsRow__body}>
+							<div className={settingStyles.selectButtons}>
+								<button
+									className={settingStyles.selectButtons__button + (useOverpass ? '' : ' ' + settingStyles['selectButtons__button--disabled'])}
+									onClick={(): void => actions.setUseOverpassForBuildings(false)}
+								>Off</button>
+								<button
+									className={settingStyles.selectButtons__button + (useOverpass ? ' ' + settingStyles['selectButtons__button--disabled'] : '')}
+									onClick={(): void => actions.setUseOverpassForBuildings(true)}
+								>On</button>
+							</div>
+						</div>
+					</div>
 					<Endpoints
 						ref={endpointsRef}
 						endpoints={endpoints}
@@ -95,7 +112,7 @@ const SettingsModalPanel: React.FC<{
 						}
 					]}
 				/>
-			</ModalCategoryContainer>*/}
+			</ModalCategoryContainer>
 		</div>
 	</ModalPanel>;
 }

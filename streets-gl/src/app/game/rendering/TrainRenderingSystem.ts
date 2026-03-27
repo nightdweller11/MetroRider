@@ -297,30 +297,43 @@ export default class TrainRenderingSystem extends System {
 					}
 				}
 
-				if (!colorsApplied && pbr?.baseColorTexture !== undefined && texturePixels) {
-					const texIdx = pbr.baseColorTexture.index;
-					const texture = jsonChunk.textures?.[texIdx];
-					const imgIdx = texture?.source;
-					const pixels = texturePixels.get(imgIdx);
+				if (!colorsApplied) {
+					let texColors: number[] | null = null;
 
-					if (pixels) {
-						const uvAccessorIdx = prim.attributes?.TEXCOORD_0;
-						if (uvAccessorIdx !== undefined) {
-							const uvData = this.extractAccessorData(jsonChunk, binChunk, uvAccessorIdx);
-							if (uvData) {
-								this.sampleTextureColors(uvData, pixels, vertCount, allColors);
-								colorsApplied = true;
+					if (pbr?.baseColorTexture !== undefined && texturePixels) {
+						const texIdx = pbr.baseColorTexture.index;
+						const texture = jsonChunk.textures?.[texIdx];
+						const imgIdx = texture?.source;
+						const pixels = texturePixels.get(imgIdx);
+
+						if (pixels) {
+							const uvAccessorIdx = prim.attributes?.TEXCOORD_0;
+							if (uvAccessorIdx !== undefined) {
+								const uvData = this.extractAccessorData(jsonChunk, binChunk, uvAccessorIdx);
+								if (uvData) {
+									texColors = [];
+									this.sampleTextureColors(uvData, pixels, vertCount, texColors);
+								}
 							}
 						}
 					}
-				}
 
-				if (!colorsApplied && pbr?.baseColorFactor) {
-					const [r, g, b] = pbr.baseColorFactor;
-					for (let v = 0; v < vertCount; v++) {
-						allColors.push(r, g, b);
+					const factor = pbr?.baseColorFactor;
+					const fr = factor ? factor[0] : 1;
+					const fg = factor ? factor[1] : 1;
+					const fb = factor ? factor[2] : 1;
+
+					if (texColors) {
+						for (let v = 0; v < vertCount; v++) {
+							allColors.push(texColors[v * 3] * fr, texColors[v * 3 + 1] * fg, texColors[v * 3 + 2] * fb);
+						}
+						colorsApplied = true;
+					} else if (factor) {
+						for (let v = 0; v < vertCount; v++) {
+							allColors.push(fr, fg, fb);
+						}
+						colorsApplied = true;
 					}
-					colorsApplied = true;
 				}
 
 				if (!colorsApplied) {
@@ -507,6 +520,7 @@ export default class TrainRenderingSystem extends System {
 				let pixels: {data: Uint8ClampedArray; width: number; height: number} | null = null;
 
 				if (img.bufferView !== undefined && binChunk) {
+					debugLog(`[TrainRenderingSystem] Texture ${i}: loading from embedded bufferView ${img.bufferView}`);
 					const bv = gltf.bufferViews[img.bufferView];
 					if (bv) {
 						const imgBytes = new Uint8Array(binChunk, bv.byteOffset || 0, bv.byteLength);
@@ -518,9 +532,22 @@ export default class TrainRenderingSystem extends System {
 					}
 				} else if (img.uri) {
 					if (img.uri.startsWith('data:')) {
+						debugLog(`[TrainRenderingSystem] Texture ${i}: loading from data URI`);
 						pixels = await this.fetchTexturePixels(img.uri);
 					} else {
-						pixels = await this.fetchTexturePixels(baseUrl + img.uri);
+						const primaryUrl = baseUrl + img.uri;
+						debugLog(`[TrainRenderingSystem] Texture ${i}: loading external URI "${primaryUrl}"`);
+						pixels = await this.fetchTexturePixels(primaryUrl);
+						if (!pixels) {
+							const lowered = baseUrl + img.uri.toLowerCase();
+							if (lowered !== primaryUrl) {
+								debugLog(`[TrainRenderingSystem] Texture ${i}: retrying with lowercase path: ${lowered}`);
+								pixels = await this.fetchTexturePixels(lowered);
+							}
+						}
+						if (!pixels) {
+							console.warn(`[TrainRenderingSystem] Texture ${i}: external URI failed for "${img.uri}" (baseUrl: ${baseUrl})`);
+						}
 					}
 				}
 
@@ -603,16 +630,23 @@ export default class TrainRenderingSystem extends System {
 		const naturalStride = compSize * components;
 		const byteStride = bufferView.byteStride || 0;
 
-		if (byteStride && byteStride !== naturalStride) {
+		const useDataView = (byteStride && byteStride !== naturalStride) || (baseOffset % compSize !== 0);
+		const effectiveStride = (byteStride && byteStride !== naturalStride) ? byteStride : naturalStride;
+
+		if (useDataView) {
 			const result = new Float32Array(totalElements);
 			const dv = new DataView(bin);
 			for (let i = 0; i < count; i++) {
-				const elemOffset = baseOffset + i * byteStride;
+				const elemOffset = baseOffset + i * effectiveStride;
 				for (let c = 0; c < components; c++) {
 					const off = elemOffset + c * compSize;
 					switch (componentType) {
 						case 5126: result[i * components + c] = dv.getFloat32(off, true); break;
-						case 5123: result[i * components + c] = dv.getUint16(off, true); break;
+						case 5123: {
+							const val = dv.getUint16(off, true);
+							result[i * components + c] = accessor.normalized ? val / 65535 : val;
+							break;
+						}
 						case 5125: result[i * components + c] = dv.getUint32(off, true); break;
 						case 5121: {
 							const val = dv.getUint8(off);
@@ -639,7 +673,15 @@ export default class TrainRenderingSystem extends System {
 
 		switch (componentType) {
 			case 5126: return new Float32Array(bin, baseOffset, totalElements);
-			case 5123: return new Uint16Array(bin, baseOffset, totalElements);
+			case 5123: {
+				if (accessor.normalized) {
+					const raw = new Uint16Array(bin, baseOffset, totalElements);
+					const result = new Float32Array(totalElements);
+					for (let i = 0; i < totalElements; i++) result[i] = raw[i] / 65535;
+					return result;
+				}
+				return new Uint16Array(bin, baseOffset, totalElements);
+			}
 			case 5125: return new Uint32Array(bin, baseOffset, totalElements);
 			case 5121: {
 				const raw = new Uint8Array(bin, baseOffset, totalElements);

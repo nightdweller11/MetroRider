@@ -34,6 +34,7 @@ export default class UISystem extends System {
 		northDirection: 0,
 		settingsSchema: {},
 		overpassEndpoints: [],
+		useOverpassForBuildings: localStorage.getItem('useOverpassForBuildings') === 'true',
 		dataTimestamp: null
 	};
 	private fpsUpdateTimer = 0;
@@ -41,6 +42,18 @@ export default class UISystem extends System {
 	public postInit(): void {
 		this.ui = new UI(this.state);
 		this.updateDOM();
+
+		const settingsSystem = this.systemManager.getSystem(SettingsSystem);
+		const settings = settingsSystem.settings;
+		console.log(
+			`[Settings] Loaded from localStorage: ` +
+			`shadows=${settings.get('shadows')?.statusValue}, ` +
+			`taa=${settings.get('taa')?.statusValue}, ` +
+			`bloom=${settings.get('bloom')?.statusValue}, ` +
+			`ssao=${settings.get('ssao')?.statusValue}, ` +
+			`performanceMode=${settings.get('performanceMode')?.statusValue}, ` +
+			`overpass=${this.state.useOverpassForBuildings}`
+		);
 
 		this.systemManager.onSystemReady(MapTimeSystem, system => {
 			this.ui.addStateFieldListener('mapTimeMode', value => {
@@ -62,6 +75,11 @@ export default class UISystem extends System {
 				if (value.length > 0) {
 					system.setOverpassEndpoints(value);
 				}
+			});
+
+			this.ui.addStateFieldListener('useOverpassForBuildings', value => {
+				system.useOverpassForBuildings = value;
+				console.log(`[Settings] Overpass for buildings: ${value ? 'ENABLED' : 'DISABLED'}`);
 			});
 
 			system.fetchTilesTimestamp().then(timestamp => {
@@ -94,12 +112,19 @@ export default class UISystem extends System {
 			setTime: (time: number) => {
 				this.ui.setStateFieldValue('mapTime', time);
 			},
+			updateSetting: (key, value) => {
+				settingsSystem.settings.update(key, value);
+			},
 			resetSettings: () => settingsSystem.resetSettings(),
 			setOverpassEndpoints: (endpoints: OverpassEndpoint[]) => {
 				this.ui.setStateFieldValue('overpassEndpoints', endpoints);
 			},
 			resetOverpassEndpoints: () => {
 				this.systemManager.getSystem(TileLoadingSystem).resetOverpassEndpoints();
+			},
+			setUseOverpassForBuildings: (enabled: boolean) => {
+				this.ui.setStateFieldValue('useOverpassForBuildings', enabled);
+				localStorage.setItem('useOverpassForBuildings', String(enabled));
 			},
 			getControlsStateHash: (): string => {
 				return this.systemManager.getSystem(ControlsSystem).getCurrentStateHash();

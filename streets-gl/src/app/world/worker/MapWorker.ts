@@ -4,10 +4,11 @@ import Tile3DBuffers from "~/lib/tile-processing/tile3d/buffers/Tile3DBuffers";
 import {isDebugEnabled} from "~/app/game/debug";
 
 export interface TileRequestParams {
-	overpassEndpoint: string;
+	overpassEndpoints: string[];
 	tileServerEndpoint: string;
 	vectorTilesEndpointTemplate: string;
 	isTerrainHeightEnabled: boolean;
+	useOverpassForBuildings: boolean;
 }
 
 export default class MapWorker {
@@ -38,8 +39,16 @@ export default class MapWorker {
 	public async requestTile(x: number, y: number, params: TileRequestParams): Promise<Tile3DBuffers> {
 		this.queueLength++;
 
+		const tileKey = `${x},${y}`;
+		const existing = this.tilesInProgress.get(tileKey);
+		if (existing) {
+			console.warn(`[MapWorker] Duplicate request for tile ${tileKey}, rejecting previous`);
+			this.queueLength--;
+			existing.reject(new Error(`Superseded by new request for tile ${tileKey}`));
+		}
+
 		const promise = new Promise<Tile3DBuffers>((resolve, reject) => {
-			this.tilesInProgress.set(`${x},${y}`, {resolve, reject});
+			this.tilesInProgress.set(tileKey, {resolve, reject});
 		});
 
 		this.sendMessage({
@@ -62,11 +71,19 @@ export default class MapWorker {
 
 		switch (data.type) {
 			case WorkerMessage.FromWorkerType.Success:
+				if (!tileInProgress) {
+					console.warn(`[MapWorker] Received success for tile ${tileKey} with no pending request (stale response)`);
+					return;
+				}
 				this.queueLength--;
 				this.tilesInProgress.delete(tileKey);
 				tileInProgress.resolve(data.payload);
 				break;
 			case WorkerMessage.FromWorkerType.Error:
+				if (!tileInProgress) {
+					console.warn(`[MapWorker] Received error for tile ${tileKey} with no pending request (stale response)`);
+					return;
+				}
 				this.queueLength--;
 				this.tilesInProgress.delete(tileKey);
 				tileInProgress.reject(data.payload);

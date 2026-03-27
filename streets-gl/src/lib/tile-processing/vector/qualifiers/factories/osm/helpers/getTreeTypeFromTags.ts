@@ -4,7 +4,17 @@ const treeTypeMap: Record<string, VectorNodeDescriptor['treeType']> = {
 	beech: 'beech',
 	fir: 'fir',
 	linden: 'linden',
-	oak: 'oak'
+	oak: 'oak',
+	palm: 'palm',
+	phoenix: 'palm',
+	washingtonia: 'palm',
+	cocos: 'palm',
+	chamaerops: 'palm',
+	trachycarpus: 'palm',
+	cypress: 'cypress',
+	cupressus: 'cypress',
+	thuja: 'cypress',
+	juniperus: 'cypress',
 };
 
 export default function getTreeTypeFromTags(tags: Record<string, string>): VectorNodeDescriptor['treeType'] {

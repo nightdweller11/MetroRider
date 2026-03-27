@@ -28,3 +28,21 @@ export const bidirectionalSyncEffect = (key: any, storage: StateStorage): AtomEf
 		storage.removeStateFieldListener(key, listener);
 	};
 };
+
+export const readOnlySyncEffect = (key: any, storage: StateStorage): AtomEffect<any> => (
+	{setSelf, trigger}
+) => {
+	if (trigger === 'get') {
+		setSelf(storage.getStateFieldValue(key));
+	}
+
+	const listener = (newValue: any): void => {
+		setSelf(newValue);
+	}
+
+	storage.addStateFieldListener(key, listener);
+
+	return () => {
+		storage.removeStateFieldListener(key, listener);
+	};
+};

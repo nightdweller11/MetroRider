@@ -7,7 +7,7 @@ export default function createExtrudedMeshTexture(renderer: AbstractRenderer): A
 	return renderer.createTexture2DArray({
 		width: 512,
 		height: 512,
-		depth: 21 * 4,
+		depth: 32 * 4,
 		anisotropy: 16,
 		data: [
 			ResourceLoader.get('roofGeneric1Diffuse'),
@@ -114,6 +114,61 @@ export default function createExtrudedMeshTexture(renderer: AbstractRenderer): A
 			ResourceLoader.get('facadeBlockWindowNormal'),
 			ResourceLoader.get('facadeBlockWindowMask'),
 			ResourceLoader.get('window1Glow'),
+
+			ResourceLoader.get('facadeStoneWallDiffuse'),
+			ResourceLoader.get('facadeStoneWallNormal'),
+			ResourceLoader.get('facadeStoneWallMask'),
+			ResourceLoader.get('noGlow'),
+
+			ResourceLoader.get('facadeStoneWindowDiffuse'),
+			ResourceLoader.get('facadeStoneWindowNormal'),
+			ResourceLoader.get('facadeStoneWindowMask'),
+			ResourceLoader.get('window0Glow'),
+
+			ResourceLoader.get('facadeStuccoWallDiffuse'),
+			ResourceLoader.get('facadeStuccoWallNormal'),
+			ResourceLoader.get('facadeStuccoWallMask'),
+			ResourceLoader.get('noGlow'),
+
+			ResourceLoader.get('facadeStuccoWindowDiffuse'),
+			ResourceLoader.get('facadeStuccoWindowNormal'),
+			ResourceLoader.get('facadeStuccoWindowMask'),
+			ResourceLoader.get('window1Glow'),
+
+			ResourceLoader.get('facadeMetalPanelDiffuse'),
+			ResourceLoader.get('facadeMetalPanelNormal'),
+			ResourceLoader.get('facadeMetalPanelMask'),
+			ResourceLoader.get('glassGlow'),
+
+			ResourceLoader.get('facadePaintedConcreteWallDiffuse'),
+			ResourceLoader.get('facadePaintedConcreteWallNormal'),
+			ResourceLoader.get('facadePaintedConcreteWallMask'),
+			ResourceLoader.get('noGlow'),
+
+			ResourceLoader.get('facadePaintedConcreteWindowDiffuse'),
+			ResourceLoader.get('facadePaintedConcreteWindowNormal'),
+			ResourceLoader.get('facadePaintedConcreteWindowMask'),
+			ResourceLoader.get('window1Glow'),
+
+			ResourceLoader.get('roofGeneric5Diffuse'),
+			ResourceLoader.get('roofGeneric5Normal'),
+			ResourceLoader.get('roofCommonMask'),
+			ResourceLoader.get('noGlow'),
+
+			ResourceLoader.get('roofGeneric6Diffuse'),
+			ResourceLoader.get('roofGeneric6Normal'),
+			ResourceLoader.get('roofCommonMask'),
+			ResourceLoader.get('noGlow'),
+
+			ResourceLoader.get('roofGeneric7Diffuse'),
+			ResourceLoader.get('roofGeneric7Normal'),
+			ResourceLoader.get('roofCommonMask'),
+			ResourceLoader.get('noGlow'),
+
+			ResourceLoader.get('roofGeneric8Diffuse'),
+			ResourceLoader.get('roofGeneric8Normal'),
+			ResourceLoader.get('roofCommonMask'),
+			ResourceLoader.get('noGlow'),
 
 		],
 		minFilter: RendererTypes.MinFilter.LinearMipmapLinear,

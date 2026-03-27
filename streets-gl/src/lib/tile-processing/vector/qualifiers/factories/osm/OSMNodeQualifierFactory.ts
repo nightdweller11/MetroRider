@@ -155,6 +155,36 @@ export default class OSMNodeQualifierFactory extends AbstractQualifierFactory<Ve
 			}];
 		}
 
+		if (tags.highway === 'street_lamp') {
+			return [{
+				type: QualifierType.Descriptor,
+				data: {
+					type: 'streetLamp',
+					height: parseHeight(tags.height, 8)
+				}
+			}];
+		}
+
+		if (tags.highway === 'traffic_signals' || tags.traffic_signals === 'signal') {
+			return [{
+				type: QualifierType.Descriptor,
+				data: {
+					type: 'trafficSignal',
+					height: parseHeight(tags.height, 6)
+				}
+			}];
+		}
+
+		if (tags.barrier === 'bollard') {
+			return [{
+				type: QualifierType.Descriptor,
+				data: {
+					type: 'bollard',
+					height: parseHeight(tags.height, 0.8)
+				}
+			}];
+		}
+
 		if (tags.highway === 'turning_circle') {
 			return [{
 				type: QualifierType.Modifier,

@@ -134,9 +134,10 @@ class WorkerInstance {
 				this.fetchTile(
 					x,
 					y,
-					data.overpassEndpoint,
+					data.overpassEndpoints,
 					data.tileServerEndpoint,
 					data.vectorTilesEndpointTemplate,
+					data.useOverpassForBuildings,
 				);
 			}
 		});
@@ -145,14 +146,16 @@ class WorkerInstance {
 	private fetchTile(
 		x: number,
 		y: number,
-		overpassEndpoint: string,
+		overpassEndpoints: string[],
 		tileServerEndpoint: string,
 		vectorTilesEndpointTemplate: string,
+		useOverpassForBuildings: boolean,
 	): void {
 		const provider = new Tile3DFromVectorProvider({
-			overpassEndpoint,
+			overpassEndpoints,
 			tileServerEndpoint,
 			vectorTilesEndpointTemplate,
+			useOverpassForBuildings,
 			heightPromise: (positions: Float64Array): Promise<Float64Array> => this.getTerrainHeight(x, y, positions)
 		});
 		const collectionPromise = provider.getCollection({x, y, zoom: WorkerInstance.TileZoom});

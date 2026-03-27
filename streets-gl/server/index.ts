@@ -34,7 +34,11 @@ app.get('/api/admin/verify', (req, res) => {
 	res.json({valid: true});
 });
 
-app.use('/data/assets', express.static(path.join(DATA_DIR, 'assets')));
+app.use('/data/assets', express.static(path.join(DATA_DIR, 'assets'), {
+	maxAge: '7d',
+	immutable: true,
+	etag: true,
+}));
 
 app.get('/api/metrodreamin/user/:userId', (req, res) => {
 	const userId = req.params.userId;
@@ -215,7 +219,7 @@ app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 	});
 });
 
-app.use(express.static(BUILD_DIR));
+app.use(express.static(BUILD_DIR, {maxAge: '1h'}));
 
 app.get('/{*path}', (_req, res) => {
 	const indexPath = path.join(BUILD_DIR, 'index.html');

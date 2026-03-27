@@ -62,6 +62,7 @@ module.exports = (env, argv) => {
 		performance: {maxEntrypointSize: 8000000, maxAssetSize: 8000000},
 		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020'})]},
 		devServer: {
+			port: 8080,
 			hot: true,
 			proxy: [{context: ['/api', '/data/assets'], target: 'http://localhost:3001'}],
 			historyApiFallback: {

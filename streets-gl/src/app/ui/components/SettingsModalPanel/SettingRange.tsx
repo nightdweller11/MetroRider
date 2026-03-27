@@ -1,7 +1,7 @@
 import React, {useContext} from "react";
 import styles from "./Setting.scss";
-import {AtomsContext} from "~/app/ui/UI";
-import {useRecoilState, useRecoilValue} from "recoil";
+import {ActionsContext, AtomsContext} from "~/app/ui/UI";
+import {useRecoilValue} from "recoil";
 import {SettingsSchemaRangeScale} from "~/app/settings/SettingsSchema";
 import Setting from "./Setting";
 
@@ -23,7 +23,8 @@ const SettingRange: React.FC<{
 	id: string;
 }> = ({id}) => {
 	const atoms = useContext(AtomsContext);
-	const [settingValue, setSettingValue] = useRecoilState(atoms.settingsObject(id));
+	const actions = useContext(ActionsContext);
+	const settingValue = useRecoilValue(atoms.settingsObject(id));
 	const schema = useRecoilValue(atoms.settingsSchema)[id];
 
 	return <Setting name={schema.label} isSub={!!schema.parent}>
@@ -44,7 +45,7 @@ const SettingRange: React.FC<{
 						linearToLog(schema.selectRange[0], schema.selectRange[1], +e.target.value) :
 						+e.target.value;
 
-					setSettingValue({
+					actions.updateSetting(id, {
 						...settingValue,
 						numberValue
 					});

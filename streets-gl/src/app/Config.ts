@@ -185,8 +185,11 @@ const Config = {
 	} as SettingsSchema,
 	OverpassEndpoints: [
 		{url: 'https://overpass-api.de/api/interpreter', isEnabled: true},
-		{url: 'https://overpass.openstreetmap.ru/cgi/interpreter', isEnabled: false},
-		{url: 'https://overpass.kumi.systems/api/interpreter', isEnabled: false}
+		{url: 'https://z.overpass-api.de/api/interpreter', isEnabled: true},
+		{url: 'https://lz4.overpass-api.de/api/interpreter', isEnabled: true},
+		{url: 'https://overpass.openstreetmap.fr/api/interpreter', isEnabled: true},
+		{url: 'https://overpass.private.coffee/api/interpreter', isEnabled: false},
+		{url: 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', isEnabled: false},
 	],
 	TileServerEndpoint: 'https://tiles.streets.gl',
 	SlippyEndpointTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',

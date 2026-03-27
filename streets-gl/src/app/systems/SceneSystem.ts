@@ -137,6 +137,9 @@ export default class SceneSystem extends System {
 		this.objects.instancedObjects.set('shrubbery', new GenericInstancedObject(ModelManager.getGLTFModel('shrubbery')));
 		this.objects.instancedObjects.set('utilityPole', new GenericInstancedObject(ModelManager.getGLTFModel('utilityPole')));
 		this.objects.instancedObjects.set('wire', new AdvancedInstancedObject(ModelManager.getGLTFModel('wire')));
+		this.objects.instancedObjects.set('streetLamp', new GenericInstancedObject(ModelManager.getGLTFModel('utilityPole')));
+		this.objects.instancedObjects.set('trafficSignal', new GenericInstancedObject(ModelManager.getGLTFModel('utilityPole')));
+		this.objects.instancedObjects.set('bollard', new GenericInstancedObject(ModelManager.getGLTFModel('hydrant')));
 
 		this.scene.add(wrapper);
 		wrapper.add(

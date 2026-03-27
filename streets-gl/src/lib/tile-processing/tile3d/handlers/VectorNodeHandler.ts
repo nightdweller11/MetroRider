@@ -125,6 +125,30 @@ export default class VectorNodeHandler implements Handler {
 			})];
 		}
 
+		if (this.descriptor.type === 'streetLamp') {
+			return [this.getGenericInstanceFeature({
+				type: 'streetLamp',
+				rotateToNearestPath: true,
+				height: this.descriptor.height
+			})];
+		}
+
+		if (this.descriptor.type === 'trafficSignal') {
+			return [this.getGenericInstanceFeature({
+				type: 'trafficSignal',
+				rotateToNearestPath: true,
+				height: this.descriptor.height
+			})];
+		}
+
+		if (this.descriptor.type === 'bollard') {
+			return [this.getGenericInstanceFeature({
+				type: 'bollard',
+				rotateToNearestPath: false,
+				height: this.descriptor.height
+			})];
+		}
+
 		return [];
 	}
 

@@ -1,11 +1,11 @@
 import {OMBBResult} from "~/lib/tile-processing/tile3d/builders/Tile3DMultipolygon";
 import Vec3 from "~/lib/math/Vec3";
 
-type TreeType = 'genericBroadleaved' | 'genericNeedleleaved' | 'beech' | 'fir' | 'linden' | 'oak';
+type TreeType = 'genericBroadleaved' | 'genericNeedleleaved' | 'beech' | 'fir' | 'linden' | 'oak' | 'palm' | 'cypress';
 
 export interface VectorNodeDescriptor {
 	type?: 'tree' | 'rock' | 'hydrant' | 'transmissionTower' | 'utilityPole' | 'artwork' | 'adColumn' | 'windTurbine' |
-	'bench' | 'picnicTable' | 'busStop' | 'memorial' | 'statue' | 'sculpture';
+	'bench' | 'picnicTable' | 'busStop' | 'memorial' | 'statue' | 'sculpture' | 'streetLamp' | 'trafficSignal' | 'bollard';
 	treeType?: TreeType;
 	direction?: number;
 	height?: number;
@@ -44,7 +44,7 @@ export interface VectorAreaDescriptor {
 	buildingRoofOrientation?: 'along' | 'across';
 	buildingRoofDirection?: number;
 	buildingRoofAngle?: number;
-	buildingFacadeMaterial?: 'plaster' | 'brick' | 'wood' | 'glass' | 'cementBlock';
+	buildingFacadeMaterial?: 'plaster' | 'brick' | 'wood' | 'glass' | 'cementBlock' | 'stone' | 'stucco' | 'metalPanel' | 'paintedConcrete';
 	buildingFacadeColor?: number;
 	buildingRoofMaterial?: 'default' | 'tiles' | 'metal' | 'concrete' | 'thatch' | 'eternit' | 'grass' | 'glass' |
 		'tar';

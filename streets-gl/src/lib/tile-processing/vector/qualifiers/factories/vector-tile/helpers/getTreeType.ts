@@ -10,7 +10,17 @@ const treeTypeMap: Record<string, VectorNodeDescriptor['treeType']> = {
 	tilia: 'linden',
 	linde: 'linden',
 	oak: 'oak',
-	quercus: 'oak'
+	quercus: 'oak',
+	palm: 'palm',
+	phoenix: 'palm',
+	washingtonia: 'palm',
+	cocos: 'palm',
+	chamaerops: 'palm',
+	trachycarpus: 'palm',
+	cypress: 'cypress',
+	cupressus: 'cypress',
+	thuja: 'cypress',
+	juniperus: 'cypress',
 };
 
 export default function getTreeType(tags: VectorTile.FeatureTags): VectorNodeDescriptor['treeType'] {

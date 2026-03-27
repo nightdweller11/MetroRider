@@ -1,14 +1,15 @@
 import React, {useContext} from "react";
 import styles from "./Setting.scss";
-import {AtomsContext} from "~/app/ui/UI";
-import {useRecoilState, useRecoilValue} from "recoil";
+import {ActionsContext, AtomsContext} from "~/app/ui/UI";
+import {useRecoilValue} from "recoil";
 import Setting from "./Setting";
 
 const SettingSelect: React.FC<{
 	id: string;
 }> = ({id}) => {
 	const atoms = useContext(AtomsContext);
-	const [settingValue, setSettingValue] = useRecoilState(atoms.settingsObject(id));
+	const actions = useContext(ActionsContext);
+	const settingValue = useRecoilValue(atoms.settingsObject(id));
 	const schema = useRecoilValue(atoms.settingsSchema)[id];
 	const selected = settingValue.statusValue;
 
@@ -27,7 +28,7 @@ const SettingSelect: React.FC<{
 					key={status}
 					onClick={(): void => {
 						if (selected !== status) {
-							setSettingValue({...settingValue, statusValue: status});
+							actions.updateSetting(id, {...settingValue, statusValue: status});
 						}
 					}}
 				>{statusLabel}</button>

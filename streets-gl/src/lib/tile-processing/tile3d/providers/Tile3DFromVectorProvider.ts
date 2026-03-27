@@ -27,10 +27,11 @@ import Vec2 from "~/lib/math/Vec2";
 import Vec3 from "~/lib/math/Vec3";
 
 export interface Tile3DProviderParams {
-	overpassEndpoint: string;
+	overpassEndpoints: string[];
 	tileServerEndpoint: string;
 	vectorTilesEndpointTemplate: string;
 	heightPromise: (positions: Float64Array) => Promise<Float64Array>;
+	useOverpassForBuildings?: boolean;
 }
 
 export default class Tile3DFromVectorProvider implements FeatureProvider<Tile3DFeatureCollection> {
@@ -40,6 +41,9 @@ export default class Tile3DFromVectorProvider implements FeatureProvider<Tile3DF
 	public constructor(params: Tile3DProviderParams) {
 		this.params = params;
 		this.vectorProvider = new CombinedVectorFeatureProvider(params);
+		if (params.useOverpassForBuildings) {
+			this.vectorProvider.setUseOverpassForBuildings(true);
+		}
 	}
 
 	public async getCollection(

@@ -73,8 +73,10 @@ export function getTreeTextureIdFromType(type: VectorNodeDescriptor['treeType'])
 		fir: [1],
 		linden: [2, 3],
 		oak: [4],
+		palm: [5],
+		cypress: [6],
 		genericBroadleaved: [0, 2, 3, 4],
-		genericNeedleleaved: [1]
+		genericNeedleleaved: [1, 6]
 	};
 
 	return lookup[type] ?? lookup.genericBroadleaved;
@@ -86,7 +88,9 @@ export function getTreeHeightRangeFromTextureId(textureId: number): [number, num
 		1: [25, 35],
 		2: [14, 18],
 		3: [14, 18],
-		4: [12, 15]
+		4: [12, 15],
+		5: [8, 15],
+		6: [15, 25]
 	};
 
 	return lookup[textureId];
@@ -98,7 +102,9 @@ export function getTreeTextureScaling(textureId: number): number {
 		1: 1.06,
 		2: 1.19,
 		3: 1.02,
-		4: 1.43
+		4: 1.43,
+		5: 0.85,
+		6: 0.75
 	};
 
 	return lookup[textureId];

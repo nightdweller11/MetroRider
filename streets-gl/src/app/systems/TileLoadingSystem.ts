@@ -12,9 +12,20 @@ export interface OverpassEndpoint {
 	isUserDefined: boolean;
 }
 
+const OVERPASS_MIN_INTERVAL_MS = 2000;
+const OVERPASS_MAX_IN_FLIGHT = 2;
+
 export default class TileLoadingSystem extends System {
 	private readonly overpassEndpointsDefault: OverpassEndpoint[] = [];
 	public overpassEndpoints: OverpassEndpoint[] = [];
+	public useOverpassForBuildings: boolean = localStorage.getItem('useOverpassForBuildings') === 'true';
+
+	private overpassLastDispatchTime: number = 0;
+	private overpassInFlight: number = 0;
+	private overpassTotalDispatched: number = 0;
+	private overpassTotalCompleted: number = 0;
+	private overpassTotalFailed: number = 0;
+	private lastLoggedOverpassState: boolean | null = null;
 
 	public constructor() {
 		super();
@@ -85,34 +96,57 @@ export default class TileLoadingSystem extends System {
 		this.overpassEndpoints = this.overpassEndpointsDefault;
 	}
 
-	private getNextOverpassEndpoint(): string {
-		const urls = this.overpassEndpoints
+	private getEnabledOverpassEndpoints(): string[] {
+		return this.overpassEndpoints
 			.filter(endpoint => endpoint.isEnabled)
 			.map(endpoint => endpoint.url);
+	}
 
-		if (urls.length === 0) {
-			return null;
+	private canDispatchOverpassTile(): boolean {
+		if (!this.useOverpassForBuildings) {
+			return true;
 		}
 
-		return urls[Math.floor(Math.random() * urls.length)];
+		if (this.overpassInFlight >= OVERPASS_MAX_IN_FLIGHT) {
+			return false;
+		}
+
+		const elapsed = Date.now() - this.overpassLastDispatchTime;
+		return elapsed >= OVERPASS_MIN_INTERVAL_MS;
 	}
 
 	public update(deltaTime: number): void {
+		if (this.lastLoggedOverpassState !== this.useOverpassForBuildings) {
+			this.lastLoggedOverpassState = this.useOverpassForBuildings;
+			const endpoints = this.getEnabledOverpassEndpoints();
+			console.log(
+				`[TileLoading] Overpass: ${this.useOverpassForBuildings ? 'ENABLED' : 'DISABLED'}, ` +
+				`${endpoints.length} server(s): ${endpoints.map(u => new URL(u).hostname).join(', ') || 'none'}`
+			);
+		}
+
 		const mapWorkerSystem = this.systemManager.getSystem(MapWorkerSystem);
 		const tileSystem = this.systemManager.getSystem(TileSystem);
+		const overpassEndpoints = this.getEnabledOverpassEndpoints();
 
 		const queuedTile = tileSystem.getNextTileToLoad();
 		const worker = mapWorkerSystem.getFreeWorker();
-		const overpassEndpoint = this.getNextOverpassEndpoint();
 
-		if (queuedTile && worker && overpassEndpoint) {
+		if (queuedTile && worker && this.canDispatchOverpassTile()) {
+			if (this.useOverpassForBuildings) {
+				this.overpassLastDispatchTime = Date.now();
+				this.overpassInFlight++;
+				this.overpassTotalDispatched++;
+			}
+
 			this.loadTile({
 				tile: queuedTile.position,
 				onBeforeLoad: queuedTile.onBeforeLoad,
 				onLoad: queuedTile.onLoad,
 				worker: worker,
-				overpassEndpoint: overpassEndpoint,
-				isTerrainHeightEnabled: tileSystem.enableTerrainHeight
+				overpassEndpoints: overpassEndpoints,
+				isTerrainHeightEnabled: tileSystem.enableTerrainHeight,
+				useOverpassForBuildings: this.useOverpassForBuildings,
 			});
 		}
 	}
@@ -123,28 +157,49 @@ export default class TileLoadingSystem extends System {
 			onBeforeLoad,
 			onLoad,
 			worker,
-			overpassEndpoint,
-			isTerrainHeightEnabled
+			overpassEndpoints,
+			isTerrainHeightEnabled,
+			useOverpassForBuildings,
 		}: {
 			tile: Vec2;
 			onBeforeLoad: () => Promise<any>;
 			onLoad: (buffers: Tile3DBuffers) => void;
 			worker: MapWorker;
-			overpassEndpoint: string;
+			overpassEndpoints: string[];
 			isTerrainHeightEnabled: boolean;
+			useOverpassForBuildings: boolean;
 		}
 	): Promise<void> {
 		await onBeforeLoad();
 
+		const tileKey = `${tile.x},${tile.y}`;
+		const startMs = Date.now();
+
 		worker.requestTile(tile.x, tile.y, {
-			overpassEndpoint: overpassEndpoint,
+			overpassEndpoints: overpassEndpoints,
 			tileServerEndpoint: Config.TileServerEndpoint,
 			vectorTilesEndpointTemplate: Config.TilesEndpointTemplate,
-			isTerrainHeightEnabled: isTerrainHeightEnabled
+			isTerrainHeightEnabled: isTerrainHeightEnabled,
+			useOverpassForBuildings: useOverpassForBuildings,
 		}).then(result => {
+			if (useOverpassForBuildings) {
+				this.overpassInFlight = Math.max(0, this.overpassInFlight - 1);
+				this.overpassTotalCompleted++;
+				console.log(
+					`[TileLoading] Tile ${tileKey} done (${Date.now() - startMs}ms) ` +
+					`[inflight=${this.overpassInFlight} done=${this.overpassTotalCompleted} failed=${this.overpassTotalFailed}]`
+				);
+			}
 			onLoad(result);
 		}, error => {
-			//console.error(`Failed to load tile ${tile.x},${tile.y}. Retrying...`, error);
+			if (useOverpassForBuildings) {
+				this.overpassInFlight = Math.max(0, this.overpassInFlight - 1);
+				this.overpassTotalFailed++;
+				console.warn(
+					`[TileLoading] Tile ${tileKey} failed (${Date.now() - startMs}ms): ${error} ` +
+					`[inflight=${this.overpassInFlight} done=${this.overpassTotalCompleted} failed=${this.overpassTotalFailed}]`
+				);
+			}
 			onLoad(null);
 		});
 	}

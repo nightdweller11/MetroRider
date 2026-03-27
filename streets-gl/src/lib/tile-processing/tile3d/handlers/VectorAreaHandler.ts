@@ -666,7 +666,11 @@ export default class VectorAreaHandler implements Handler {
 				ExtrudedTextures.RoofGeneric1,
 				ExtrudedTextures.RoofGeneric2,
 				ExtrudedTextures.RoofGeneric3,
-				ExtrudedTextures.RoofGeneric4
+				ExtrudedTextures.RoofGeneric4,
+				ExtrudedTextures.RoofGeneric5,
+				ExtrudedTextures.RoofGeneric6,
+				ExtrudedTextures.RoofGeneric7,
+				ExtrudedTextures.RoofGeneric8
 			];
 
 			return {
@@ -702,9 +706,30 @@ export default class VectorAreaHandler implements Handler {
 		textureIdWindow: number;
 		textureIdWall: number;
 	} {
-		const material = this.descriptor.buildingFacadeMaterial;
+		let material = this.descriptor.buildingFacadeMaterial;
 		let color = this.descriptor.buildingFacadeColor;
 		const hasWindows = this.descriptor.buildingWindows;
+
+		if (material === 'plaster' && color === 0xffffff) {
+			const rnd = new SeededRandom(this.osmReference.id ?? 0);
+			const roll = rnd.generate();
+			if (roll < 0.35) {
+				const warmTints = [0xf5f0e8, 0xeee8d5, 0xe8dcc8, 0xf0ebe0, 0xddd5c5, 0xf2ece2];
+				color = warmTints[Math.floor(rnd.generate() * warmTints.length)];
+			} else if (roll < 0.58) {
+				material = 'brick';
+				color = [0x8c4834, 0x9c5840, 0x7a3c2a, 0xa0604c][Math.floor(rnd.generate() * 4)];
+			} else if (roll < 0.78) {
+				material = 'cementBlock';
+				color = [0xd0d0d0, 0xc8c8c8, 0xdadada, 0xbfbfbf][Math.floor(rnd.generate() * 4)];
+			} else if (roll < 0.92) {
+				const tintedPlaster = [0xd4c4a8, 0xc8b8a0, 0xe0d0b8, 0xbfb19a, 0xdcc8b0];
+				color = tintedPlaster[Math.floor(rnd.generate() * tintedPlaster.length)];
+			} else {
+				material = 'wood';
+				color = [0xdec8a0, 0xc8b088, 0xe0c898][Math.floor(rnd.generate() * 3)];
+			}
+		}
 
 		const materialToTextureId: Record<VectorAreaDescriptor['buildingFacadeMaterial'], {
 			wall: number;
@@ -734,6 +759,26 @@ export default class VectorAreaHandler implements Handler {
 			cementBlock: {
 				wall: ExtrudedTextures.FacadeBlockWall,
 				window: ExtrudedTextures.FacadeBlockWindow,
+				width: 4
+			},
+			stone: {
+				wall: ExtrudedTextures.FacadeStoneWall,
+				window: ExtrudedTextures.FacadeStoneWindow,
+				width: 4
+			},
+			stucco: {
+				wall: ExtrudedTextures.FacadeStuccoWall,
+				window: ExtrudedTextures.FacadeStuccoWindow,
+				width: 4
+			},
+			metalPanel: {
+				wall: ExtrudedTextures.FacadeMetalPanel,
+				window: ExtrudedTextures.FacadeMetalPanel,
+				width: 4
+			},
+			paintedConcrete: {
+				wall: ExtrudedTextures.FacadePaintedConcreteWall,
+				window: ExtrudedTextures.FacadePaintedConcreteWindow,
 				width: 4
 			}
 		};

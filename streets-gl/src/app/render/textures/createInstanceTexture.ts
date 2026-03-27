@@ -21,7 +21,10 @@ export const InstanceTextureIdList: Record<Tile3DInstanceType, number> = {
 	utilityPole: 12,
 	wire: 13,
 	statueBig: 14,
-	sculpture: 15
+	sculpture: 15,
+	streetLamp: 12,
+	trafficSignal: 12,
+	bollard: 2,
 };
 
 export default function createInstanceTexture(renderer: AbstractRenderer): AbstractTexture2DArray {

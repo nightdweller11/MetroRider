@@ -16,10 +16,11 @@ export namespace WorkerMessage {
 	export interface ToWorker {
 		type: ToWorkerType;
 		tile: [number, number];
-		overpassEndpoint?: string;
+		overpassEndpoints?: string[];
 		tileServerEndpoint?: string;
 		vectorTilesEndpointTemplate?: string;
 		isTerrainHeightEnabled?: boolean;
+		useOverpassForBuildings?: boolean;
 		height?: Float64Array;
 		corridorSegments?: CorridorSegment[];
 		debug?: boolean;

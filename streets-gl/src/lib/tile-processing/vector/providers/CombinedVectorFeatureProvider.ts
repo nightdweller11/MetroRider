@@ -11,13 +11,19 @@ export default class CombinedVectorFeatureProvider extends VectorFeatureProvider
 	private readonly overpassProvider: OverpassVectorFeatureProvider;
 	private readonly mapboxProvider: MapboxVectorFeatureProvider;
 	private readonly pbfProvider: PBFVectorFeatureProvider;
+	private useOverpassForBuildings: boolean = false;
 
 	public constructor(params: Tile3DProviderParams) {
 		super();
 
-		this.overpassProvider = new OverpassVectorFeatureProvider(params.overpassEndpoint);
+		this.overpassProvider = new OverpassVectorFeatureProvider(params.overpassEndpoints);
 		this.mapboxProvider = new MapboxVectorFeatureProvider(params.vectorTilesEndpointTemplate);
 		this.pbfProvider = new PBFVectorFeatureProvider();
+	}
+
+	public setUseOverpassForBuildings(enabled: boolean): void {
+		this.useOverpassForBuildings = enabled;
+		this.overpassProvider.setQueryMode(enabled ? 'buildings' : 'full');
 	}
 
 	public async getCollection(
@@ -31,23 +37,66 @@ export default class CombinedVectorFeatureProvider extends VectorFeatureProvider
 			zoom: number;
 		}
 	): Promise<VectorFeatureCollection> {
-		const pbfRequest = this.pbfProvider.getCollection({x, y, zoom});
+		const tileKey = `${x},${y}`;
 
-		return new Promise((resolve, reject) => {
-			pbfRequest.then((data) => {
-				//this.clearFeaturesNotInTile(data, x, y, zoom);
-				resolve(data);
-			}).catch((err) => {
-				reject(err);
-			});
-		});
+		if (!this.useOverpassForBuildings) {
+			return this.pbfProvider.getCollection({x, y, zoom});
+		}
+
+		const startMs = Date.now();
+		const [pbfResult, overpassResult] = await Promise.allSettled([
+			this.pbfProvider.getCollection({x, y, zoom}),
+			this.overpassProvider.getCollection({x, y, zoom}),
+		]);
+		const fetchMs = Date.now() - startMs;
+
+		if (pbfResult.status === 'rejected') {
+			throw new Error(`PBF fetch failed: ${pbfResult.reason}`);
+		}
+
+		const pbfData = pbfResult.value;
+
+		if (overpassResult.status === 'rejected') {
+			console.error(
+				`[Combined ${tileKey}] Overpass FAILED (${fetchMs}ms), PBF-only fallback: ` +
+				`${pbfData.areas.length} areas, ${pbfData.nodes.length} nodes`
+			);
+			return pbfData;
+		}
+
+		const overpassData = overpassResult.value;
+
+		const pbfBuildingCount = pbfData.areas.filter(
+			a => a.descriptor.type === 'building' || a.descriptor.type === 'buildingPart'
+		).length;
+		const pbfNonBuildings: VectorArea[] = pbfData.areas.filter(
+			a => a.descriptor.type !== 'building' && a.descriptor.type !== 'buildingPart'
+		);
+		const overpassBuildings: VectorArea[] = overpassData.areas.filter(
+			a => a.descriptor.type === 'building' || a.descriptor.type === 'buildingPart'
+		);
+
+		const materials = new Set(overpassBuildings.map(b => b.descriptor.buildingFacadeMaterial));
+
+		console.log(
+			`[Combined ${tileKey}] Merged in ${fetchMs}ms: ` +
+			`Overpass=${overpassBuildings.length} buildings (materials: ${[...materials].join(',')}) | ` +
+			`PBF=${pbfBuildingCount} buildings replaced, ${pbfNonBuildings.length} other areas kept | ` +
+			`Overpass nodes=${overpassData.nodes.length}, trees=${overpassData.nodes.filter(n => n.descriptor?.type === 'tree').length}`
+		);
+
+		return {
+			nodes: this.mergeCollections(pbfData, overpassData).nodes,
+			polylines: pbfData.polylines,
+			areas: [...pbfNonBuildings, ...overpassBuildings]
+		};
 	}
 
 	private mergeCollections(...collections: VectorFeatureCollection[]): VectorFeatureCollection {
 		return {
-			nodes: [].concat(...collections.map(c => c.nodes)),
-			polylines: [].concat(...collections.map(c => c.polylines)),
-			areas: [].concat(...collections.map(c => c.areas))
+			nodes: ([] as VectorFeatureCollection['nodes']).concat(...collections.map(c => c.nodes)),
+			polylines: ([] as VectorFeatureCollection['polylines']).concat(...collections.map(c => c.polylines)),
+			areas: ([] as VectorFeatureCollection['areas']).concat(...collections.map(c => c.areas))
 		};
 	}
 

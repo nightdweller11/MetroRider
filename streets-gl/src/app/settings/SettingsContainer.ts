@@ -15,6 +15,11 @@ export default class SettingsContainer {
 	}
 
 	public update(key: string, value: SettingsObjectEntry): void {
+		if (!value || (value.statusValue === undefined && value.numberValue === undefined)) {
+			console.error(`[Settings] Refusing to save invalid value for key "${key}":`, value);
+			console.trace('[Settings] Caller of invalid update:');
+			return;
+		}
 		this.settingsObject[key] = value;
 		this.saveSettings();
 

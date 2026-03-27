@@ -35,7 +35,20 @@ export default function getBuildingParamsFromOSMTags(
 	buildingFoundation: boolean;
 } {
 	const fallbackLevels = 1;
-	const levelHeight = 4;
+	const groundLevelHeight = 4.0;
+	const upperLevelHeight = 3.2;
+	const roofLevelHeight = 3.2;
+
+	function bodyHeightFromLevels(lvl: number): number {
+		if (lvl <= 0) return 0;
+		if (lvl <= 1) return groundLevelHeight;
+		return groundLevelHeight + (lvl - 1) * upperLevelHeight;
+	}
+
+	function levelsFromBodyHeight(h: number): number {
+		if (h <= groundLevelHeight) return 1;
+		return Math.max(1, 1 + Math.round((h - groundLevelHeight) / upperLevelHeight));
+	}
 
 	const hasFoundation = !onlyRoof &&
 		tags['building:levels'] === undefined &&
@@ -49,7 +62,7 @@ export default function getBuildingParamsFromOSMTags(
 	const roofLevels = parseRoofLevels(tags, 'roof:levels') ?? getDefaultLevelsFromRoofType(roofParams.type);
 	const roofDirection = parseDirection(tags['roof:direction'], null);
 	const roofAngle = readTagAsUnsignedFloat(tags, 'roof:angle');
-	let roofHeight = parseHeight(tags['roof:height'], roofLevels * levelHeight);
+	let roofHeight = parseHeight(tags['roof:height'], roofLevels * roofLevelHeight);
 
 	let minLevel = readTagAsUnsignedInt(tags, 'building:min_level') ?? null;
 	let height = parseHeight(tags.height, parseHeight(tags.est_height, null));
@@ -62,23 +75,23 @@ export default function getBuildingParamsFromOSMTags(
 
 	if (height === null && levels === null) {
 		levels = (minLevel !== null) ? minLevel: fallbackLevels;
-		height = levels * levelHeight + roofHeight
+		height = bodyHeightFromLevels(levels) + roofHeight;
 	} else if (height === null) {
-		height = levels * levelHeight + roofHeight
+		height = bodyHeightFromLevels(levels) + roofHeight;
 	} else if (levels === null) {
-		levels = Math.max(1, Math.round((height - roofHeight) / levelHeight));
+		levels = levelsFromBodyHeight(height - roofHeight);
 	}
 
 	if (minLevel === null) {
 		if (minHeight !== null) {
-			minLevel = Math.min(levels - 1, Math.round(minHeight / levelHeight));
+			minLevel = Math.min(levels - 1, Math.round(minHeight / upperLevelHeight));
 		} else {
 			minLevel = 0;
 		}
 	}
 
 	if (minHeight === null) {
-		minHeight = Math.min(minLevel * levelHeight, height);
+		minHeight = Math.min(minLevel * upperLevelHeight, height);
 	}
 
 	const facadeParams = getFacadeParamsFromTags(tags);

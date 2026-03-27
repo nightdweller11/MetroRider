@@ -28,7 +28,20 @@ export default function getBuildingParams(
 	buildingFoundation: boolean;
 } {
 	const fallbackLevels = 1;
-	const levelHeight = 4;
+	const groundLevelHeight = 4.0;
+	const upperLevelHeight = 3.2;
+	const roofLevelHeight = 3.2;
+
+	function bodyHeightFromLevels(lvl: number): number {
+		if (lvl <= 0) return 0;
+		if (lvl <= 1) return groundLevelHeight;
+		return groundLevelHeight + (lvl - 1) * upperLevelHeight;
+	}
+
+	function levelsFromBodyHeight(h: number): number {
+		if (h <= groundLevelHeight) return 1;
+		return Math.max(1, 1 + Math.round((h - groundLevelHeight) / upperLevelHeight));
+	}
 
 	const isRoof = tags.buildingType === 'roof';
 
@@ -43,7 +56,7 @@ export default function getBuildingParams(
 	const roofLevels = tags.roofLevels <= 0 ? 0.6 : <number>tags.roofLevels ?? (roofParams.type === 'flat' ? 0 : 1);
 	const roofDirection = <number>tags.roofDirection ?? null;
 	const roofAngle = <number>tags.roofAngle ?? null;
-	let roofHeight = <number>tags.roofHeight ?? (roofLevels * levelHeight);
+	let roofHeight = <number>tags.roofHeight ?? (roofLevels * roofLevelHeight);
 
 	let minLevel = <number>tags.minLevel ?? null;
 	let height = <number>tags.height ?? null;
@@ -56,23 +69,23 @@ export default function getBuildingParams(
 
 	if (height === null && levels === null) {
 		levels = (minLevel !== null) ? minLevel : fallbackLevels;
-		height = levels * levelHeight + roofHeight
+		height = bodyHeightFromLevels(levels) + roofHeight;
 	} else if (height === null) {
-		height = levels * levelHeight + roofHeight
+		height = bodyHeightFromLevels(levels) + roofHeight;
 	} else if (levels === null) {
-		levels = Math.max(1, Math.round((height - roofHeight) / levelHeight));
+		levels = levelsFromBodyHeight(height - roofHeight);
 	}
 
 	if (minLevel === null) {
 		if (minHeight !== null) {
-			minLevel = Math.min(levels - 1, Math.round(minHeight / levelHeight));
+			minLevel = Math.min(levels - 1, Math.round(minHeight / upperLevelHeight));
 		} else {
 			minLevel = 0;
 		}
 	}
 
 	if (minHeight === null) {
-		minHeight = Math.min(minLevel * levelHeight, height);
+		minHeight = Math.min(minLevel * upperLevelHeight, height);
 	}
 
 	const facadeParams = getFacadeParamsFromTags(tags);

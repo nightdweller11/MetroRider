@@ -48,6 +48,7 @@ export default class GameUISystem extends System {
 		this.createControls(trainSystem);
 		this.createLineSelector(trainSystem);
 		this.createSettingsButton();
+		this.createMapSelectionButton(trainSystem);
 		this.createStartButton(trainSystem);
 		this.createDebugOverlay();
 
@@ -470,6 +471,25 @@ export default class GameUISystem extends System {
 			max-width: 460px; width: 92vw; max-height: 85vh; overflow-y: auto;
 		`;
 
+		const closeBtn = document.createElement('div');
+		closeBtn.style.cssText = `
+			position: absolute; top: 10px; right: 14px;
+			width: 28px; height: 28px; border-radius: 50%;
+			display: flex; align-items: center; justify-content: center;
+			cursor: pointer; font-size: 16px; color: #888;
+			transition: color 0.15s, background 0.15s;
+		`;
+		closeBtn.textContent = '\u2715';
+		closeBtn.title = 'Close';
+		closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = '#fff'; closeBtn.style.background = 'rgba(255,255,255,0.1)'; });
+		closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = '#888'; closeBtn.style.background = 'transparent'; });
+		closeBtn.addEventListener('click', () => {
+			startBtn.style.display = 'none';
+		});
+
+		startBtn.style.position = 'absolute';
+		startBtn.appendChild(closeBtn);
+
 		const title = document.createElement('div');
 		title.textContent = '\uD83D\uDE87 MetroRider';
 		title.style.cssText = 'font-size: 22px; margin-bottom: 8px;';
@@ -791,6 +811,52 @@ export default class GameUISystem extends System {
 		this.container.appendChild(btn);
 	}
 
+	private createMapSelectionButton(trainSystem: TrainSystem): void {
+		const btn = document.createElement('div');
+		btn.id = 'game-map-select-btn';
+		btn.style.cssText = `
+			position: absolute; top: 20px; right: 126px;
+			width: 42px; height: 42px; border-radius: 10px;
+			background: rgba(0,0,0,0.65); color: #fff;
+			display: flex; align-items: center; justify-content: center;
+			font-size: 18px; cursor: pointer; user-select: none;
+			backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+			pointer-events: auto; transition: background 0.15s;
+		`;
+		btn.textContent = '\uD83D\uDDFA';
+		btn.title = 'Change Map';
+		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
+		btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.65)'; });
+		btn.addEventListener('click', () => {
+			const startBtn = document.getElementById('game-start-btn');
+			if (startBtn && startBtn.style.display !== 'none') {
+				startBtn.style.display = 'none';
+			} else {
+				this.returnToMapSelection(trainSystem);
+			}
+		});
+		this.container.appendChild(btn);
+	}
+
+	private returnToMapSelection(trainSystem: TrainSystem): void {
+		trainSystem.stopGame();
+
+		const camSystem = this.systemManager.getSystem(GameCameraSystem);
+		if (camSystem) {
+			camSystem.deactivate();
+		}
+
+		if (this.speedEl) this.speedEl.style.display = 'none';
+		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'none';
+		if (this.lineListEl) this.lineListEl.style.display = 'none';
+		this.hideStationPanel();
+
+		const startBtn = document.getElementById('game-start-btn');
+		if (startBtn) {
+			startBtn.style.display = '';
+		}
+	}
+
 	private createDebugOverlay(): void {
 		this.debugEl = document.createElement('div');
 		this.debugEl.style.cssText = `
@@ -816,6 +882,7 @@ export default class GameUISystem extends System {
 	private showGameUI(): void {
 		if (this.speedEl) this.speedEl.style.display = 'block';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'block';
+		if (this.lineListEl) this.lineListEl.style.display = 'flex';
 	}
 
 	private debugFrameCounter: number = 0;
