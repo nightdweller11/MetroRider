@@ -12,6 +12,7 @@ export interface SoundConfig {
 
 export interface AssetConfig {
 	trainModel: string;
+	locomotiveModel: string;
 	trackModel: string;
 	stationModel: string;
 	carCount: number;
@@ -49,6 +50,7 @@ type ConfigChangeListener = (config: AssetConfig) => void;
 const LOCAL_STORAGE_KEY = 'metrorider-user-config';
 const DEFAULT_CONFIG: AssetConfig = {
 	trainModel: 'procedural-default',
+	locomotiveModel: 'procedural-default',
 	trackModel: 'procedural-default',
 	stationModel: 'station-platform-basic',
 	carCount: 3,
@@ -180,6 +182,7 @@ export default class AssetConfigSystem extends System {
 	private rebuildMergedConfig(): void {
 		this.mergedConfig = {
 			trainModel: (this.userOverrides as any).trainModel || this.serverConfig.trainModel,
+			locomotiveModel: (this.userOverrides as any).locomotiveModel || this.serverConfig.locomotiveModel || 'procedural-default',
 			trackModel: (this.userOverrides as any).trackModel || this.serverConfig.trackModel,
 			stationModel: (this.userOverrides as any).stationModel || this.serverConfig.stationModel,
 			carCount: (this.userOverrides as any).carCount ?? this.serverConfig.carCount ?? 3,
@@ -204,6 +207,9 @@ export default class AssetConfigSystem extends System {
 	public setUserConfig(partial: Partial<AssetConfig>): void {
 		if (partial.trainModel !== undefined) {
 			(this.userOverrides as any).trainModel = partial.trainModel;
+		}
+		if (partial.locomotiveModel !== undefined) {
+			(this.userOverrides as any).locomotiveModel = partial.locomotiveModel;
 		}
 		if (partial.trackModel !== undefined) {
 			(this.userOverrides as any).trackModel = partial.trackModel;
@@ -339,6 +345,7 @@ export default class AssetConfigSystem extends System {
 					const parsed = JSON.parse(raw);
 					const changed =
 						(parsed.trainModel && parsed.trainModel !== (this.userOverrides as any).trainModel) ||
+						(parsed.locomotiveModel && parsed.locomotiveModel !== (this.userOverrides as any).locomotiveModel) ||
 						(parsed.trackModel && parsed.trackModel !== (this.userOverrides as any).trackModel) ||
 						(parsed.stationModel && parsed.stationModel !== (this.userOverrides as any).stationModel);
 

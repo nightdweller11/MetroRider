@@ -15,6 +15,9 @@ const STATION_PLATFORM_OFFSET = 7;
 const TARGET_CAR_WIDTH = 3.0;
 const DEFAULT_CAR_COUNT = 3;
 const CAR_GAP = 0.5;
+const TARGET_STATION_LENGTH = 40;
+const MAX_STATION_SCALE = 100;
+const MIN_STATION_SCALE = 0.01;
 
 export default class TrainRenderingSystem extends System {
 	public trainMesh: TrainMeshObject | null = null;
@@ -26,6 +29,7 @@ export default class TrainRenderingSystem extends System {
 	private lastTerrainSample: number = 0;
 	private terrainSettled: boolean = false;
 	private lastTrainModelId: string = '';
+	private lastLocoModelId: string = '';
 	private lastStationModelId: string = '';
 	private glbCache: Map<string, GeometryBuffers> = new Map();
 	private catalogReady: boolean = false;
@@ -50,8 +54,9 @@ export default class TrainRenderingSystem extends System {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 		const ls = trainSystem?.getCurrentLine();
 
-		if (config.trainModel !== this.lastTrainModelId) {
-			debugLog(`[TrainRenderingSystem] Config changed: train model ${this.lastTrainModelId} -> ${config.trainModel}`);
+		const locoId = config.locomotiveModel || 'procedural-default';
+		if (config.trainModel !== this.lastTrainModelId || locoId !== this.lastLocoModelId) {
+			debugLog(`[TrainRenderingSystem] Config changed: train=${this.lastTrainModelId}->${config.trainModel}, loco=${this.lastLocoModelId}->${locoId}`);
 			if (ls) {
 				this.rebuildTrainMesh(ls.parsed.color);
 			}
@@ -86,43 +91,118 @@ export default class TrainRenderingSystem extends System {
 
 	private rebuildTrainMesh(color: string): void {
 		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
-		const config = assetConfig?.getConfig();
-		const catalog = assetConfig?.getCatalog();
-		const modelId = config?.trainModel || 'procedural-default';
-		const carCount = (config as any)?.carCount ?? DEFAULT_CAR_COUNT;
+		if (!assetConfig) {
+			this.applyTrainBuffers(buildTrainCarGeometry(color));
+			return;
+		}
+		const config = assetConfig.getConfig();
+		const catalog = assetConfig.getCatalog();
+		const carModelId = config.trainModel || 'procedural-default';
+		const locoModelId = config.locomotiveModel || 'procedural-default';
+		const carCount = config.carCount ?? DEFAULT_CAR_COUNT;
 
-		this.lastTrainModelId = modelId;
+		this.lastTrainModelId = carModelId;
+		this.lastLocoModelId = locoModelId;
 
-		if (modelId !== 'procedural-default') {
+		const hasDistinctLoco = locoModelId !== 'procedural-default' && locoModelId !== carModelId;
+
+		if (carModelId !== 'procedural-default' || hasDistinctLoco) {
 			if (!catalog) {
-				debugLog(`[TrainRenderingSystem] Catalog not loaded yet, will retry for model: ${modelId}`);
+				debugLog(`[TrainRenderingSystem] Catalog not loaded yet, will retry`);
 				this.pendingModelRebuild = true;
 				this.applyTrainBuffers(buildTrainCarGeometry(color));
 				return;
 			}
 
-			const entry = catalog.models.trains.find(e => e.id === modelId);
-			if (entry?.path) {
-				if (this.glbCache.has(modelId)) {
-					const cached = this.glbCache.get(modelId);
-					if (cached) {
-						const assembled = this.assembleMultiCar(cached, carCount);
-						this.applyTrainBuffers(assembled);
-						debugLog(`[TrainRenderingSystem] Applied cached model: ${modelId} (${carCount} cars)`);
-						return;
+			if (hasDistinctLoco) {
+				this.loadLocoAndCars(catalog, assetConfig, locoModelId, carModelId, carCount, color);
+			} else if (carModelId !== 'procedural-default') {
+				const entry = catalog.models.trains.find(e => e.id === carModelId);
+				if (entry?.path) {
+					if (this.glbCache.has(carModelId)) {
+						const cached = this.glbCache.get(carModelId);
+						if (cached) {
+							const assembled = this.assembleMultiCar(cached, carCount);
+							this.applyTrainBuffers(assembled);
+							debugLog(`[TrainRenderingSystem] Applied cached car model: ${carModelId} (${carCount} cars)`);
+							return;
+						}
 					}
+					const url = assetConfig.getAssetUrl(entry.path);
+					debugLog(`[TrainRenderingSystem] Loading GLB model: ${carModelId} from ${url}`);
+					this.loadGLBModel(url, carModelId, color, carCount);
+					return;
+				} else {
+					console.warn(`[TrainRenderingSystem] No path for car model: ${carModelId}`);
 				}
-
-				const url = assetConfig ? assetConfig.getAssetUrl(entry.path) : `/data/assets/${entry.path}`;
-				debugLog(`[TrainRenderingSystem] Loading GLB model: ${modelId} from ${url}`);
-				this.loadGLBModel(url, modelId, color, carCount);
-				return;
-			} else {
-				console.warn(`[TrainRenderingSystem] No path for model: ${modelId}`);
 			}
+
+			if (hasDistinctLoco) return;
 		}
 
 		this.applyTrainBuffers(buildTrainCarGeometry(color));
+	}
+
+	private async loadLocoAndCars(
+		catalog: any,
+		assetConfig: AssetConfigSystem,
+		locoModelId: string,
+		carModelId: string,
+		carCount: number,
+		fallbackColor: string,
+	): Promise<void> {
+		try {
+			const locoEntry = catalog.models.trains.find((e: any) => e.id === locoModelId);
+			const carEntry = carModelId !== 'procedural-default'
+				? catalog.models.trains.find((e: any) => e.id === carModelId)
+				: null;
+
+			if (!locoEntry?.path) {
+				console.warn(`[TrainRenderingSystem] No path for locomotive model: ${locoModelId}`);
+				this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
+				return;
+			}
+
+			let locoBuffers: GeometryBuffers | null = this.glbCache.get(locoModelId) || null;
+			if (!locoBuffers) {
+				const url = assetConfig.getAssetUrl(locoEntry.path);
+				debugLog(`[TrainRenderingSystem] Loading locomotive GLB: ${locoModelId}`);
+				const resp = await fetch(url);
+				if (!resp.ok) throw new Error(`HTTP ${resp.status} loading loco ${url}`);
+				const ab = await resp.arrayBuffer();
+				const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+				locoBuffers = await this.parseGLBWithTextures(ab, baseUrl);
+				if (locoBuffers) this.glbCache.set(locoModelId, locoBuffers);
+			}
+
+			if (!locoBuffers) {
+				console.error(`[TrainRenderingSystem] Failed to parse loco GLB: ${locoModelId}`);
+				this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
+				return;
+			}
+
+			let carBuffers: GeometryBuffers | null = null;
+			if (carEntry?.path && carCount > 0) {
+				carBuffers = this.glbCache.get(carModelId) || null;
+				if (!carBuffers) {
+					const url = assetConfig.getAssetUrl(carEntry.path);
+					debugLog(`[TrainRenderingSystem] Loading car GLB: ${carModelId}`);
+					const resp = await fetch(url);
+					if (!resp.ok) throw new Error(`HTTP ${resp.status} loading car ${url}`);
+					const ab = await resp.arrayBuffer();
+					const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+					carBuffers = await this.parseGLBWithTextures(ab, baseUrl);
+					if (carBuffers) this.glbCache.set(carModelId, carBuffers);
+				}
+			}
+
+			const assembled = this.assembleLocoAndCars(locoBuffers, carBuffers, carCount);
+			this.applyTrainBuffers(assembled);
+			debugLog(`[TrainRenderingSystem] Assembled loco + ${carCount} cars (loco=${locoModelId}, car=${carModelId})`);
+		} catch (err) {
+			console.error(`[TrainRenderingSystem] Failed to load loco+car models:`, err);
+			this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
+		}
 	}
 
 	private applyTrainBuffers(buffers: GeometryBuffers): void {
@@ -209,7 +289,100 @@ export default class TrainRenderingSystem extends System {
 		return {position: positions, normal: normals, color: colors, indices};
 	}
 
-	private async parseGLBWithTextures(buffer: ArrayBuffer, baseUrl: string): Promise<GeometryBuffers | null> {
+	private assembleLocoAndCars(
+		loco: GeometryBuffers,
+		car: GeometryBuffers | null,
+		carCount: number,
+	): GeometryBuffers {
+		const getZExtent = (buf: GeometryBuffers): {minZ: number; maxZ: number; length: number} => {
+			let mn = Infinity, mx = -Infinity;
+			const vc = buf.position.length / 3;
+			for (let i = 0; i < vc; i++) {
+				const z = buf.position[i * 3 + 2];
+				if (z < mn) mn = z;
+				if (z > mx) mx = z;
+			}
+			return {minZ: mn, maxZ: mx, length: mx - mn};
+		};
+
+		const locoZ = getZExtent(loco);
+		const effectiveCarCount = car ? carCount : 0;
+		const totalPieces = 1 + effectiveCarCount;
+
+		let carZ = {minZ: 0, maxZ: 0, length: 0};
+		if (car) {
+			carZ = getZExtent(car);
+		}
+
+		const locoVerts = loco.position.length / 3;
+		const locoIdxCount = loco.indices.length;
+		const carVerts = car ? car.position.length / 3 : 0;
+		const carIdxCount = car ? car.indices.length : 0;
+
+		const totalVerts = locoVerts + carVerts * effectiveCarCount;
+		const totalIdx = locoIdxCount + carIdxCount * effectiveCarCount;
+
+		const positions = new Float32Array(totalVerts * 3);
+		const normals = new Float32Array(totalVerts * 3);
+		const colors = new Float32Array(totalVerts * 3);
+		const indices = new Uint32Array(totalIdx);
+
+		const totalTrainLength = locoZ.length + effectiveCarCount * (carZ.length + CAR_GAP) + (effectiveCarCount > 0 ? CAR_GAP : 0);
+		const frontOffset = totalTrainLength / 2;
+		const locoOffset = frontOffset - locoZ.length / 2;
+
+		for (let v = 0; v < locoVerts; v++) {
+			positions[v * 3] = loco.position[v * 3];
+			positions[v * 3 + 1] = loco.position[v * 3 + 1];
+			positions[v * 3 + 2] = loco.position[v * 3 + 2] + locoOffset;
+			normals[v * 3] = loco.normal[v * 3];
+			normals[v * 3 + 1] = loco.normal[v * 3 + 1];
+			normals[v * 3 + 2] = loco.normal[v * 3 + 2];
+			colors[v * 3] = loco.color[v * 3];
+			colors[v * 3 + 1] = loco.color[v * 3 + 1];
+			colors[v * 3 + 2] = loco.color[v * 3 + 2];
+		}
+		for (let i = 0; i < locoIdxCount; i++) {
+			indices[i] = loco.indices[i];
+		}
+
+		if (car) {
+			const carSpacing = carZ.length + CAR_GAP;
+			let carStartZ = locoOffset - locoZ.length / 2 - CAR_GAP - carZ.length / 2;
+
+			for (let c = 0; c < effectiveCarCount; c++) {
+				const zOff = carStartZ - c * carSpacing;
+				const vBase = locoVerts + c * carVerts;
+
+				for (let v = 0; v < carVerts; v++) {
+					positions[(vBase + v) * 3] = car.position[v * 3];
+					positions[(vBase + v) * 3 + 1] = car.position[v * 3 + 1];
+					positions[(vBase + v) * 3 + 2] = car.position[v * 3 + 2] + zOff;
+					normals[(vBase + v) * 3] = car.normal[v * 3];
+					normals[(vBase + v) * 3 + 1] = car.normal[v * 3 + 1];
+					normals[(vBase + v) * 3 + 2] = car.normal[v * 3 + 2];
+					colors[(vBase + v) * 3] = car.color[v * 3];
+					colors[(vBase + v) * 3 + 1] = car.color[v * 3 + 1];
+					colors[(vBase + v) * 3 + 2] = car.color[v * 3 + 2];
+				}
+
+				const iBase = locoIdxCount + c * carIdxCount;
+				for (let i = 0; i < carIdxCount; i++) {
+					indices[iBase + i] = car.indices[i] + vBase;
+				}
+			}
+		}
+
+		debugLog(
+			`[TrainRenderingSystem] AssembleLocoAndCars: loco=${locoVerts} verts, ` +
+			`car=${carVerts} verts x ${effectiveCarCount}, total=${totalVerts} verts, ` +
+			`total length=${totalTrainLength.toFixed(1)}m`
+		);
+
+		return {position: positions, normal: normals, color: colors, indices};
+	}
+
+	private async parseGLBWithTextures(buffer: ArrayBuffer, baseUrl: string, skipScaling = false): Promise<GeometryBuffers | null> {
 		const view = new DataView(buffer);
 		if (view.getUint32(0, true) !== 0x46546C67) {
 			console.error('[TrainRenderingSystem] Not a valid GLB file');
@@ -373,7 +546,9 @@ export default class TrainRenderingSystem extends System {
 			return null;
 		}
 
-		this.scaleAndCenterModel(allPositions);
+		if (!skipScaling) {
+			this.scaleAndCenterModel(allPositions, allNormals);
+		}
 
 		return {
 			position: new Float32Array(allPositions),
@@ -383,7 +558,7 @@ export default class TrainRenderingSystem extends System {
 		};
 	}
 
-	private scaleAndCenterModel(positions: number[]): void {
+	private scaleAndCenterModel(positions: number[], normals?: number[]): void {
 		let minX = Infinity, maxX = -Infinity;
 		let minY = Infinity, maxY = -Infinity;
 		let minZ = Infinity, maxZ = -Infinity;
@@ -396,21 +571,50 @@ export default class TrainRenderingSystem extends System {
 			if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
 		}
 
-		const modelWidth = maxX - minX;
-		const scale = modelWidth > 0.01 ? TARGET_CAR_WIDTH / modelWidth : 1;
+		const extentX = maxX - minX;
+		const extentY = maxY - minY;
+		const extentZ = maxZ - minZ;
+
+		const ratio = Math.max(extentX, extentZ) > 0.001
+			? Math.min(extentX, extentZ) / Math.max(extentX, extentZ) : 1;
+		const needsRotation = extentX > extentZ && ratio < 0.9;
+
+		const widthExtent = needsRotation ? extentZ : extentX;
+		const scale = widthExtent > 0.01 ? TARGET_CAR_WIDTH / widthExtent : 1;
 
 		const centerX = (minX + maxX) / 2;
 		const centerZ = (minZ + maxZ) / 2;
 
-		const scaledW = modelWidth * scale;
-		const scaledH = (maxY - minY) * scale;
-		const scaledL = (maxZ - minZ) * scale;
-		debugLog(`[TrainRenderingSystem] Model: raw ${modelWidth.toFixed(2)}x${(maxY-minY).toFixed(2)}x${(maxZ-minZ).toFixed(2)}, scaled ${scaledW.toFixed(1)}x${scaledH.toFixed(1)}x${scaledL.toFixed(1)} (scale=${scale.toFixed(2)})`);
+		const finalW = (needsRotation ? extentZ : extentX) * scale;
+		const finalH = extentY * scale;
+		const finalL = (needsRotation ? extentX : extentZ) * scale;
+		debugLog(
+			`[TrainRenderingSystem] Model: raw ${extentX.toFixed(2)}x${extentY.toFixed(2)}x${extentZ.toFixed(2)}, ` +
+			`scaled ${finalW.toFixed(1)}x${finalH.toFixed(1)}x${finalL.toFixed(1)} ` +
+			`(scale=${scale.toFixed(3)}, rotated=${needsRotation})`
+		);
 
 		for (let i = 0; i < vertCount; i++) {
-			positions[i * 3] = (positions[i * 3] - centerX) * scale;
-			positions[i * 3 + 1] = (positions[i * 3 + 1] - minY) * scale;
-			positions[i * 3 + 2] = (positions[i * 3 + 2] - centerZ) * scale;
+			let lx = (positions[i * 3] - centerX) * scale;
+			const ly = (positions[i * 3 + 1] - minY) * scale;
+			let lz = (positions[i * 3 + 2] - centerZ) * scale;
+
+			if (needsRotation) {
+				const tmp = lx;
+				lx = -lz;
+				lz = tmp;
+			}
+
+			positions[i * 3] = lx;
+			positions[i * 3 + 1] = ly;
+			positions[i * 3 + 2] = lz;
+
+			if (needsRotation && normals) {
+				const nx = normals[i * 3];
+				const nz = normals[i * 3 + 2];
+				normals[i * 3] = -nz;
+				normals[i * 3 + 2] = nx;
+			}
 		}
 	}
 
@@ -831,7 +1035,7 @@ export default class TrainRenderingSystem extends System {
 			}
 			const arrayBuffer = await response.arrayBuffer();
 			const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-			const parsed = await this.parseGLBWithTextures(arrayBuffer, baseUrl);
+			const parsed = await this.parseGLBWithTextures(arrayBuffer, baseUrl, true);
 
 			if (parsed) {
 				const cacheKey = `station:${modelId}`;
@@ -873,10 +1077,26 @@ export default class TrainRenderingSystem extends System {
 			if (vz < minZ) minZ = vz; if (vz > maxZ) maxZ = vz;
 		}
 
-		const modelWidth = maxX - minX;
-		const modelLength = maxZ - minZ;
-		const targetLength = 40;
-		const scaleFactor = modelLength > 0.01 ? targetLength / modelLength : 1;
+		const extentX = maxX - minX;
+		const extentY = maxY - minY;
+		const extentZ = maxZ - minZ;
+		const needsRotation = extentX > extentZ;
+		const longestHorizontal = Math.max(extentX, extentZ);
+
+		let scaleFactor = longestHorizontal > 0.001 ? TARGET_STATION_LENGTH / longestHorizontal : 1;
+		scaleFactor = Math.max(MIN_STATION_SCALE, Math.min(MAX_STATION_SCALE, scaleFactor));
+
+		const cx = (minX + maxX) / 2;
+		const cz = (minZ + maxZ) / 2;
+
+		const scaledW = (needsRotation ? extentZ : extentX) * scaleFactor;
+		const scaledH = extentY * scaleFactor;
+		const scaledL = (needsRotation ? extentX : extentZ) * scaleFactor;
+		debugLog(
+			`[TrainRenderingSystem] Station model: raw ${extentX.toFixed(2)}x${extentY.toFixed(2)}x${extentZ.toFixed(2)}, ` +
+			`scaled ${scaledW.toFixed(1)}x${scaledH.toFixed(1)}x${scaledL.toFixed(1)} ` +
+			`(scale=${scaleFactor.toFixed(4)}, rotated=${needsRotation})`
+		);
 
 		for (let si = 0; si < stations.length; si++) {
 			const dist = realDists[si] ?? 0;
@@ -901,22 +1121,32 @@ export default class TrainRenderingSystem extends System {
 			const colors: number[] = [];
 			const indices: number[] = [];
 
-			const cx = (minX + maxX) / 2;
-			const cz = (minZ + maxZ) / 2;
-
 			for (let i = 0; i < vertCount; i++) {
-				const lx = (glbBuffers.position[i * 3] - cx) * scaleFactor;
-				const ly = glbBuffers.position[i * 3 + 1] * scaleFactor;
-				const lz = (glbBuffers.position[i * 3 + 2] - cz) * scaleFactor;
+				let lx = (glbBuffers.position[i * 3] - cx) * scaleFactor;
+				const ly = (glbBuffers.position[i * 3 + 1] - minY) * scaleFactor;
+				let lz = (glbBuffers.position[i * 3 + 2] - cz) * scaleFactor;
+
+				if (needsRotation) {
+					const tmp = lx;
+					lx = -lz;
+					lz = tmp;
+				}
 
 				const rx = lx * cosH + lz * sinH;
 				const rz = -lx * sinH + lz * cosH;
 
 				positions.push(worldX + rx, h + ly, worldZ + rz);
 
-				const nx = glbBuffers.normal[i * 3];
+				let nx = glbBuffers.normal[i * 3];
 				const ny = glbBuffers.normal[i * 3 + 1];
-				const nz = glbBuffers.normal[i * 3 + 2];
+				let nz = glbBuffers.normal[i * 3 + 2];
+
+				if (needsRotation) {
+					const tmpN = nx;
+					nx = -nz;
+					nz = tmpN;
+				}
+
 				normals.push(nx * cosH + nz * sinH, ny, -nx * sinH + nz * cosH);
 
 				colors.push(
@@ -993,8 +1223,9 @@ export default class TrainRenderingSystem extends System {
 
 		const config = assetConfig.getConfig();
 		const currentTrainModelId = config.trainModel || 'procedural-default';
-		if (currentTrainModelId !== this.lastTrainModelId) {
-			debugLog(`[TrainRenderingSystem] Poll detected train model change: ${this.lastTrainModelId} -> ${currentTrainModelId}`);
+		const currentLocoModelId = config.locomotiveModel || 'procedural-default';
+		if (currentTrainModelId !== this.lastTrainModelId || currentLocoModelId !== this.lastLocoModelId) {
+			debugLog(`[TrainRenderingSystem] Poll detected model change: train=${this.lastTrainModelId}->${currentTrainModelId}, loco=${this.lastLocoModelId}->${currentLocoModelId}`);
 			const ls = trainSystem.getCurrentLine();
 			if (ls) {
 				this.rebuildTrainMesh(ls.parsed.color);

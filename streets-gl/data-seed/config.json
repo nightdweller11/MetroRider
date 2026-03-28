@@ -1,7 +1,7 @@
 {
-  "trainModel": "651c32eb-717c-44f6-99be-878908b404d7",
+  "trainModel": "locomotive-classic",
   "trackModel": "procedural-default",
-  "stationModel": "procedural-default",
+  "stationModel": "station-platform-basic",
   "carCount": 3,
   "sounds": {
     "horn": "metro-horn",

@@ -1,6 +1,7 @@
 import React, {useEffect, useState, useCallback, useRef} from 'react';
 import './settings.css';
 import ModelPreview from './ModelPreview';
+import SketchfabPanel from './SketchfabPanel';
 
 interface AssetEntry {
 	id: string;
@@ -17,13 +18,14 @@ interface AssetCatalog {
 
 interface AssetConfig {
 	trainModel: string;
+	locomotiveModel: string;
 	trackModel: string;
 	stationModel: string;
 	carCount: number;
 	sounds: Record<string, string>;
 }
 
-type CategoryId = 'trains' | 'tracks' | 'stations' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime';
+type CategoryId = 'trains' | 'tracks' | 'stations' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime' | 'sketchfab';
 
 const CATEGORIES: {id: CategoryId; label: string; group: 'models' | 'sounds'; description: string}[] = [
 	{id: 'trains', label: 'Train Models', group: 'models', description: 'Choose the 3D model for your train. Procedural models are generated in real-time.'},
@@ -88,6 +90,10 @@ function setSelectedId(config: AssetConfig, category: CategoryId, id: string): A
 	return next;
 }
 
+function setLocomotiveId(config: AssetConfig, id: string): AssetConfig {
+	return {...config, sounds: {...config.sounds}, locomotiveModel: id};
+}
+
 function getItems(catalog: AssetCatalog, category: CategoryId): AssetEntry[] {
 	const cat = CATEGORIES.find(c => c.id === category);
 	if (!cat) return [];
@@ -133,6 +139,7 @@ export default function SettingsPage(): React.ReactElement {
 	const [adminToken, setAdminToken] = useState<string | null>(getAdminToken);
 	const [tokenVerified, setTokenVerified] = useState<boolean>(false);
 	const uploadRef = useRef<HTMLInputElement>(null);
+	const [assetFilter, setAssetFilter] = useState<string>('');
 
 	useEffect((): void => {
 		const initialToken = getAdminToken();
@@ -161,6 +168,7 @@ export default function SettingsPage(): React.ReactElement {
 			const userOverrides = loadUserConfig();
 			const merged: AssetConfig = {
 				trainModel: userOverrides.trainModel ?? serverCfg.trainModel ?? 'procedural-default',
+				locomotiveModel: (userOverrides as any).locomotiveModel ?? (serverCfg as any).locomotiveModel ?? 'procedural-default',
 				trackModel: userOverrides.trackModel ?? serverCfg.trackModel ?? 'procedural-default',
 				stationModel: userOverrides.stationModel ?? serverCfg.stationModel ?? 'procedural-default',
 				carCount: (userOverrides as any).carCount ?? (serverCfg as any).carCount ?? 3,
@@ -178,6 +186,41 @@ export default function SettingsPage(): React.ReactElement {
 		setTimeout((): void => setStatusMsg(null), 2500);
 	}, []);
 
+	const refreshCatalog = useCallback((): void => {
+		fetch('/api/assets/list')
+			.then(r => r.json())
+			.then((catalogData: AssetCatalog) => {
+				setCatalog(catalogData);
+				console.log('[Settings] Catalog refreshed after import');
+			})
+			.catch((e: Error) => {
+				console.error('[Settings] Failed to refresh catalog:', e);
+			});
+	}, []);
+
+	const handleSketchfabImport = useCallback((category: 'stations' | 'trains' | 'tracks', modelId: string): void => {
+		refreshCatalog();
+		const categoryMap: Record<string, CategoryId> = {stations: 'stations', trains: 'trains', tracks: 'tracks'};
+		const targetCategory = categoryMap[category];
+		if (targetCategory && config) {
+			const next = setSelectedId(config, targetCategory, modelId);
+			setConfig(next);
+			saveUserConfig(next);
+
+			if (adminMode && adminToken && tokenVerified) {
+				pushConfigToServer(next, adminToken).then(ok => {
+					flash(ok
+						? `Imported and set as default ${category.slice(0, -1)} model for all users`
+						: `Imported and saved locally, but server update failed`
+					);
+				});
+			} else {
+				flash(`Imported and selected as active ${category.slice(0, -1)} model`);
+			}
+			setActiveCategory(targetCategory);
+		}
+	}, [config, adminMode, adminToken, tokenVerified, flash, refreshCatalog]);
+
 	const handleSelect = useCallback((category: CategoryId, id: string): void => {
 		if (!config) return;
 		const next = setSelectedId(config, category, id);
@@ -190,6 +233,21 @@ export default function SettingsPage(): React.ReactElement {
 			});
 		} else {
 			flash('Selection saved');
+		}
+	}, [config, adminMode, adminToken, tokenVerified, flash]);
+
+	const handleLocoSelect = useCallback((id: string): void => {
+		if (!config) return;
+		const next = setLocomotiveId(config, id);
+		setConfig(next);
+		saveUserConfig(next);
+
+		if (adminMode && adminToken && tokenVerified) {
+			pushConfigToServer(next, adminToken).then(ok => {
+				flash(ok ? 'Locomotive set as default for all users' : 'Saved locally, but server update failed');
+			});
+		} else {
+			flash('Locomotive selection saved');
 		}
 	}, [config, adminMode, adminToken, tokenVerified, flash]);
 
@@ -384,7 +442,11 @@ export default function SettingsPage(): React.ReactElement {
 	}
 
 	const activeCat = CATEGORIES.find(c => c.id === activeCategory);
-	const items = getItems(catalog, activeCategory);
+	const allItems = getItems(catalog, activeCategory);
+	const filterLower = assetFilter.toLowerCase().trim();
+	const items = filterLower
+		? allItems.filter(e => e.name.toLowerCase().includes(filterLower) || e.source.toLowerCase().includes(filterLower))
+		: allItems;
 	const selectedId = getSelectedId(config, activeCategory);
 	const isModelCategory = activeCat?.group === 'models';
 
@@ -419,7 +481,7 @@ export default function SettingsPage(): React.ReactElement {
 						<button
 							key={cat.id}
 							className={`sidebar-item ${cat.id === activeCategory ? 'active' : ''}`}
-							onClick={(): void => setActiveCategory(cat.id)}
+							onClick={(): void => { setActiveCategory(cat.id); setAssetFilter(''); }}
 						>
 							{cat.label}
 						</button>
@@ -429,101 +491,223 @@ export default function SettingsPage(): React.ReactElement {
 						<button
 							key={cat.id}
 							className={`sidebar-item ${cat.id === activeCategory ? 'active' : ''}`}
-							onClick={(): void => setActiveCategory(cat.id)}
+							onClick={(): void => { setActiveCategory(cat.id); setAssetFilter(''); }}
 						>
 							{cat.label}
 						</button>
 					))}
+					{adminMode && (
+						<>
+							<h3>Admin</h3>
+							<button
+								className={`sidebar-item ${activeCategory === 'sketchfab' ? 'active' : ''}`}
+								onClick={(): void => { setActiveCategory('sketchfab'); setAssetFilter(''); }}
+							>
+								Sketchfab Browser
+							</button>
+						</>
+					)}
 				</nav>
 
 				<main className="settings-content">
-					<h2>{activeCat?.label ?? ''}</h2>
-					<p className="category-description">{activeCat?.description ?? ''}</p>
-
-					<div className="upload-bar">
-						<button className="btn btn-secondary" onClick={handleUploadClick}>
-							Upload {isModelCategory ? 'Model' : 'Sound'}
-						</button>
-						<input
-							ref={uploadRef}
-							type="file"
-							accept={isModelCategory ? '.glb,.gltf' : '.mp3,.wav,.ogg'}
-							onChange={handleUpload}
-							style={{display: 'none'}}
+					{activeCategory === 'sketchfab' && adminMode && adminToken ? (
+						<SketchfabPanel
+							adminToken={adminToken}
+							onModelImported={handleSketchfabImport}
 						/>
-					</div>
+					) : (
+						<>
+							<h2>{activeCat?.label ?? ''}</h2>
+							<p className="category-description">{activeCat?.description ?? ''}</p>
 
-					{activeCategory === 'trains' && config && (
-						<div className="car-count-control">
-							<label>Number of Cars: </label>
-							<select
-								value={config.carCount}
-								onChange={(e: React.ChangeEvent<HTMLSelectElement>): void => {
-									handleCarCountChange(parseInt(e.target.value, 10));
-								}}
-							>
-								{[1, 2, 3, 4, 5, 6, 8].map(n => (
-									<option key={n} value={n}>{n} {n === 1 ? 'car' : 'cars'}</option>
-								))}
-							</select>
-						</div>
-					)}
+							<div className="upload-bar">
+								<button className="btn btn-secondary" onClick={handleUploadClick}>
+									Upload {isModelCategory ? 'Model' : 'Sound'}
+								</button>
+								<input
+									ref={uploadRef}
+									type="file"
+									accept={isModelCategory ? '.glb,.gltf' : '.mp3,.wav,.ogg'}
+									onChange={handleUpload}
+									style={{display: 'none'}}
+								/>
+							</div>
 
-					<div className="asset-grid">
-						{items.map(entry => {
-							const isSelected = entry.id === selectedId;
-							const isServerDefault = serverConfig && getSelectedId(serverConfig, activeCategory) === entry.id;
-							return (
-								<div
-									key={entry.id}
-									className={`asset-card ${isSelected ? 'selected' : ''}`}
-									onClick={(): void => handleSelect(activeCategory, entry.id)}
-								>
-									{isModelCategory && entry.path ? (
-										<div className="asset-preview">
-											<ModelPreview modelPath={`/data/assets/${entry.path}`} />
-										</div>
-									) : isModelCategory ? (
-										<div className="asset-preview procedural-preview">
-											<span>Procedural</span>
-										</div>
-									) : (
-										<div className="asset-preview sound-preview">
-											<button
-												className={`play-btn ${playingId === entry.id ? 'playing' : ''}`}
-												onClick={(ev: React.MouseEvent): void => {
-													ev.stopPropagation();
-													handlePlaySound(entry);
-												}}
-											>
-												{playingId === entry.id ? '\u25A0' : '\u25B6'}
-											</button>
-										</div>
-									)}
-
-									<div className="asset-info">
-										<div className="asset-name">{entry.name}</div>
-										<div className="asset-source">{entry.source}</div>
-										{isSelected && <div className="asset-selected-badge">Selected</div>}
-										{isServerDefault && !isSelected && <div className="asset-default-badge">Server Default</div>}
-									</div>
-
-									{entry.type !== 'procedural' && (
-										<button
-											className="delete-btn"
-											onClick={(ev: React.MouseEvent): void => {
-												ev.stopPropagation();
-												handleDelete(entry);
-											}}
-											title="Delete (requires admin token)"
-										>
-											&#x2715;
+							{allItems.length > 4 && (
+								<div className="asset-filter-bar">
+									<input
+										type="text"
+										value={assetFilter}
+										onChange={e => setAssetFilter(e.target.value)}
+										placeholder={`Filter ${activeCat?.label ?? 'assets'} by name...`}
+										className="asset-filter-input"
+									/>
+									{assetFilter && (
+										<button className="asset-filter-clear" onClick={() => setAssetFilter('')}>
+											&times;
 										</button>
 									)}
+									{filterLower && (
+										<span className="asset-filter-count">
+											{items.length} of {allItems.length}
+										</span>
+									)}
 								</div>
-							);
-						})}
-					</div>
+							)}
+
+							{activeCategory === 'trains' && config ? (
+								<>
+									<div className="car-count-control">
+										<label>Number of Passenger Cars: </label>
+										<select
+											value={config.carCount}
+											onChange={(e: React.ChangeEvent<HTMLSelectElement>): void => {
+												handleCarCountChange(parseInt(e.target.value, 10));
+											}}
+										>
+											{[1, 2, 3, 4, 5, 6, 8].map(n => (
+												<option key={n} value={n}>{n} {n === 1 ? 'car' : 'cars'}</option>
+											))}
+										</select>
+									</div>
+
+									<h3 className="train-section-heading">Locomotive</h3>
+									<p className="train-section-desc">The engine at the front of the train. Selecting "Procedural" uses the same model as the passenger cars.</p>
+									<div className="asset-grid">
+										{items.map(entry => {
+											const isLocoSelected = entry.id === config.locomotiveModel;
+											const isLocoServerDefault = serverConfig && (serverConfig as any).locomotiveModel === entry.id;
+											return (
+												<div
+													key={`loco-${entry.id}`}
+													className={`asset-card ${isLocoSelected ? 'selected' : ''}`}
+													onClick={(): void => handleLocoSelect(entry.id)}
+												>
+													{entry.path ? (
+														<div className="asset-preview">
+															<ModelPreview modelPath={`/data/assets/${entry.path}`} />
+														</div>
+													) : (
+														<div className="asset-preview procedural-preview">
+															<span>Procedural</span>
+														</div>
+													)}
+													<div className="asset-info">
+														<div className="asset-name">{entry.name}</div>
+														<div className="asset-source">{entry.source}</div>
+														{isLocoSelected && <div className="asset-selected-badge">Locomotive</div>}
+														{isLocoServerDefault && !isLocoSelected && <div className="asset-default-badge">Server Default</div>}
+													</div>
+													{entry.type !== 'procedural' && (
+														<button
+															className="delete-btn"
+															onClick={(ev: React.MouseEvent): void => { ev.stopPropagation(); handleDelete(entry); }}
+															title="Delete (requires admin token)"
+														>&#x2715;</button>
+													)}
+												</div>
+											);
+										})}
+									</div>
+
+									<h3 className="train-section-heading">Passenger Cars</h3>
+									<p className="train-section-desc">The repeating cars behind the locomotive ({config.carCount} car{config.carCount !== 1 ? 's' : ''}).</p>
+									<div className="asset-grid">
+										{items.map(entry => {
+											const isCarSelected = entry.id === selectedId;
+											const isCarServerDefault = serverConfig && getSelectedId(serverConfig, activeCategory) === entry.id;
+											return (
+												<div
+													key={`car-${entry.id}`}
+													className={`asset-card ${isCarSelected ? 'selected' : ''}`}
+													onClick={(): void => handleSelect(activeCategory, entry.id)}
+												>
+													{entry.path ? (
+														<div className="asset-preview">
+															<ModelPreview modelPath={`/data/assets/${entry.path}`} />
+														</div>
+													) : (
+														<div className="asset-preview procedural-preview">
+															<span>Procedural</span>
+														</div>
+													)}
+													<div className="asset-info">
+														<div className="asset-name">{entry.name}</div>
+														<div className="asset-source">{entry.source}</div>
+														{isCarSelected && <div className="asset-selected-badge">Passenger Car</div>}
+														{isCarServerDefault && !isCarSelected && <div className="asset-default-badge">Server Default</div>}
+													</div>
+													{entry.type !== 'procedural' && (
+														<button
+															className="delete-btn"
+															onClick={(ev: React.MouseEvent): void => { ev.stopPropagation(); handleDelete(entry); }}
+															title="Delete (requires admin token)"
+														>&#x2715;</button>
+													)}
+												</div>
+											);
+										})}
+									</div>
+								</>
+							) : (
+								<div className="asset-grid">
+									{items.map(entry => {
+										const isSelected = entry.id === selectedId;
+										const isServerDefault = serverConfig && getSelectedId(serverConfig, activeCategory) === entry.id;
+										return (
+											<div
+												key={entry.id}
+												className={`asset-card ${isSelected ? 'selected' : ''}`}
+												onClick={(): void => handleSelect(activeCategory, entry.id)}
+											>
+												{isModelCategory && entry.path ? (
+													<div className="asset-preview">
+														<ModelPreview modelPath={`/data/assets/${entry.path}`} />
+													</div>
+												) : isModelCategory ? (
+													<div className="asset-preview procedural-preview">
+														<span>Procedural</span>
+													</div>
+												) : (
+													<div className="asset-preview sound-preview">
+														<button
+															className={`play-btn ${playingId === entry.id ? 'playing' : ''}`}
+															onClick={(ev: React.MouseEvent): void => {
+																ev.stopPropagation();
+																handlePlaySound(entry);
+															}}
+														>
+															{playingId === entry.id ? '\u25A0' : '\u25B6'}
+														</button>
+													</div>
+												)}
+
+												<div className="asset-info">
+													<div className="asset-name">{entry.name}</div>
+													<div className="asset-source">{entry.source}</div>
+													{isSelected && <div className="asset-selected-badge">Selected</div>}
+													{isServerDefault && !isSelected && <div className="asset-default-badge">Server Default</div>}
+												</div>
+
+												{entry.type !== 'procedural' && (
+													<button
+														className="delete-btn"
+														onClick={(ev: React.MouseEvent): void => {
+															ev.stopPropagation();
+															handleDelete(entry);
+														}}
+														title="Delete (requires admin token)"
+													>
+														&#x2715;
+													</button>
+												)}
+											</div>
+										);
+									})}
+								</div>
+							)}
+						</>
+					)}
 				</main>
 			</div>
 		</div>

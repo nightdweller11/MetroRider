@@ -6,6 +6,7 @@ import {adminAuth} from '../middleware/adminAuth';
 function getDefaultConfig(): object {
 	return {
 		trainModel: 'procedural-default',
+		locomotiveModel: 'procedural-default',
 		trackModel: 'procedural-default',
 		stationModel: 'procedural-default',
 		sounds: {
