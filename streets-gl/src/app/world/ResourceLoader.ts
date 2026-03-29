@@ -14,6 +14,8 @@ export interface ResourceRequest {
 	type: ResourceType;
 }
 
+const MAX_CONCURRENT_LOADS = 6;
+
 export default new class ResourceLoader {
 	private resources: Map<string, any> = new Map();
 	private requests: Map<string, ResourceRequest> = new Map();
@@ -27,7 +29,6 @@ export default new class ResourceLoader {
 			const type = ResourceLoader.getResourceTypeFromString(record.type);
 
 			if (name.startsWith('aircraft')) {
-				// Skip aircraft models as they are unused for now
 				continue;
 			}
 
@@ -50,51 +51,66 @@ export default new class ResourceLoader {
 	): Promise<void> {
 		let loaded = 0;
 		const total = this.requests.size;
+		const entries = Array.from(this.requests.entries());
 
-		return new Promise<void>(async resolve => {
-			for (const [name, request] of this.requests.entries()) {
-				let promise: Promise<any> = null;
+		let nextIndex = 0;
+		const activeNames: Set<string> = new Set();
 
-				switch (request.type) {
-					case ResourceType.Image: {
-						promise = this.loadImage(request.url);
-						break;
-					}
-					case ResourceType.GLTF: {
-						promise = this.loadGLTF(request.url);
-						break;
-					}
-				}
+		const loadNext = async (): Promise<void> => {
+			while (nextIndex < entries.length) {
+				const idx = nextIndex++;
+				const [name, request] = entries[idx];
 
+				activeNames.add(name);
 				onLoadedFileNameChange(request.url);
 
-				const r = await promise;
-
-				this.resources.set(name, r);
-				onFileLoad(++loaded, total);
-
-				if (loaded === total) {
-					onLoadedFileNameChange('');
-					resolve();
+				try {
+					let result: any;
+					switch (request.type) {
+						case ResourceType.Image:
+							result = await this.loadImage(request.url);
+							break;
+						case ResourceType.GLTF:
+							result = await this.loadGLTF(request.url);
+							break;
+					}
+					this.resources.set(name, result);
+				} catch (err) {
+					console.error(`[ResourceLoader] Failed to load "${name}" from ${request.url}:`, err);
 				}
+
+				activeNames.delete(name);
+				onFileLoad(++loaded, total);
 			}
-		});
+		};
+
+		const workers = Math.min(MAX_CONCURRENT_LOADS, entries.length);
+		const promises: Promise<void>[] = [];
+		for (let i = 0; i < workers; i++) {
+			promises.push(loadNext());
+		}
+		await Promise.all(promises);
+
+		onLoadedFileNameChange('');
 	}
 
 	private async loadImage(url: string): Promise<HTMLImageElement> {
-		return new Promise<any>(resolve => {
+		return new Promise<HTMLImageElement>((resolve, reject) => {
 			const image = new Image();
 
 			image.crossOrigin = "anonymous";
 			image.onload = (): void => {
 				resolve(image);
 			};
+			image.onerror = (): void => {
+				reject(new Error(`Image load failed: ${url}`));
+			};
 
 			image.src = url;
 		});
 	}
 
-	private async loadGLTF(url: string): Promise<HTMLImageElement> {
+	private async loadGLTF(url: string): Promise<any> {
 		return await load(url, GLTFLoader);
 	}
 

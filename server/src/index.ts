@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -17,6 +18,10 @@ process.on('uncaughtException', (err) => {
 });
 
 const app = express();
+app.use(compression({
+  level: 6,
+  threshold: 1024,
+}));
 app.use(cors());
 app.use(express.json());
 

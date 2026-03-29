@@ -650,9 +650,7 @@ export default class TrainRenderingSystem extends System {
 
 		const result = new Map<number, {data: Uint8ClampedArray; width: number; height: number}>();
 
-		for (let i = 0; i < images.length; i++) {
-			const img = images[i];
-
+		const loadTasks = images.map((img: any, i: number) => async () => {
 			try {
 				let pixels: {data: Uint8ClampedArray; width: number; height: number} | null = null;
 
@@ -695,7 +693,9 @@ export default class TrainRenderingSystem extends System {
 			} catch (err) {
 				console.error(`[TrainRenderingSystem] Failed to load texture ${i}:`, err);
 			}
-		}
+		});
+
+		await Promise.all(loadTasks.map((task: () => Promise<void>) => task()));
 
 		return result.size > 0 ? result : null;
 	}

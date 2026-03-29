@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
+import compression from 'compression';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
@@ -17,6 +18,16 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const BUILD_DIR = path.join(__dirname, '..', '..', 'build');
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', '..', 'data');
 
+app.use(compression({
+	level: 6,
+	threshold: 1024,
+	filter: (req, res) => {
+		if (req.headers['x-no-compression']) {
+			return false;
+		}
+		return compression.filter(req, res);
+	},
+}));
 app.use(cors());
 app.use(express.json());
 
