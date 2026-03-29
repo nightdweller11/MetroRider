@@ -3,12 +3,24 @@ import SceneSystem from '~/app/systems/SceneSystem';
 import TerrainSystem from '~/app/systems/TerrainSystem';
 import TrainSystem from '~/app/game/TrainSystem';
 import TrainMeshObject from './TrainMeshObject';
-import {buildTrainCarGeometry, buildTrackGeometry, buildStationGeometry, GeometryBuffers} from './TrainGeometry';
+import {buildTrainCarGeometry, buildTrackGeometry, buildStationGeometry, GeometryBuffers, AnimationData, NodeTRS} from './TrainGeometry';
 import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
 import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
 import {debugLog} from '~/app/game/debug';
+import {
+	parseAnimations,
+	findDoorAnimationIndex,
+	sampleChannelAtTime,
+	composeTRS,
+	multiplyMat4,
+	getAnimatedNodeIndices,
+	detectAnimTimeRange,
+	ModelTransformParams,
+	AnimatedNodeInfo,
+	GLTFAnimationClip,
+} from './GLTFAnimation';
 
 const TRACK_HEIGHT_OFFSET = 0.05;
 const STATION_PLATFORM_OFFSET = 7;
@@ -17,6 +29,15 @@ const CAR_GAP = 0.15;
 const TARGET_STATION_LENGTH = 40;
 const MAX_STATION_SCALE = 100;
 const MIN_STATION_SCALE = 0.01;
+
+interface CarAnimState {
+	playing: boolean;
+	forward: boolean;
+	currentTime: number;
+	animData: AnimationData;
+	originalPositions: Float32Array;
+	originalNormals: Float32Array;
+}
 
 export default class TrainRenderingSystem extends System {
 	public carMeshes: TrainMeshObject[] = [];
@@ -33,6 +54,9 @@ export default class TrainRenderingSystem extends System {
 	private glbCache: Map<string, GeometryBuffers> = new Map();
 	private catalogReady: boolean = false;
 	private pendingModelRebuild: boolean = false;
+
+	private carAnimStates: CarAnimState[] = [];
+	private lastDoorsOpen: boolean = false;
 
 	public postInit(): void {
 		this.systemManager.onSystemReady(TrainSystem, () => {
@@ -97,6 +121,8 @@ export default class TrainRenderingSystem extends System {
 		}
 		this.carMeshes = [];
 		this.carOffsets = [];
+		this.carAnimStates = [];
+		this.lastDoorsOpen = false;
 	}
 
 	private getCarLength(buf: GeometryBuffers): number {
@@ -187,15 +213,29 @@ export default class TrainRenderingSystem extends System {
 			} else {
 				buf = this.glbCache.get(modelId) || proceduralSingleCar;
 			}
+			const hasAnim = !!buf.animationData;
 			const mesh = new TrainMeshObject({
 				position: new Float32Array(buf.position),
 				normal: new Float32Array(buf.normal),
 				color: new Float32Array(buf.color),
 				indices: new Uint32Array(buf.indices),
-			});
+			}, hasAnim);
 			sceneSystem.objects.wrapper.add(mesh);
 			this.carMeshes.push(mesh);
 			carLengths.push(this.getCarLength(buf));
+
+			if (buf.animationData) {
+				this.carAnimStates.push({
+					playing: false,
+					forward: true,
+					currentTime: buf.animationData.doorAnimStartTime,
+					animData: buf.animationData,
+					originalPositions: new Float32Array(buf.position),
+					originalNormals: new Float32Array(buf.normal),
+				});
+			} else {
+				this.carAnimStates.push(null as any);
+			}
 		}
 
 		this.carOffsets = [];
@@ -335,10 +375,19 @@ export default class TrainRenderingSystem extends System {
 
 		const texturePixels = await this.loadGLTFTextures(jsonChunk, baseUrl, binChunk);
 
+		const clips = parseAnimations(
+			jsonChunk, binChunk,
+			(gltf: any, bin: ArrayBuffer, idx: number) => this.extractAccessorData(gltf, bin, idx),
+		);
+
+		const animatedNodeSet = getAnimatedNodeIndices(clips);
+		const affectedMeshNodes = this.getAffectedMeshNodes(jsonChunk, animatedNodeSet);
+
 		const allPositions: number[] = [];
 		const allNormals: number[] = [];
 		const allColors: number[] = [];
 		const allIndices: number[] = [];
+		const animatedNodesInfo: AnimatedNodeInfo[] = [];
 
 		const nodeTransforms = this.computeNodeTransforms(jsonChunk);
 
@@ -350,6 +399,11 @@ export default class TrainRenderingSystem extends System {
 			if (!mesh) continue;
 
 			const worldMatrix = nodeTransforms[nodeIdx];
+			const isAffectedByAnim = affectedMeshNodes.has(nodeIdx);
+			const nodeVertStart = allPositions.length / 3;
+
+			const nodeLocalPos: number[] = [];
+			const nodeLocalNorm: number[] = [];
 
 			for (const prim of mesh.primitives || []) {
 				const posAccessorIdx = prim.attributes?.POSITION;
@@ -361,6 +415,9 @@ export default class TrainRenderingSystem extends System {
 				const vertCount = posData.length / 3;
 
 				for (let i = 0; i < vertCount; i++) {
+					if (isAffectedByAnim) {
+						nodeLocalPos.push(posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2]);
+					}
 					const [px, py, pz] = this.transformPoint(
 						worldMatrix,
 						posData[i * 3], posData[i * 3 + 1], posData[i * 3 + 2],
@@ -373,6 +430,9 @@ export default class TrainRenderingSystem extends System {
 					const normData = this.extractAccessorData(jsonChunk, binChunk, normalAccessorIdx);
 					if (normData) {
 						for (let i = 0; i < normData.length / 3; i++) {
+							if (isAffectedByAnim) {
+								nodeLocalNorm.push(normData[i * 3], normData[i * 3 + 1], normData[i * 3 + 2]);
+							}
 							const [nx, ny, nz] = this.transformNormal(
 								worldMatrix,
 								normData[i * 3], normData[i * 3 + 1], normData[i * 3 + 2],
@@ -383,6 +443,11 @@ export default class TrainRenderingSystem extends System {
 				}
 				while (allNormals.length < allPositions.length) {
 					allNormals.push(0, 1, 0);
+					if (isAffectedByAnim) {
+						while (nodeLocalNorm.length / 3 < nodeLocalPos.length / 3) {
+							nodeLocalNorm.push(0, 1, 0);
+						}
+					}
 				}
 
 				const materialIdx = prim.material;
@@ -461,6 +526,18 @@ export default class TrainRenderingSystem extends System {
 					}
 				}
 			}
+
+			if (isAffectedByAnim && nodeLocalPos.length > 0) {
+				const nodeVertCount = nodeLocalPos.length / 3;
+				animatedNodesInfo.push({
+					nodeIdx,
+					vertexStart: nodeVertStart,
+					vertexCount: nodeVertCount,
+					localPositions: new Float32Array(nodeLocalPos),
+					localNormals: new Float32Array(nodeLocalNorm),
+				});
+				debugLog(`[TrainRenderingSystem] Animated node "${node.name}" idx=${nodeIdx} (${nodeVertCount} verts)`);
+			}
 		}
 
 		if (allPositions.length === 0) {
@@ -468,8 +545,62 @@ export default class TrainRenderingSystem extends System {
 			return null;
 		}
 
+		let scaleParams: ModelTransformParams | undefined;
 		if (!skipScaling) {
-			this.scaleAndCenterModel(allPositions, allNormals);
+			scaleParams = this.scaleAndCenterModel(allPositions, allNormals);
+		}
+
+		let animationData: AnimationData | undefined;
+		if (clips.length > 0 && animatedNodesInfo.length > 0 && scaleParams) {
+			const nodes = jsonChunk.nodes || [];
+			const parentMap = new Int32Array(nodes.length).fill(-1);
+			for (let i = 0; i < nodes.length; i++) {
+				for (const c of (nodes[i].children || [])) {
+					if (c >= 0 && c < nodes.length) parentMap[c] = i;
+				}
+			}
+
+			const localMatrices: Float64Array[] = [];
+			const nodeTRS: NodeTRS[] = [];
+			for (const node of nodes) {
+				const t = node.translation ? [...node.translation] : [0, 0, 0];
+				const r = node.rotation ? [...node.rotation] : [0, 0, 0, 1];
+				const s = node.scale ? [...node.scale] : [1, 1, 1];
+				nodeTRS.push({t, r, s});
+
+				const m = new Float64Array(16);
+				if (node.matrix) {
+					for (let i = 0; i < 16; i++) m[i] = node.matrix[i];
+				} else {
+					composeTRS(t, r, s, m);
+				}
+				localMatrices.push(m);
+			}
+
+			const doorClipIndex = findDoorAnimationIndex(clips, nodes);
+			let doorAnimStartTime = 0;
+			let doorAnimEndTime = 0;
+			if (doorClipIndex >= 0) {
+				const doorClip = clips[doorClipIndex];
+				const timeRange = detectAnimTimeRange(doorClip);
+				doorAnimStartTime = timeRange.startTime;
+				doorAnimEndTime = timeRange.endTime;
+				if (doorAnimEndTime <= doorAnimStartTime) {
+					doorAnimEndTime = doorClip.duration;
+				}
+			}
+
+			animationData = {
+				clips,
+				doorClipIndex,
+				doorAnimStartTime,
+				doorAnimEndTime,
+				animatedNodes: animatedNodesInfo,
+				parentMap,
+				localMatrices,
+				scaleParams,
+				nodeTRS,
+			};
 		}
 
 		return {
@@ -477,10 +608,35 @@ export default class TrainRenderingSystem extends System {
 			normal: new Float32Array(allNormals),
 			color: new Float32Array(allColors),
 			indices: new Uint32Array(allIndices),
+			animationData,
 		};
 	}
 
-	private scaleAndCenterModel(positions: number[], normals?: number[]): void {
+	private getAffectedMeshNodes(gltf: any, animatedNodeSet: Set<number>): Set<number> {
+		const nodes = gltf.nodes || [];
+		const affected = new Set<number>();
+		if (animatedNodeSet.size === 0) return affected;
+
+		const isDescendantOfAnimated = (nodeIdx: number): boolean => {
+			if (animatedNodeSet.has(nodeIdx)) return true;
+			for (let pi = 0; pi < nodes.length; pi++) {
+				const children: number[] = nodes[pi].children || [];
+				if (children.includes(nodeIdx)) {
+					return isDescendantOfAnimated(pi);
+				}
+			}
+			return false;
+		};
+
+		for (let i = 0; i < nodes.length; i++) {
+			if (nodes[i].mesh !== undefined && isDescendantOfAnimated(i)) {
+				affected.add(i);
+			}
+		}
+		return affected;
+	}
+
+	private scaleAndCenterModel(positions: number[], normals?: number[]): ModelTransformParams {
 		let minX = Infinity, maxX = -Infinity;
 		let minY = Infinity, maxY = -Infinity;
 		let minZ = Infinity, maxZ = -Infinity;
@@ -507,6 +663,8 @@ export default class TrainRenderingSystem extends System {
 		const centerX = (minX + maxX) / 2;
 		const centerZ = (minZ + maxZ) / 2;
 
+		const params: ModelTransformParams = {scale, centerX, centerZ, minY, needsRotation};
+
 		const finalW = (needsRotation ? extentZ : extentX) * scale;
 		const finalH = extentY * scale;
 		const finalL = (needsRotation ? extentX : extentZ) * scale;
@@ -516,12 +674,18 @@ export default class TrainRenderingSystem extends System {
 			`(scale=${scale.toFixed(3)}, rotated=${needsRotation})`
 		);
 
-		for (let i = 0; i < vertCount; i++) {
-			let lx = (positions[i * 3] - centerX) * scale;
-			const ly = (positions[i * 3 + 1] - minY) * scale;
-			let lz = (positions[i * 3 + 2] - centerZ) * scale;
+		this.applyScaleParams(positions, normals, params);
+		return params;
+	}
 
-			if (needsRotation) {
+	private applyScaleParams(positions: number[] | Float32Array, normals: number[] | Float32Array | undefined, params: ModelTransformParams): void {
+		const vertCount = positions.length / 3;
+		for (let i = 0; i < vertCount; i++) {
+			let lx = (positions[i * 3] - params.centerX) * params.scale;
+			const ly = (positions[i * 3 + 1] - params.minY) * params.scale;
+			let lz = (positions[i * 3 + 2] - params.centerZ) * params.scale;
+
+			if (params.needsRotation) {
 				const tmp = lx;
 				lx = -lz;
 				lz = tmp;
@@ -531,7 +695,7 @@ export default class TrainRenderingSystem extends System {
 			positions[i * 3 + 1] = ly;
 			positions[i * 3 + 2] = lz;
 
-			if (needsRotation && normals) {
+			if (params.needsRotation && normals) {
 				const nx = normals[i * 3];
 				const nz = normals[i * 3 + 2];
 				normals[i * 3] = -nz;
@@ -1136,6 +1300,14 @@ export default class TrainRenderingSystem extends System {
 
 		if (!trainSystem.gameActive || !trainSystem.trainPosition || this.carMeshes.length === 0) return;
 
+		const doorsOpen = trainSystem.physicsState.doorsOpen;
+		if (doorsOpen !== this.lastDoorsOpen) {
+			this.lastDoorsOpen = doorsOpen;
+			this.startDoorAnimation(doorsOpen);
+		}
+
+		this.advanceAnimations(deltaTime);
+
 		const cosLat = Math.cos(trainSystem.trainPosition.lat * Math.PI / 180);
 
 		for (let i = 0; i < this.carMeshes.length; i++) {
@@ -1145,6 +1317,168 @@ export default class TrainRenderingSystem extends System {
 			this.carMeshes[i].rotation.set(0, carPos.heading, 0);
 			this.carMeshes[i].updateMatrix();
 		}
+	}
+
+	private startDoorAnimation(open: boolean): void {
+		for (let ci = 0; ci < this.carAnimStates.length; ci++) {
+			const state = this.carAnimStates[ci];
+			if (!state) continue;
+			if (state.animData.doorClipIndex < 0) continue;
+
+			const startTime = state.animData.doorAnimStartTime;
+			const endTime = state.animData.doorAnimEndTime;
+			state.playing = true;
+			state.forward = open;
+			if (open && state.currentTime <= startTime) {
+				state.currentTime = startTime;
+			} else if (!open && state.currentTime >= endTime) {
+				state.currentTime = endTime;
+			}
+		}
+	}
+
+	private advanceAnimations(deltaTime: number): void {
+		for (let ci = 0; ci < this.carAnimStates.length; ci++) {
+			const state = this.carAnimStates[ci];
+			if (!state || !state.playing) continue;
+
+			const clip = state.animData.clips[state.animData.doorClipIndex];
+			if (!clip) continue;
+
+			const startTime = state.animData.doorAnimStartTime;
+			const endTime = state.animData.doorAnimEndTime;
+
+			if (state.forward) {
+				state.currentTime += deltaTime;
+				if (state.currentTime >= endTime) {
+					state.currentTime = endTime;
+					state.playing = false;
+				}
+			} else {
+				state.currentTime -= deltaTime;
+				if (state.currentTime <= startTime) {
+					state.currentTime = startTime;
+					state.playing = false;
+				}
+			}
+
+			try {
+				this.applyAnimationFrame(ci, state, clip);
+			} catch (err) {
+				console.error('applyAnimationFrame error:', err);
+				state.playing = false;
+			}
+		}
+	}
+
+	private applyAnimationFrame(carIdx: number, state: CarAnimState, clip: GLTFAnimationClip): void {
+		const {animData, originalPositions, originalNormals} = state;
+		const {animatedNodes, parentMap, localMatrices, scaleParams, nodeTRS} = animData;
+		const t = state.currentTime;
+
+		const animLocalMatrices = localMatrices.map(m => {
+			const copy = new Float64Array(16);
+			for (let i = 0; i < 16; i++) copy[i] = m[i];
+			return copy;
+		});
+
+		const nodeT = new Map<number, Float32Array>();
+		const nodeR = new Map<number, Float32Array>();
+		const nodeS = new Map<number, Float32Array>();
+
+		for (const ch of clip.channels) {
+			const val = sampleChannelAtTime(ch, t);
+			switch (ch.path) {
+				case 'translation': nodeT.set(ch.nodeIdx, val); break;
+				case 'rotation': nodeR.set(ch.nodeIdx, val); break;
+				case 'scale': nodeS.set(ch.nodeIdx, val); break;
+			}
+		}
+
+		for (const nodeIdx of new Set([...nodeT.keys(), ...nodeR.keys(), ...nodeS.keys()])) {
+			const origTRS = nodeTRS[nodeIdx];
+			const tr = nodeT.get(nodeIdx);
+			const rot = nodeR.get(nodeIdx);
+			const sc = nodeS.get(nodeIdx);
+
+			composeTRS(
+				tr ? Array.from(tr) : origTRS.t,
+				rot || new Float32Array(origTRS.r),
+				sc ? Array.from(sc) : origTRS.s,
+				animLocalMatrices[nodeIdx],
+			);
+		}
+
+		const worldMatrices: Float64Array[] = animLocalMatrices.map(m => {
+			const w = new Float64Array(16);
+			for (let i = 0; i < 16; i++) w[i] = m[i];
+			return w;
+		});
+
+		const resolved = new Uint8Array(parentMap.length);
+		const resolveNode = (idx: number): void => {
+			if (resolved[idx]) return;
+			resolved[idx] = 1;
+			const p = parentMap[idx];
+			if (p >= 0) {
+				resolveNode(p);
+				multiplyMat4(worldMatrices[p], animLocalMatrices[idx], worldMatrices[idx]);
+			}
+		};
+		for (let i = 0; i < parentMap.length; i++) resolveNode(i);
+
+		const newPos = new Float32Array(originalPositions);
+		const newNorm = new Float32Array(originalNormals);
+
+		for (const aNode of animatedNodes) {
+			const wm = worldMatrices[aNode.nodeIdx];
+			for (let v = 0; v < aNode.vertexCount; v++) {
+				const lx = aNode.localPositions[v * 3];
+				const ly = aNode.localPositions[v * 3 + 1];
+				const lz = aNode.localPositions[v * 3 + 2];
+
+				let wx = wm[0] * lx + wm[4] * ly + wm[8]  * lz + wm[12];
+				let wy = wm[1] * lx + wm[5] * ly + wm[9]  * lz + wm[13];
+				let wz = wm[2] * lx + wm[6] * ly + wm[10] * lz + wm[14];
+
+				let sx = (wx - scaleParams.centerX) * scaleParams.scale;
+				const sy = (wy - scaleParams.minY) * scaleParams.scale;
+				let sz = (wz - scaleParams.centerZ) * scaleParams.scale;
+
+				if (scaleParams.needsRotation) {
+					const tmp = sx;
+					sx = -sz;
+					sz = tmp;
+				}
+
+				const idx = (aNode.vertexStart + v) * 3;
+				newPos[idx] = sx;
+				newPos[idx + 1] = sy;
+				newPos[idx + 2] = sz;
+
+				const nlx = aNode.localNormals[v * 3];
+				const nly = aNode.localNormals[v * 3 + 1];
+				const nlz = aNode.localNormals[v * 3 + 2];
+
+				let wnx = wm[0] * nlx + wm[4] * nly + wm[8]  * nlz;
+				let wny = wm[1] * nlx + wm[5] * nly + wm[9]  * nlz;
+				let wnz = wm[2] * nlx + wm[6] * nly + wm[10] * nlz;
+				const nlen = Math.sqrt(wnx * wnx + wny * wny + wnz * wnz) || 1;
+				wnx /= nlen; wny /= nlen; wnz /= nlen;
+
+				if (scaleParams.needsRotation) {
+					const tmpN = wnx;
+					wnx = -wnz;
+					wnz = tmpN;
+				}
+
+				newNorm[idx] = wnx;
+				newNorm[idx + 1] = wny;
+				newNorm[idx + 2] = wnz;
+			}
+		}
+
+		this.carMeshes[carIdx].updatePositionAndNormalBuffers(newPos, newNorm);
 	}
 
 	private pollConfigChanges(trainSystem: TrainSystem): void {

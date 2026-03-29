@@ -253,6 +253,14 @@ export default class TrainSystem extends System {
 	public toggleDoors(): void {
 		if (this.physicsState.trainSpeed < 0.5) {
 			this.physicsState.doorsOpen = !this.physicsState.doorsOpen;
+			const audioSystem = this.systemManager.getSystem(AudioSystem);
+			if (audioSystem) {
+				if (this.physicsState.doorsOpen) {
+					audioSystem.playDoorOpen();
+				} else {
+					audioSystem.playDoorClose();
+				}
+			}
 		}
 	}
 

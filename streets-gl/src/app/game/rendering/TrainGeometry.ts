@@ -3,11 +3,32 @@
  * No Three.js - just typed arrays ready for the GPU.
  */
 
+import {GLTFAnimationClip, AnimatedNodeInfo, ModelTransformParams} from './GLTFAnimation';
+
+export interface NodeTRS {
+	t: number[];
+	r: number[];
+	s: number[];
+}
+
+export interface AnimationData {
+	clips: GLTFAnimationClip[];
+	doorClipIndex: number;
+	doorAnimStartTime: number;
+	doorAnimEndTime: number;
+	animatedNodes: AnimatedNodeInfo[];
+	parentMap: Int32Array;
+	localMatrices: Float64Array[];
+	scaleParams: ModelTransformParams;
+	nodeTRS: NodeTRS[];
+}
+
 export interface GeometryBuffers {
 	position: Float32Array;
 	normal: Float32Array;
 	color: Float32Array;
 	indices: Uint32Array;
+	animationData?: AnimationData;
 }
 
 function hexToRGB(hex: string): [number, number, number] {
