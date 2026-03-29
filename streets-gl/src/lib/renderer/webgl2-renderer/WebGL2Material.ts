@@ -195,7 +195,7 @@ export default class WebGL2Material implements AbstractMaterial {
 				this.gl.uniform3fv(location, uniform.value);
 				break;
 			case RendererTypes.UniformType.Float4:
-				this.gl.uniform3fv(location, uniform.value);
+				this.gl.uniform4fv(location, uniform.value);
 				break;
 			case RendererTypes.UniformType.Int1:
 				this.gl.uniform1iv(location, uniform.value);

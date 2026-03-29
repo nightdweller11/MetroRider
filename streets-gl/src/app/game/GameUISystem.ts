@@ -13,6 +13,7 @@ const DEFAULT_MAP_URL = 'https://metrodreamin.com/view/QVQ2V2ZIYVpyUFEzNE1acEVLc
 export default class GameUISystem extends System {
 	private container: HTMLElement | null = null;
 	private speedEl: HTMLElement | null = null;
+	private fpsEl: HTMLElement | null = null;
 	private stationEl: HTMLElement | null = null;
 	private directionEl: HTMLElement | null = null;
 	private lineColorEl: HTMLElement | null = null;
@@ -115,6 +116,7 @@ export default class GameUISystem extends System {
 			return r;
 		};
 
+		this.infoPanelEl.appendChild(row('FPS', 'hud-fps-val', false));
 		this.infoPanelEl.appendChild(row('SPEED', 'hud-speed-val', true));
 		this.infoPanelEl.appendChild(row('TIME', 'hud-time-val', false));
 
@@ -128,6 +130,7 @@ export default class GameUISystem extends System {
 		this.container.appendChild(this.infoPanelEl);
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
+		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
 		this.timeEl = document.getElementById('hud-time-val') ?? this.infoPanelEl;
 		this.paxEl = document.getElementById('hud-pax-val') ?? this.infoPanelEl;
 		this.etaEl = document.getElementById('hud-eta-val') ?? this.infoPanelEl;
@@ -1087,6 +1090,10 @@ export default class GameUISystem extends System {
 
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 		if (!trainSystem?.gameActive) return;
+
+		if (this.fpsEl && deltaTime > 0) {
+			this.fpsEl.textContent = `${Math.round(1 / deltaTime)}`;
+		}
 
 		if (this.speedEl) {
 			this.speedEl.textContent = `${Math.round(trainSystem.getSpeedKmH())} km/h`;

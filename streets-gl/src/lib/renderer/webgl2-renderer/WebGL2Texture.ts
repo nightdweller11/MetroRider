@@ -149,12 +149,19 @@ export default abstract class WebGL2Texture implements AbstractTexture {
 		);
 		this.renderer.gl.bindBuffer(this.renderer.gl.PIXEL_PACK_BUFFER, null);
 
+		this.pixelPackBuffer = buffer;
 		return buffer;
 	}
 
 	public delete(): void {
 		this.gl.deleteTexture(this.WebGLTexture);
 		this.WebGLTexture = null;
+
+		if (this.pixelPackBuffer) {
+			this.gl.deleteBuffer(this.pixelPackBuffer);
+			this.pixelPackBuffer = null;
+		}
+
 		this.deleted = true;
 	}
 

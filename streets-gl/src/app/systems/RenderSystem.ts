@@ -39,6 +39,11 @@ export default class RenderSystem extends System {
 	private passManager: PassManager;
 	public fullScreenTriangle: FullScreenTriangle;
 
+	private _cachedResolutionUI: Vec2 = new Vec2(0, 0);
+	private _cachedResolutionScene: Vec2 = new Vec2(0, 0);
+	private _resolutionDirty: boolean = true;
+	private _renderScale: number = 1.0;
+
 	public postInit(): void {
 		const canvas = <HTMLCanvasElement>document.getElementById('canvas');
 
@@ -50,6 +55,7 @@ export default class RenderSystem extends System {
 		window.addEventListener('resize', () => this.resize());
 
 		this.initScene();
+		this.listenToPerformanceSettings();
 	}
 
 	private initScene(): void {
@@ -85,7 +91,19 @@ export default class RenderSystem extends System {
 		this.passManager.listenToSettings();
 	}
 
+	private listenToPerformanceSettings(): void {
+		const settings = this.systemManager.getSystem(SettingsSystem).settings;
+
+		settings.onChange('renderScale', ({numberValue}) => {
+			this._renderScale = numberValue ?? 1.0;
+			this._resolutionDirty = true;
+			this.resize();
+		}, true);
+	}
+
 	private resize(): void {
+		this._resolutionDirty = true;
+
 		const {x: widthUI, y: heightUI} = this.resolutionUI;
 		const {x: widthScene, y: heightScene} = this.resolutionUI;
 
@@ -181,12 +199,25 @@ export default class RenderSystem extends System {
 	}
 
 	public get resolutionUI(): Vec2 {
-		const pixelRatio = window.devicePixelRatio;
-		return new Vec2(window.innerWidth * pixelRatio, window.innerHeight * pixelRatio);
+		if (this._resolutionDirty) {
+			this._updateResolutionCache();
+		}
+		return this._cachedResolutionUI;
 	}
 
 	public get resolutionScene(): Vec2 {
-		const pixelRatio = 1;
-		return new Vec2(window.innerWidth * pixelRatio, window.innerHeight * pixelRatio);
+		if (this._resolutionDirty) {
+			this._updateResolutionCache();
+		}
+		return this._cachedResolutionScene;
+	}
+
+	private _updateResolutionCache(): void {
+		const pixelRatio = window.devicePixelRatio * this._renderScale;
+		this._cachedResolutionUI.x = window.innerWidth * pixelRatio;
+		this._cachedResolutionUI.y = window.innerHeight * pixelRatio;
+		this._cachedResolutionScene.x = window.innerWidth * this._renderScale;
+		this._cachedResolutionScene.y = window.innerHeight * this._renderScale;
+		this._resolutionDirty = false;
 	}
 }

@@ -338,6 +338,7 @@ class WorkerInstance {
 				}
 
 				resolve(heightArray);
+				return;
 			}
 
 			const handler = async (event: MessageEvent): Promise<void> => {

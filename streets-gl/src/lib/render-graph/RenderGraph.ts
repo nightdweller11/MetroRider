@@ -13,13 +13,21 @@ export default class RenderGraph {
 	public outdegreeSets: Map<Node, Set<Node>> = new Map();
 	private nextNodes: Map<Node, Set<Node>> = new Map();
 	private previousNodes: Map<Node, Set<Node>> = new Map();
+	private _graphDirty: boolean = true;
+	private _cachedSorted: Pass<any>[] = null;
+	private _cachedAllResources: Set<Resource<any, any>> = null;
 
 	public constructor(resourcePool: ResourcePool = new ResourcePool(2)) {
 		this.resourcePool = resourcePool;
 	}
 
+	public markDirty(): void {
+		this._graphDirty = true;
+	}
+
 	public addPass(pass: Pass<any>): void {
 		this.passes.add(pass);
+		this._graphDirty = true;
 	}
 
 	private sortRenderableNodes(nodes: Set<Node>): Node[] {
@@ -125,7 +133,10 @@ export default class RenderGraph {
 			this.previousNodes.set(pass, inputResources);
 			this.nextNodes.set(pass, outputResources);
 
-			for (const resource of [...inputResources, ...outputResources]) {
+			for (const resource of inputResources) {
+				allResources.add(resource);
+			}
+			for (const resource of outputResources) {
 				allResources.add(resource);
 			}
 		}
@@ -179,29 +190,35 @@ export default class RenderGraph {
 	}
 
 	public render(): void {
-		this.updateAllNodesVertices();
+		if (this._graphDirty || !this._cachedSorted) {
+			this.updateAllNodesVertices();
 
-		const graph = this.buildGraphWithCulling(this.passes);
-		const sorted = <Pass<any>[]>this.sortRenderableNodes(graph);
+			const graph = this.buildGraphWithCulling(this.passes);
+			const sorted = <Pass<any>[]>this.sortRenderableNodes(graph);
 
-		this.lastGraph = graph;
-		this.lastSortedPassList = sorted;
+			this.lastGraph = graph;
+			this.lastSortedPassList = sorted;
+			this._cachedSorted = sorted;
 
-		const allResources: Set<Resource<any, any>> = new Set();
+			const allResources: Set<Resource<any, any>> = new Set();
 
-		for (const pass of sorted) {
-			const resources = pass.getAllResources();
+			for (const pass of sorted) {
+				const resources = pass.getAllResources();
 
-			for (const resource of resources) {
-				allResources.add(resource);
+				for (const resource of resources) {
+					allResources.add(resource);
+				}
 			}
+
+			this._cachedAllResources = allResources;
+			this._graphDirty = false;
 		}
 
-		this.attachPhysicalResources(allResources);
+		this.attachPhysicalResources(this._cachedAllResources);
 
-		this.renderPasses(sorted);
+		this.renderPasses(this._cachedSorted);
 		this.resourcePool.update();
 
-		this.resetPhysicalResources(allResources);
+		this.resetPhysicalResources(this._cachedAllResources);
 	}
 }

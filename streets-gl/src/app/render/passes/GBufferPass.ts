@@ -88,6 +88,19 @@ export default class GBufferPass extends Pass<{
 	public objectIdY = 0;
 	private fullScreenTriangle: FullScreenTriangle;
 
+	private readonly _tmpMat4A: Float32Array = new Float32Array(16);
+	private readonly _tmpMat4B: Float32Array = new Float32Array(16);
+	private readonly _tmpMat4C: Float32Array = new Float32Array(16);
+	private readonly _tmpMat4D: Float32Array = new Float32Array(16);
+	private readonly _tmpVec4A: Float32Array = new Float32Array(4);
+	private readonly _tmpVec4B: Float32Array = new Float32Array(4);
+	private readonly _tmpVec2A: Float32Array = new Float32Array(2);
+	private readonly _tmpVec2B: Float32Array = new Float32Array(2);
+	private readonly _tmpFloat1: Float32Array = new Float32Array(1);
+	private readonly _tmpNormalTransform0: Float32Array = new Float32Array(4);
+	private readonly _tmpNormalTransform1: Float32Array = new Float32Array(4);
+	private readonly _tmpDetailOffset: Float32Array = new Float32Array(2);
+
 	public constructor(manager: PassManager) {
 		super('GBufferPass', manager, {
 			GBufferRenderPass: {
@@ -178,23 +191,21 @@ export default class GBufferPass extends Pass<{
 
 	private getTileNormalTexturesTransforms(tile: Tile): [Float32Array, Float32Array] {
 		const terrainSystem = this.manager.systemManager.getSystem(TerrainSystem);
-		const transform0 = new Float32Array(4);
-		const transform1 = new Float32Array(4);
 
 		terrainSystem.areaLoaders.height0.transformToArray(
 			tile.position.x,
 			tile.position.z,
 			Config.TileSize,
-			transform0
+			this._tmpNormalTransform0
 		);
 		terrainSystem.areaLoaders.height1.transformToArray(
 			tile.position.x,
 			tile.position.z,
 			Config.TileSize,
-			transform1
+			this._tmpNormalTransform1
 		);
 
-		return [transform0, transform1];
+		return [this._tmpNormalTransform0, this._tmpNormalTransform1];
 	}
 
 	private getCameraPositionRelativeToTile(camera: Camera, tile: Tile): [number, number] {
@@ -207,14 +218,16 @@ export default class GBufferPass extends Pass<{
 	private renderSkybox(): void {
 		const camera = this.manager.sceneSystem.objects.camera;
 		const skybox = this.manager.sceneSystem.objects.skybox;
-		const skyRotationMatrix = new Float32Array(this.manager.mapTimeSystem.skyDirectionMatrix.values);
 
-		this.skyboxMaterial.getUniform('projectionMatrix', 'Uniforms').value =
-			new Float32Array(camera.projectionMatrix.values);
-		this.skyboxMaterial.getUniform('modelViewMatrix', 'Uniforms').value =
-			new Float32Array(Mat4.multiply(camera.matrixWorldInverse, skybox.matrixWorld).values);
-		this.skyboxMaterial.getUniform('viewMatrix', 'Uniforms').value = new Float32Array(camera.matrixWorld.values);
-		this.skyboxMaterial.getUniform('skyRotationMatrix', 'Uniforms').value = skyRotationMatrix;
+		this._tmpMat4A.set(this.manager.mapTimeSystem.skyDirectionMatrix.values);
+		this._tmpMat4B.set(camera.projectionMatrix.values);
+		this._tmpMat4C.set(Mat4.multiply(camera.matrixWorldInverse, skybox.matrixWorld).values);
+		this._tmpMat4D.set(camera.matrixWorld.values);
+
+		this.skyboxMaterial.getUniform('projectionMatrix', 'Uniforms').value = this._tmpMat4B;
+		this.skyboxMaterial.getUniform('modelViewMatrix', 'Uniforms').value = this._tmpMat4C;
+		this.skyboxMaterial.getUniform('viewMatrix', 'Uniforms').value = this._tmpMat4D;
+		this.skyboxMaterial.getUniform('skyRotationMatrix', 'Uniforms').value = this._tmpMat4A;
 		this.skyboxMaterial.updateUniformBlock('Uniforms');
 
 		this.renderer.useMaterial(this.skyboxMaterial);
@@ -229,7 +242,8 @@ export default class GBufferPass extends Pass<{
 
 		this.renderer.useMaterial(this.extrudedMeshMaterial);
 
-		this.extrudedMeshMaterial.getUniform('projectionMatrix', 'PerMaterial').value = new Float32Array(camera.jitteredProjectionMatrix.values);
+		this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+		this.extrudedMeshMaterial.getUniform('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.extrudedMeshMaterial.getUniform<UniformFloat1>('windowLightThreshold', 'PerMaterial').value[0] = windowLightThreshold;
 		this.extrudedMeshMaterial.updateUniformBlock('PerMaterial');
 
@@ -238,11 +252,11 @@ export default class GBufferPass extends Pass<{
 				continue;
 			}
 
-			const mvMatrix = Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld);
-			const mvMatrixPrev = Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld);
+			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
+			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
 
-			this.extrudedMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = new Float32Array(mvMatrix.values);
-			this.extrudedMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = new Float32Array(mvMatrixPrev.values);
+			this.extrudedMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
+			this.extrudedMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
 			this.extrudedMeshMaterial.getUniform<UniformFloat1>('tileId', 'PerMesh').value[0] = tile.localId;
 			this.extrudedMeshMaterial.updateUniformBlock('PerMesh');
 
@@ -269,9 +283,11 @@ export default class GBufferPass extends Pass<{
 		this.terrainMaterial.getUniform('tUsageMask').value = terrainUsageTileMask;
 		this.renderer.useMaterial(this.terrainMaterial);
 
-		this.terrainMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value =
-			new Float32Array(camera.jitteredProjectionMatrix.values);
-		this.terrainMaterial.getUniform('biomeCoordinates', 'PerMaterial').value = new Float32Array([biomePos.x, biomePos.y]);
+		this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+		this.terrainMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
+		this._tmpVec2A[0] = biomePos.x;
+		this._tmpVec2A[1] = biomePos.y;
+		this.terrainMaterial.getUniform('biomeCoordinates', 'PerMaterial').value = this._tmpVec2A;
 		this.terrainMaterial.getUniform<UniformFloat1>('time', 'PerMaterial').value[0] = performance.now() * 0.001;
 		// @ts-ignore
 		this.terrainMaterial.getUniform<UniformFloat1>('usageRange', 'PerMaterial').value[0] = window.from ?? 0;
@@ -285,10 +301,11 @@ export default class GBufferPass extends Pass<{
 			const detailOffsetX = ring.position.x % offsetSize - ring.size / 2;
 			const detailOffsetY = ring.position.z % offsetSize - ring.size / 2;
 
-			this.terrainMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value =
-				new Float32Array(Mat4.multiply(camera.matrixWorldInverse, ring.matrixWorld).values);
-			this.terrainMaterial.getUniform<UniformMatrix4>('modelViewMatrixPrev', 'PerMesh').value =
-				new Float32Array(Mat4.multiply(this.cameraMatrixWorldInversePrev, ring.matrixWorld).values);
+			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, ring.matrixWorld).values);
+			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, ring.matrixWorld).values);
+
+			this.terrainMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
+			this.terrainMaterial.getUniform<UniformMatrix4>('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
 			this.terrainMaterial.getUniform<UniformFloat3>('transformNormal0', 'PerMesh').value = ring.heightTextureTransform0;
 			this.terrainMaterial.getUniform<UniformFloat3>('transformNormal1', 'PerMesh').value = ring.heightTextureTransform1;
 			this.terrainMaterial.getUniform<UniformFloat4>('transformWater0', 'PerMesh').value = ring.waterTextureTransform0;
@@ -296,13 +313,12 @@ export default class GBufferPass extends Pass<{
 			this.terrainMaterial.getUniform<UniformFloat3>('transformMask', 'PerMesh').value = ring.maskTextureTransform;
 			this.terrainMaterial.getUniform<UniformFloat1>('size', 'PerMesh').value[0] = ring.size;
 			this.terrainMaterial.getUniform<UniformFloat1>('segmentCount', 'PerMesh').value[0] = ring.segmentCount * 2;
-			this.terrainMaterial.getUniform('detailTextureOffset', 'PerMesh').value = new Float32Array([
-				detailOffsetX,
-				detailOffsetY
-			]);
-			this.terrainMaterial.getUniform('cameraPosition', 'PerMesh').value = new Float32Array([
-				camera.position.x - ring.position.x, camera.position.z - ring.position.z
-			]);
+			this._tmpVec2A[0] = detailOffsetX;
+			this._tmpVec2A[1] = detailOffsetY;
+			this.terrainMaterial.getUniform('detailTextureOffset', 'PerMesh').value = this._tmpVec2A;
+			this._tmpVec2B[0] = camera.position.x - ring.position.x;
+			this._tmpVec2B[1] = camera.position.z - ring.position.z;
+			this.terrainMaterial.getUniform('cameraPosition', 'PerMesh').value = this._tmpVec2B;
 			this.terrainMaterial.getUniform<UniformInt1>('levelId', 'PerMesh').value[0] = i;
 			this.terrainMaterial.updateUniformBlock('PerMesh');
 
@@ -312,10 +328,10 @@ export default class GBufferPass extends Pass<{
 
 	private getTileDetailTextureOffset(tile: Tile): Float32Array {
 		const offsetSize = Config.TileSize * Config.TerrainDetailUVScale;
-		const detailOffsetX = tile.position.x % offsetSize;
-		const detailOffsetY = tile.position.z % offsetSize;
+		this._tmpDetailOffset[0] = tile.position.x % offsetSize;
+		this._tmpDetailOffset[1] = tile.position.z % offsetSize;
 
-		return new Float32Array([detailOffsetX, detailOffsetY]);
+		return this._tmpDetailOffset;
 	}
 
 	private renderProjectedMeshes(): void {
@@ -331,7 +347,8 @@ export default class GBufferPass extends Pass<{
 
 		this.renderer.useMaterial(this.projectedMeshMaterial);
 
-		this.projectedMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = new Float32Array(camera.jitteredProjectionMatrix.values);
+		this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+		this.projectedMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.projectedMeshMaterial.updateUniformBlock('PerMaterial');
 
 		for (const tile of tiles) {
@@ -349,21 +366,25 @@ export default class GBufferPass extends Pass<{
 			const normalTextureTransforms = this.getTileNormalTexturesTransforms(tile);
 			const detailTextureOffset = this.getTileDetailTextureOffset(tile);
 
-			const mvMatrix = Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld);
-			const mvMatrixPrev = Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld);
+			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
+			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
 			const relativeCameraPosition = this.getCameraPositionRelativeToTile(camera, tile);
 
-			this.projectedMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = new Float32Array(mvMatrix.values);
-			this.projectedMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = new Float32Array(mvMatrixPrev.values);
+			this.projectedMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
+			this.projectedMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
 			this.projectedMeshMaterial.getUniform('transformNormal0', 'PerMesh').value = normalTextureTransforms[0];
 			this.projectedMeshMaterial.getUniform('transformNormal1', 'PerMesh').value = normalTextureTransforms[1];
 			this.projectedMeshMaterial.getUniform<UniformFloat1>('terrainRingSize', 'PerMesh').value[0] = ring0.size;
-			this.projectedMeshMaterial.getUniform('terrainRingOffset', 'PerMesh').value = new Float32Array([
-				ring0Offset.x, ring0Offset.y, ring1Offset.x, ring1Offset.y
-			]);
+			this._tmpVec4A[0] = ring0Offset.x;
+			this._tmpVec4A[1] = ring0Offset.y;
+			this._tmpVec4A[2] = ring1Offset.x;
+			this._tmpVec4A[3] = ring1Offset.y;
+			this.projectedMeshMaterial.getUniform('terrainRingOffset', 'PerMesh').value = this._tmpVec4A;
 			this.projectedMeshMaterial.getUniform<UniformFloat1>('terrainLevelId', 'PerMesh').value[0] = levelId;
 			this.projectedMeshMaterial.getUniform<UniformFloat1>('segmentCount', 'PerMesh').value[0] = ring0.segmentCount * 2;
-			this.projectedMeshMaterial.getUniform('cameraPosition', 'PerMesh').value = new Float32Array(relativeCameraPosition);
+			this._tmpVec2A[0] = relativeCameraPosition[0];
+			this._tmpVec2A[1] = relativeCameraPosition[1];
+			this.projectedMeshMaterial.getUniform('cameraPosition', 'PerMesh').value = this._tmpVec2A;
 			this.projectedMeshMaterial.getUniform('detailTextureOffset', 'PerMesh').value = detailTextureOffset;
 			this.projectedMeshMaterial.getUniform<UniformFloat1>('time', 'PerMaterial').value[0] = performance.now() * 0.001;
 
@@ -386,7 +407,8 @@ export default class GBufferPass extends Pass<{
 
 		this.renderer.useMaterial(this.huggingMeshMaterial);
 
-		this.huggingMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = new Float32Array(camera.jitteredProjectionMatrix.values);
+		this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+		this.huggingMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.huggingMeshMaterial.updateUniformBlock('PerMaterial');
 
 		for (const tile of tiles) {
@@ -402,22 +424,26 @@ export default class GBufferPass extends Pass<{
 
 			const {ring0, levelId, ring0Offset, ring1Offset} = tileParams;
 			const normalTextureTransforms = this.getTileNormalTexturesTransforms(tile);
-
-			const mvMatrix = Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld);
-			const mvMatrixPrev = Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld);
 			const relativeCameraPosition = this.getCameraPositionRelativeToTile(camera, tile);
 
-			this.huggingMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = new Float32Array(mvMatrix.values);
-			this.huggingMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = new Float32Array(mvMatrixPrev.values);
+			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
+			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
+
+			this.huggingMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
+			this.huggingMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
 			this.huggingMeshMaterial.getUniform('transformNormal0', 'PerMesh').value = normalTextureTransforms[0];
 			this.huggingMeshMaterial.getUniform('transformNormal1', 'PerMesh').value = normalTextureTransforms[1];
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('terrainRingSize', 'PerMesh').value[0] = ring0.size;
-			this.huggingMeshMaterial.getUniform('terrainRingOffset', 'PerMesh').value = new Float32Array([
-				ring0Offset.x, ring0Offset.y, ring1Offset.x, ring1Offset.y
-			]);
+			this._tmpVec4A[0] = ring0Offset.x;
+			this._tmpVec4A[1] = ring0Offset.y;
+			this._tmpVec4A[2] = ring1Offset.x;
+			this._tmpVec4A[3] = ring1Offset.y;
+			this.huggingMeshMaterial.getUniform('terrainRingOffset', 'PerMesh').value = this._tmpVec4A;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('terrainLevelId', 'PerMesh').value[0] = levelId;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('segmentCount', 'PerMesh').value[0] = ring0.segmentCount * 2;
-			this.huggingMeshMaterial.getUniform('cameraPosition', 'PerMesh').value = new Float32Array(relativeCameraPosition);
+			this._tmpVec2A[0] = relativeCameraPosition[0];
+			this._tmpVec2A[1] = relativeCameraPosition[1];
+			this.huggingMeshMaterial.getUniform('cameraPosition', 'PerMesh').value = this._tmpVec2A;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('time', 'PerMaterial').value[0] = performance.now() * 0.001;
 			this.huggingMeshMaterial.updateUniformBlock('PerMesh');
 
@@ -429,7 +455,7 @@ export default class GBufferPass extends Pass<{
 		const camera = this.manager.sceneSystem.objects.camera;
 		const tiles = this.manager.sceneSystem.objects.tiles;
 
-		this.manager.sceneSystem.updateInstancedObjectsBuffers(tiles, camera, instancesOrigin);
+		this.manager.sceneSystem.updateInstancedObjectsBuffers(tiles, camera, instancesOrigin, this.manager.sceneSystem.frameId);
 
 		for (const [name, instancedObject] of this.manager.sceneSystem.objects.instancedObjects.entries()) {
 			if (instancedObject.instanceCount === 0) {
@@ -448,16 +474,21 @@ export default class GBufferPass extends Pass<{
 
 			this.renderer.useMaterial(material);
 
-			material.getUniform('projectionMatrix', 'MainBlock').value = new Float32Array(camera.jitteredProjectionMatrix.values);
-			material.getUniform('modelMatrix', 'MainBlock').value = new Float32Array(instancedObject.matrixWorld.values);
-			material.getUniform('viewMatrix', 'MainBlock').value = new Float32Array(camera.matrixWorldInverse.values);
-			material.getUniform('modelViewMatrixPrev', 'MainBlock').value = new Float32Array(mvMatrixPrev.values);
+			this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+			this._tmpMat4B.set(instancedObject.matrixWorld.values);
+			this._tmpMat4C.set(camera.matrixWorldInverse.values);
+			this._tmpMat4D.set(mvMatrixPrev.values);
+			material.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
+			material.getUniform('modelMatrix', 'MainBlock').value = this._tmpMat4B;
+			material.getUniform('viewMatrix', 'MainBlock').value = this._tmpMat4C;
+			material.getUniform('modelViewMatrixPrev', 'MainBlock').value = this._tmpMat4D;
 			material.updateUniformBlock('MainBlock');
 
 			const textureIdUniform = material.getUniform('textureId', 'PerInstanceType');
 
 			if (textureIdUniform) {
-				textureIdUniform.value = new Float32Array([InstanceTextureIdList[name as Tile3DInstanceType]]);
+				this._tmpFloat1[0] = InstanceTextureIdList[name as Tile3DInstanceType];
+				textureIdUniform.value = this._tmpFloat1;
 				material.updateUniformBlock('PerInstanceType');
 			}
 
@@ -497,11 +528,16 @@ export default class GBufferPass extends Pass<{
 
 			this.renderer.useMaterial(this.aircraftMaterial);
 
-			this.aircraftMaterial.getUniform('projectionMatrix', 'MainBlock').value = new Float32Array(camera.jitteredProjectionMatrix.values);
-			this.aircraftMaterial.getUniform('modelMatrix', 'MainBlock').value = new Float32Array(object.matrixWorld.values);
-			this.aircraftMaterial.getUniform('viewMatrix', 'MainBlock').value = new Float32Array(camera.matrixWorldInverse.values);
-			this.aircraftMaterial.getUniform('modelViewMatrixPrev', 'MainBlock').value = new Float32Array(mvMatrixPrev.values);
-			this.aircraftMaterial.getUniform('textureId', 'MainBlock').value = new Float32Array([texture]);
+			this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+			this._tmpMat4B.set(object.matrixWorld.values);
+			this._tmpMat4C.set(camera.matrixWorldInverse.values);
+			this._tmpMat4D.set(mvMatrixPrev.values);
+			this._tmpFloat1[0] = texture;
+			this.aircraftMaterial.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
+			this.aircraftMaterial.getUniform('modelMatrix', 'MainBlock').value = this._tmpMat4B;
+			this.aircraftMaterial.getUniform('viewMatrix', 'MainBlock').value = this._tmpMat4C;
+			this.aircraftMaterial.getUniform('modelViewMatrixPrev', 'MainBlock').value = this._tmpMat4D;
+			this.aircraftMaterial.getUniform('textureId', 'MainBlock').value = this._tmpFloat1;
 			this.aircraftMaterial.updateUniformBlock('MainBlock');
 
 			object.mesh.draw();
@@ -532,17 +568,15 @@ export default class GBufferPass extends Pass<{
 		this.renderer.useMaterial(this.trainMaterial);
 
 		for (const meshObj of meshes) {
-			const mvMatrix = Mat4.multiply(camera.matrixWorldInverse, meshObj.matrixWorld);
-			const mvMatrixPrev = Mat4.multiply(this.cameraMatrixWorldInversePrev, meshObj.matrixWorld);
+			this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
+			this._tmpMat4B.set(meshObj.matrixWorld.values);
+			this._tmpMat4C.set(camera.matrixWorldInverse.values);
+			this._tmpMat4D.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, meshObj.matrixWorld).values);
 
-			this.trainMaterial.getUniform('projectionMatrix', 'MainBlock').value =
-				new Float32Array(camera.jitteredProjectionMatrix.values);
-			this.trainMaterial.getUniform('modelMatrix', 'MainBlock').value =
-				new Float32Array(meshObj.matrixWorld.values);
-			this.trainMaterial.getUniform('viewMatrix', 'MainBlock').value =
-				new Float32Array(camera.matrixWorldInverse.values);
-			this.trainMaterial.getUniform('modelViewMatrixPrev', 'MainBlock').value =
-				new Float32Array(mvMatrixPrev.values);
+			this.trainMaterial.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
+			this.trainMaterial.getUniform('modelMatrix', 'MainBlock').value = this._tmpMat4B;
+			this.trainMaterial.getUniform('viewMatrix', 'MainBlock').value = this._tmpMat4C;
+			this.trainMaterial.getUniform('modelViewMatrixPrev', 'MainBlock').value = this._tmpMat4D;
 			this.trainMaterial.updateUniformBlock('MainBlock');
 
 			meshObj.draw();

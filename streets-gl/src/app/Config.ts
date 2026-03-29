@@ -181,6 +181,35 @@ const Config = {
 			statusLabels: ['Disabled', 'Enabled'],
 			statusDefault: _lowMemory ? 'off' : 'on',
 			category: 'graphics'
+		},
+		renderScale: {
+			label: 'Render resolution scale',
+			selectRange: [0.25, 1.0, 0.05],
+			selectRangeDefault: _lowMemory ? 0.65 : 1.0,
+			category: 'graphics'
+		},
+		fpsLimit: {
+			label: 'Frame rate limit',
+			status: ['off', '30', '60'],
+			statusLabels: ['Unlimited', '30 FPS', '60 FPS'],
+			statusDefault: _lowMemory ? '30' : 'off',
+			category: 'graphics'
+		},
+		terrainDetail: {
+			label: 'Terrain detail',
+			status: ['low', 'medium', 'high'],
+			statusLabels: ['Low (mobile)', 'Medium', 'High'],
+			statusDefault: _lowMemory ? 'low' : 'high',
+			category: 'graphics'
+		},
+		shadowResolution: {
+			label: 'Shadow map resolution',
+			parent: 'shadows',
+			parentStatusCondition: ['low', 'medium', 'high'],
+			status: ['512', '1024', '2048'],
+			statusLabels: ['512px', '1024px', '2048px'],
+			statusDefault: _lowMemory ? '512' : '2048',
+			category: 'graphics'
 		}
 	} as SettingsSchema,
 	OverpassEndpoints: [

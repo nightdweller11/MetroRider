@@ -114,13 +114,15 @@ export default class ShadingPass extends Pass<{
 	private updateShadingMaterialDefines(): void {
 		let needsRecompilation = false;
 
-		const newValues = {
+		const shadowSetting = this.manager.settings.get('shadows')?.statusValue ?? 'off';
+		const newValues: Record<string, string> = {
 			SHADOW_ENABLED: this.getResource('ShadowMaps') ? '1' : '0',
 			SSAO_ENABLED: this.getResource('SSAO') ? '1' : '0',
 			SSR_ENABLED: this.getResource('SSR') ? '1' : '0',
 			SHADOW_CASCADES: this.getResource('ShadowMaps') ?
 				this.getResource('ShadowMaps').descriptor.depthAttachment.texture.depth.toString() :
-				this.shadingMaterial.defines.SHADOW_CASCADES
+				this.shadingMaterial.defines.SHADOW_CASCADES,
+			SHADOW_QUALITY: shadowSetting === 'low' ? '0' : '1'
 		};
 
 		for (const [k, v] of Object.entries(newValues)) {

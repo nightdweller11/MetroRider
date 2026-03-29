@@ -60,6 +60,19 @@ export default class TileSystem extends System {
 			Config.applyPerformanceMode(isLow);
 			this.cameraFrustum = null;
 		}, true);
+
+		settings.onChange('terrainDetail', ({statusValue}) => {
+			if (statusValue === 'low') {
+				Config.TerrainRingCount = 3;
+				Config.TerrainRingSegmentCount = 32;
+			} else if (statusValue === 'medium') {
+				Config.TerrainRingCount = 4;
+				Config.TerrainRingSegmentCount = 48;
+			} else {
+				Config.TerrainRingCount = 6;
+				Config.TerrainRingSegmentCount = 64;
+			}
+		}, true);
 	}
 
 	public addTile(x: number, y: number): void {
@@ -81,7 +94,8 @@ export default class TileSystem extends System {
 				}
 
 				if (!tileData) {
-					//this.removeTile(x, y);
+					console.warn(`Tile load failed for (${x}, ${y}), removing orphan entry`);
+					this.removeTile(x, y);
 					return;
 				}
 

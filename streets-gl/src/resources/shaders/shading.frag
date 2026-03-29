@@ -260,6 +260,14 @@ float getShadowSoft(int shadowMapLayer, float shadowBias, vec4 shadowPosition, f
 		float dx1 = +texelSize.x * shadowRadius;
 		float dy1 = +texelSize.y * shadowRadius;
 
+		#if SHADOW_QUALITY == 0
+		shadow = (
+		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(dx0, dy0), shadowSpaceDepth) +
+		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(dx1, dy0), shadowSpaceDepth) +
+		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(dx0, dy1), shadowSpaceDepth) +
+		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(dx1, dy1), shadowSpaceDepth)
+		) * (1. / 4.);
+		#else
 		shadow = (
 		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(dx0, dy0), shadowSpaceDepth) +
 		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(0.0, dy0), shadowSpaceDepth) +
@@ -271,6 +279,7 @@ float getShadowSoft(int shadowMapLayer, float shadowBias, vec4 shadowPosition, f
 		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(0.0, dy1), shadowSpaceDepth) +
 		textureShadowLerp(shadowMapLayer, shadowMapSize, shadowUV.xy + vec2(dx1, dy1), shadowSpaceDepth)
 		) * (1. / 9.);
+		#endif
 	}
 
 	return shadow;

@@ -49,6 +49,11 @@ export default class ShadowMappingPass extends Pass<{
 	private readonly aircraftMaterial: AbstractMaterial;
 	private readonly trainDepthMaterial: AbstractMaterial;
 
+	private readonly _tmpMat4A: Float32Array = new Float32Array(16);
+	private readonly _tmpMat4B: Float32Array = new Float32Array(16);
+	private readonly _tmpVec4A: Float32Array = new Float32Array(4);
+	private readonly _tmpFloat1: Float32Array = new Float32Array(1);
+
 	public constructor(manager: PassManager) {
 		super('ShadowMappingPass', manager, {
 			ShadowMaps: {type: InternalResourceType.Output, resource: manager.getSharedResource('ShadowMaps')},
@@ -81,24 +86,42 @@ export default class ShadowMappingPass extends Pass<{
 
 			if (statusValue === 'low') {
 				csm.cascades = 1;
-				csm.resolution = 2048;
 				csm.far = 3000;
 				csm.biasScale = 1;
 			} else if (statusValue === 'medium') {
 				csm.cascades = 3;
-				csm.resolution = 2048;
 				csm.far = 4000;
 				csm.biasScale = 1;
 			} else {
 				csm.cascades = 3;
-				csm.resolution = 4096;
 				csm.far = 5000;
 				csm.biasScale = 0.5;
 			}
 
+			this.applyShadowResolution();
 			csm.updateCascades();
 			this.updateShadowMapDescriptor();
 		}, true);
+
+		this.manager.settings.onChange('shadowResolution', () => {
+			this.applyShadowResolution();
+			const csm = this.manager.sceneSystem.objects.csm;
+			csm.updateCascades();
+			this.updateShadowMapDescriptor();
+		}, true);
+	}
+
+	private applyShadowResolution(): void {
+		const csm = this.manager.sceneSystem.objects.csm;
+		const resStr = this.manager.settings.get('shadowResolution')?.statusValue;
+
+		if (resStr === '512') {
+			csm.resolution = 512;
+		} else if (resStr === '1024') {
+			csm.resolution = 1024;
+		} else {
+			csm.resolution = 2048;
+		}
 	}
 
 	private updateMaterialsDefines(): void {
@@ -120,7 +143,8 @@ export default class ShadowMappingPass extends Pass<{
 
 		this.renderer.useMaterial(this.extrudedMeshMaterial);
 
-		this.extrudedMeshMaterial.getUniform('projectionMatrix', 'PerMaterial').value = new Float32Array(shadowCamera.projectionMatrix.values);
+		this._tmpMat4A.set(shadowCamera.projectionMatrix.values);
+		this.extrudedMeshMaterial.getUniform('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.extrudedMeshMaterial.updateUniformBlock('PerMaterial');
 
 		for (const tile of tiles) {
@@ -128,9 +152,8 @@ export default class ShadowMappingPass extends Pass<{
 				continue;
 			}
 
-			const mvMatrix = Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld);
-
-			this.extrudedMeshMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = new Float32Array(mvMatrix.values);
+			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values);
+			this.extrudedMeshMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.extrudedMeshMaterial.updateUniformBlock('PerMesh');
 
 			tile.extrudedMesh.draw();
@@ -146,8 +169,8 @@ export default class ShadowMappingPass extends Pass<{
 
 		this.renderer.useMaterial(this.huggingMeshMaterial);
 
-		this.huggingMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value =
-			new Float32Array(shadowCamera.projectionMatrix.values);
+		this._tmpMat4A.set(shadowCamera.projectionMatrix.values);
+		this.huggingMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.huggingMeshMaterial.updateUniformBlock('PerMaterial');
 
 		for (const tile of tiles) {
@@ -163,13 +186,14 @@ export default class ShadowMappingPass extends Pass<{
 
 			const {ring0, levelId, ring0Offset, ring1Offset} = tileParams;
 
-			const mvMatrix = Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld);
-
-			this.huggingMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = new Float32Array(mvMatrix.values);
+			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values);
+			this.huggingMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('terrainRingSize', 'PerMesh').value[0] = ring0.size;
-			this.huggingMeshMaterial.getUniform('terrainRingOffset', 'PerMesh').value = new Float32Array([
-				ring0Offset.x, ring0Offset.y, ring1Offset.x, ring1Offset.y
-			]);
+			this._tmpVec4A[0] = ring0Offset.x;
+			this._tmpVec4A[1] = ring0Offset.y;
+			this._tmpVec4A[2] = ring1Offset.x;
+			this._tmpVec4A[3] = ring1Offset.y;
+			this.huggingMeshMaterial.getUniform('terrainRingOffset', 'PerMesh').value = this._tmpVec4A;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('terrainLevelId', 'PerMesh').value[0] = levelId;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('segmentCount', 'PerMesh').value[0] = ring0.segmentCount * 2;
 			this.huggingMeshMaterial.updateUniformBlock('PerMesh');
@@ -181,7 +205,7 @@ export default class ShadowMappingPass extends Pass<{
 	private renderInstances(shadowCamera: CSMCascadeCamera): void {
 		const tiles = this.manager.sceneSystem.objects.tiles;
 
-		this.manager.sceneSystem.updateInstancedObjectsBuffers(tiles, shadowCamera, this.getInstancesOrigin(shadowCamera));
+		this.manager.sceneSystem.updateInstancedObjectsBuffers(tiles, shadowCamera, this.getInstancesOrigin(shadowCamera), this.manager.sceneSystem.frameId);
 
 		for (const [name, instancedObject] of this.manager.sceneSystem.objects.instancedObjects.entries()) {
 			if (instancedObject.instanceCount === 0) {
@@ -204,14 +228,17 @@ export default class ShadowMappingPass extends Pass<{
 
 			this.renderer.useMaterial(material);
 
-			material.getUniform('projectionMatrix', 'MainBlock').value = new Float32Array(shadowCamera.projectionMatrix.values);
-			material.getUniform('modelViewMatrix', 'MainBlock').value = new Float32Array(mvMatrix.values);
+			this._tmpMat4A.set(shadowCamera.projectionMatrix.values);
+			this._tmpMat4B.set(mvMatrix.values);
+			material.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
+			material.getUniform('modelViewMatrix', 'MainBlock').value = this._tmpMat4B;
 			material.updateUniformBlock('MainBlock');
 
 			const textureIdUniform = material.getUniform('textureId', 'PerInstanceType');
 
 			if (textureIdUniform) {
-				textureIdUniform.value = new Float32Array([InstanceTextureIdList[name as Tile3DInstanceType]]);
+				this._tmpFloat1[0] = InstanceTextureIdList[name as Tile3DInstanceType];
+				textureIdUniform.value = this._tmpFloat1;
 				material.updateUniformBlock('PerInstanceType');
 			}
 
@@ -246,8 +273,10 @@ export default class ShadowMappingPass extends Pass<{
 
 			this.renderer.useMaterial(this.aircraftMaterial);
 
-			this.aircraftMaterial.getUniform('projectionMatrix', 'MainBlock').value = new Float32Array(shadowCamera.projectionMatrix.values);
-			this.aircraftMaterial.getUniform('modelViewMatrix', 'MainBlock').value = new Float32Array(mvMatrix.values);
+			this._tmpMat4A.set(shadowCamera.projectionMatrix.values);
+			this._tmpMat4B.set(mvMatrix.values);
+			this.aircraftMaterial.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
+			this.aircraftMaterial.getUniform('modelViewMatrix', 'MainBlock').value = this._tmpMat4B;
 			this.aircraftMaterial.updateUniformBlock('MainBlock');
 
 			object.mesh.draw();
@@ -270,15 +299,13 @@ export default class ShadowMappingPass extends Pass<{
 
 		this.renderer.useMaterial(this.trainDepthMaterial);
 
-		this.trainDepthMaterial.getUniform('projectionMatrix', 'PerMaterial').value =
-			new Float32Array(shadowCamera.projectionMatrix.values);
+		this._tmpMat4A.set(shadowCamera.projectionMatrix.values);
+		this.trainDepthMaterial.getUniform('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.trainDepthMaterial.updateUniformBlock('PerMaterial');
 
 		for (const meshObj of meshes) {
-			const mvMatrix = Mat4.multiply(shadowCamera.matrixWorldInverse, meshObj.matrixWorld);
-
-			this.trainDepthMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value =
-				new Float32Array(mvMatrix.values);
+			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, meshObj.matrixWorld).values);
+			this.trainDepthMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.trainDepthMaterial.updateUniformBlock('PerMesh');
 
 			meshObj.draw();

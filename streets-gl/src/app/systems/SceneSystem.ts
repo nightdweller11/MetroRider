@@ -40,6 +40,8 @@ export default class SceneSystem extends System {
 	public objects: SceneObjects;
 	public pivotDelta: Vec2 = new Vec2();
 	private mergedBufferCache: Map<string, Float32Array> = new Map();
+	private _instanceBufferFrameId: number = -1;
+	public frameId: number = 0;
 
 	public postInit(): void {
 		this.initScene();
@@ -179,11 +181,14 @@ export default class SceneSystem extends System {
 	public getObjectsToUpdateMesh(): RenderableObject3D[] {
 		const objects: Object3D[] = [this.scene];
 		const result: RenderableObject3D[] = [];
+		let idx = 0;
 
-		while (objects.length > 0) {
-			const object = objects.shift();
+		while (idx < objects.length) {
+			const object = objects[idx++];
 
-			objects.push(...object.children);
+			for (let i = 0; i < object.children.length; i++) {
+				objects.push(object.children[i]);
+			}
 
 			if (object instanceof RenderableObject3D && !object.isMeshReady()) {
 				result.push(object);
@@ -214,8 +219,14 @@ export default class SceneSystem extends System {
 	public updateInstancedObjectsBuffers(
 		tiles: Tile[],
 		camera: Camera,
-		origin: Vec2
+		origin: Vec2,
+		frameId: number = -1
 	): void {
+		if (frameId >= 0 && frameId === this._instanceBufferFrameId) {
+			return;
+		}
+		this._instanceBufferFrameId = frameId;
+
 		for (const [name, instancedObject] of this.objects.instancedObjects.entries()) {
 			const buffers: Float32Array[] = [];
 			const config = Tile3DInstanceLODConfig[name as Tile3DInstanceType];
@@ -311,5 +322,7 @@ export default class SceneSystem extends System {
 
 		this.objects.camera.updateMatrixWorldInverse();
 		this.objects.camera.updateFrustum();
+
+		this.frameId++;
 	}
 }

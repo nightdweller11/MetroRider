@@ -13,6 +13,7 @@ export default class ShadingMaterialContainer extends MaterialContainer {
 			defines: {
 				SHADOW_ENABLED: '1',
 				SHADOW_CASCADES: '3',
+				SHADOW_QUALITY: '1',
 				SHADOW_CAMERA_NEAR: `${Config.CSMShadowCameraNear}.`,
 				SHADOW_CAMERA_FAR: `${Config.CSMShadowCameraFar}.`,
 				SSAO_ENABLED: '1',

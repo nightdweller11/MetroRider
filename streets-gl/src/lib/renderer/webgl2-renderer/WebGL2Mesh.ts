@@ -56,6 +56,10 @@ export default class WebGL2Mesh implements AbstractMesh {
 	}
 
 	public setIndices(indices: Uint32Array): void {
+		if (this.indexBuffer) {
+			this.gl.deleteBuffer(this.indexBuffer);
+		}
+
 		this.indices = indices;
 
 		this.createIndexBuffer();

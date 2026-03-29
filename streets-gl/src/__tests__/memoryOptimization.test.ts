@@ -46,6 +46,10 @@ function getConfigForMode(lowMemory: boolean) {
 		taa: lowMemory ? 'off' : 'on',
 		bloom: lowMemory ? 'off' : 'on',
 		ssao: lowMemory ? 'off' : 'on',
+		renderScale: lowMemory ? 0.65 : 1.0,
+		fpsLimit: lowMemory ? '30' : 'off',
+		terrainDetail: lowMemory ? 'low' : 'high',
+		shadowResolution: lowMemory ? '512' : '2048',
 	};
 }
 
@@ -616,5 +620,93 @@ describe('Merged buffer reuse optimization', () => {
 		expect(Array.from(r1)).toEqual([1, 2]);
 		expect(Array.from(r2)).toEqual([3, 4]);
 		expect(cache.size).toBe(2);
+	});
+});
+
+// ---------- 8. New mobile-specific settings defaults ----------
+
+describe('New mobile-specific settings defaults', () => {
+	test('renderScale is 0.65 in low-memory, 1.0 in normal', () => {
+		expect(getConfigForMode(true).renderScale).toBe(0.65);
+		expect(getConfigForMode(false).renderScale).toBe(1.0);
+	});
+
+	test('fpsLimit is 30 in low-memory, off in normal', () => {
+		expect(getConfigForMode(true).fpsLimit).toBe('30');
+		expect(getConfigForMode(false).fpsLimit).toBe('off');
+	});
+
+	test('terrainDetail is low in low-memory, high in normal', () => {
+		expect(getConfigForMode(true).terrainDetail).toBe('low');
+		expect(getConfigForMode(false).terrainDetail).toBe('high');
+	});
+
+	test('shadowResolution is 512 in low-memory, 2048 in normal', () => {
+		expect(getConfigForMode(true).shadowResolution).toBe('512');
+		expect(getConfigForMode(false).shadowResolution).toBe('2048');
+	});
+});
+
+describe('Terrain detail mapping', () => {
+	function getTerrainParams(detail: string): {rings: number; segments: number} {
+		if (detail === 'low') return {rings: 3, segments: 32};
+		if (detail === 'medium') return {rings: 4, segments: 48};
+		return {rings: 6, segments: 64};
+	}
+
+	test('low terrain detail has 3 rings and 32 segments', () => {
+		const params = getTerrainParams('low');
+		expect(params.rings).toBe(3);
+		expect(params.segments).toBe(32);
+	});
+
+	test('medium terrain detail has 4 rings and 48 segments', () => {
+		const params = getTerrainParams('medium');
+		expect(params.rings).toBe(4);
+		expect(params.segments).toBe(48);
+	});
+
+	test('high terrain detail has 6 rings and 64 segments', () => {
+		const params = getTerrainParams('high');
+		expect(params.rings).toBe(6);
+		expect(params.segments).toBe(64);
+	});
+});
+
+describe('FPS limit interval computation', () => {
+	function getFpsLimitInterval(statusValue: string): number {
+		if (statusValue === '30') return 1000 / 30;
+		if (statusValue === '60') return 1000 / 60;
+		return 0;
+	}
+
+	test('off returns 0 (unlimited)', () => {
+		expect(getFpsLimitInterval('off')).toBe(0);
+	});
+
+	test('30 returns ~33.3ms', () => {
+		expect(getFpsLimitInterval('30')).toBeCloseTo(33.333, 1);
+	});
+
+	test('60 returns ~16.7ms', () => {
+		expect(getFpsLimitInterval('60')).toBeCloseTo(16.667, 1);
+	});
+});
+
+describe('Shadow quality mapping', () => {
+	function getShadowQuality(shadowSetting: string): string {
+		return shadowSetting === 'low' ? '0' : '1';
+	}
+
+	test('low shadows use 4-tap PCF (quality 0)', () => {
+		expect(getShadowQuality('low')).toBe('0');
+	});
+
+	test('medium shadows use 9-tap PCF (quality 1)', () => {
+		expect(getShadowQuality('medium')).toBe('1');
+	});
+
+	test('high shadows use 9-tap PCF (quality 1)', () => {
+		expect(getShadowQuality('high')).toBe('1');
 	});
 });

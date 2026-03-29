@@ -183,11 +183,13 @@ export default class PassManager {
 		settings.onChange('ssao', ({statusValue}) => {
 			const shadingPassSSAOResource = statusValue === 'on' ? this.getSharedResource('SSAOResult') : null;
 			this.getPass('ShadingPass').setResource('SSAO', shadingPassSSAOResource);
+			this.renderGraph.markDirty();
 		}, true);
 
 		settings.onChange('shadows', ({statusValue}) => {
 			const shadingPassShadowMapsResource = statusValue !== 'off' ? this.getSharedResource('ShadowMaps') : null;
 			this.getPass('ShadingPass').setResource('ShadowMaps', shadingPassShadowMapsResource);
+			this.renderGraph.markDirty();
 		}, true);
 
 		settings.onChange('ssr', ({statusValue}) => {
@@ -195,6 +197,7 @@ export default class PassManager {
 			this.getPass('ShadingPass').setResource('SSR', shadingPassSSRResource);
 
 			this.getSharedResource('SSR').isUsedExternally = statusValue !== 'off';
+			this.renderGraph.markDirty();
 		}, true);
 	}
 
@@ -203,6 +206,7 @@ export default class PassManager {
 		this.getPass('ScreenPass').setResource('Labels', tilesVisible ? this.getScreenLabelsInput() : null);
 		this.getPass('ScreenPass').setResource('SlippyMap', slippyMapVisible ? this.sharedResources.get('SlippyMap') : null);
 		this.getPass('BloomPass').setResource('Color', this.getBloomColorInput());
+		this.renderGraph.markDirty();
 	}
 
 	private initSharedResources(): void {

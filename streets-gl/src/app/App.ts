@@ -27,6 +27,8 @@ class App {
 	private loop = (deltaTime: number): void => this.update(deltaTime);
 	private time = 0;
 	private systemManager: SystemManager;
+	private _fpsLimitInterval: number = 0;
+	private _lastRenderedTime: number = 0;
 
 	public constructor() {
 		this.init();
@@ -68,13 +70,35 @@ class App {
 				TileLoadingSystem,
 				GameUISystem,
 			);
+
+			this.initFpsLimitListener();
 		});
 
 		this.update();
 	}
 
+	private initFpsLimitListener(): void {
+		const settings = this.systemManager.getSystem(SettingsSystem);
+		if (!settings) return;
+
+		settings.settings.onChange('fpsLimit', ({statusValue}) => {
+			if (statusValue === '30') {
+				this._fpsLimitInterval = 1000 / 30;
+			} else if (statusValue === '60') {
+				this._fpsLimitInterval = 1000 / 60;
+			} else {
+				this._fpsLimitInterval = 0;
+			}
+		}, true);
+	}
+
 	private update(rafTime = 0): void {
 		requestAnimationFrame(this.loop);
+
+		if (this._fpsLimitInterval > 0 && (rafTime - this._lastRenderedTime) < this._fpsLimitInterval) {
+			return;
+		}
+		this._lastRenderedTime = rafTime;
 
 		const frameStart = performance.now();
 		const deltaTime = (rafTime - this.time) / 1e3;
