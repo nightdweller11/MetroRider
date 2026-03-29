@@ -27,6 +27,11 @@ export default class GameUISystem extends System {
 	private initialized: boolean = false;
 	private mobile: boolean = false;
 	private mobileTopBtns: HTMLElement[] = [];
+	private infoPanelEl: HTMLElement | null = null;
+	private timeEl: HTMLElement | null = null;
+	private paxEl: HTMLElement | null = null;
+	private etaEl: HTMLElement | null = null;
+	private lastMinute: number = -1;
 
 	public postInit(): void {
 		this.systemManager.onSystemReady(TrainSystem, (trainSystem) => {
@@ -80,24 +85,52 @@ export default class GameUISystem extends System {
 	}
 
 	private createSpeedometer(): void {
-		this.speedEl = document.createElement('div');
-		if (this.mobile) {
-			this.speedEl.style.cssText = `
-				position: absolute; top: 4px; left: 4px;
-				background: rgba(0,0,0,0.7); color: #fff; padding: 4px 8px;
-				border-radius: 6px; font-size: 13px; font-weight: 600;
-				backdrop-filter: blur(10px); display: none;
-			`;
-		} else {
-			this.speedEl.style.cssText = `
-				position: absolute; top: 20px; left: 20px;
-				background: rgba(0,0,0,0.7); color: #fff; padding: 12px 18px;
-				border-radius: 10px; font-size: 20px; font-weight: 600;
-				backdrop-filter: blur(10px); display: none;
-			`;
-		}
-		this.speedEl.textContent = '0 km/h';
-		this.container.appendChild(this.speedEl);
+		const m = this.mobile;
+		this.infoPanelEl = document.createElement('div');
+		this.infoPanelEl.style.cssText = m
+			? `position: absolute; top: 4px; left: 4px;
+				background: rgba(0,0,0,0.78); color: #fff; padding: 6px 10px;
+				border-radius: 8px; backdrop-filter: blur(12px);
+				border: 1px solid rgba(255,255,255,0.08);
+				display: none; min-width: 130px; font-size: 11px;`
+			: `position: absolute; top: 20px; left: 20px;
+				background: rgba(0,0,0,0.78); color: #fff; padding: 10px 16px;
+				border-radius: 10px; backdrop-filter: blur(12px);
+				border: 1px solid rgba(255,255,255,0.08);
+				display: none; min-width: 190px; font-size: 13px;`;
+
+		const row = (label: string, valueId: string, big: boolean = false): HTMLElement => {
+			const r = document.createElement('div');
+			r.style.cssText = `display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 3px;`;
+			const lbl = document.createElement('span');
+			lbl.style.cssText = `color: #888; font-size: ${m ? '9px' : '10px'}; text-transform: uppercase; letter-spacing: 0.5px;`;
+			lbl.textContent = label;
+			const val = document.createElement('span');
+			val.id = valueId;
+			val.style.cssText = big
+				? `font-size: ${m ? '16px' : '20px'}; font-weight: 700; font-variant-numeric: tabular-nums;`
+				: `font-size: ${m ? '12px' : '14px'}; font-weight: 600; font-variant-numeric: tabular-nums;`;
+			r.appendChild(lbl);
+			r.appendChild(val);
+			return r;
+		};
+
+		this.infoPanelEl.appendChild(row('SPEED', 'hud-speed-val', true));
+		this.infoPanelEl.appendChild(row('TIME', 'hud-time-val', false));
+
+		const sep = document.createElement('div');
+		sep.style.cssText = 'height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0;';
+		this.infoPanelEl.appendChild(sep);
+
+		this.infoPanelEl.appendChild(row('PAX', 'hud-pax-val', false));
+		this.infoPanelEl.appendChild(row('NEXT', 'hud-eta-val', false));
+
+		this.container.appendChild(this.infoPanelEl);
+
+		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
+		this.timeEl = document.getElementById('hud-time-val') ?? this.infoPanelEl;
+		this.paxEl = document.getElementById('hud-pax-val') ?? this.infoPanelEl;
+		this.etaEl = document.getElementById('hud-eta-val') ?? this.infoPanelEl;
 	}
 
 	private createStationInfo(): void {
@@ -1007,7 +1040,7 @@ export default class GameUISystem extends System {
 			camSystem.deactivate();
 		}
 
-		if (this.speedEl) this.speedEl.style.display = 'none';
+		if (this.infoPanelEl) this.infoPanelEl.style.display = 'none';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'none';
 		if (this.lineListWrap) this.lineListWrap.style.display = 'none';
 		this.hideStationPanel();
@@ -1041,7 +1074,7 @@ export default class GameUISystem extends System {
 	}
 
 	private showGameUI(): void {
-		if (this.speedEl) this.speedEl.style.display = 'block';
+		if (this.infoPanelEl) this.infoPanelEl.style.display = 'block';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'block';
 		if (this.lineListWrap) this.lineListWrap.style.display = 'flex';
 		this.applyLineListVisibility();
@@ -1059,6 +1092,19 @@ export default class GameUISystem extends System {
 			this.speedEl.textContent = `${Math.round(trainSystem.getSpeedKmH())} km/h`;
 		}
 
+		const now = new Date();
+		const currentMinute = now.getHours() * 60 + now.getMinutes();
+		if (this.timeEl && currentMinute !== this.lastMinute) {
+			this.lastMinute = currentMinute;
+			const hh = String(now.getHours()).padStart(2, '0');
+			const mm = String(now.getMinutes()).padStart(2, '0');
+			this.timeEl.textContent = `${hh}:${mm}`;
+		}
+
+		if (this.paxEl) {
+			this.paxEl.textContent = '0';
+		}
+
 		if (this.stationEl && trainSystem.stationState) {
 			const ss = trainSystem.stationState;
 			if (ss.arriving) {
@@ -1067,6 +1113,28 @@ export default class GameUISystem extends System {
 				this.stationEl.textContent = `Next: ${ss.stationName}`;
 			} else {
 				this.stationEl.textContent = ss.stationName;
+			}
+
+			if (this.etaEl) {
+				const speedMs = trainSystem.getSpeedKmH() / 3.6;
+				const distM = ss.nextStationDist;
+				if (ss.arriving) {
+					this.etaEl.textContent = 'Arrived';
+				} else if (distM < Infinity && distM > 0) {
+					const distKm = distM / 1000;
+					const distStr = distKm >= 1 ? `${distKm.toFixed(1)} km` : `${Math.round(distM)} m`;
+					if (speedMs > 0.5) {
+						const etaSec = distM / speedMs;
+						const etaStr = etaSec >= 60
+							? `~${Math.ceil(etaSec / 60)} min`
+							: `~${Math.round(etaSec)}s`;
+						this.etaEl.textContent = `${distStr} · ${etaStr}`;
+					} else {
+						this.etaEl.textContent = distStr;
+					}
+				} else {
+					this.etaEl.textContent = '—';
+				}
 			}
 		}
 
