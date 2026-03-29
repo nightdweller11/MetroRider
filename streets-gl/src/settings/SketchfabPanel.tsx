@@ -38,6 +38,7 @@ type ModelCategory = 'stations' | 'trains' | 'tracks';
 interface SketchfabPanelProps {
 	adminToken: string;
 	onModelImported: (category: ModelCategory, modelId: string) => void;
+	onImportComplete?: () => void;
 }
 
 const SUGGESTED_SEARCHES: {label: string; query: string}[] = [
@@ -65,7 +66,7 @@ function getThumbnail(model: SketchfabModel, targetWidth: number): string {
 	return best.url;
 }
 
-export default function SketchfabPanel({adminToken, onModelImported}: SketchfabPanelProps): React.ReactElement {
+export default function SketchfabPanel({adminToken, onModelImported, onImportComplete}: SketchfabPanelProps): React.ReactElement {
 	const [apiConfigured, setApiConfigured] = useState<boolean>(false);
 	const [apiChecked, setApiChecked] = useState(false);
 
@@ -187,6 +188,7 @@ export default function SketchfabPanel({adminToken, onModelImported}: SketchfabP
 			setImportResult(result);
 			if (result.ok && result.id) {
 				console.log(`[SketchfabPanel] Imported model: ${result.id} to ${importCategory}`);
+				onImportComplete?.();
 			}
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : String(err);

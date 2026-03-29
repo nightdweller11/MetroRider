@@ -2,6 +2,7 @@ import React, {useEffect, useState, useCallback, useRef} from 'react';
 import './settings.css';
 import ModelPreview from './ModelPreview';
 import SketchfabPanel from './SketchfabPanel';
+import FreesoundPanel from './FreesoundPanel';
 import TrainComposer from './TrainComposer';
 
 interface AssetEntry {
@@ -24,7 +25,7 @@ interface AssetConfig {
 	sounds: Record<string, string>;
 }
 
-type CategoryId = 'trains' | 'tracks' | 'stations' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime' | 'sketchfab';
+type CategoryId = 'trains' | 'tracks' | 'stations' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime' | 'sketchfab' | 'freesound';
 
 const CATEGORIES: {id: CategoryId; label: string; group: 'models' | 'sounds'; description: string}[] = [
 	{id: 'trains', label: 'Train Models', group: 'models', description: 'Choose the 3D model for your train. Procedural models are generated in real-time.'},
@@ -133,6 +134,7 @@ export default function SettingsPage(): React.ReactElement {
 	const [tokenVerified, setTokenVerified] = useState<boolean>(false);
 	const uploadRef = useRef<HTMLInputElement>(null);
 	const [assetFilter, setAssetFilter] = useState<string>('');
+	const [reassigningId, setReassigningId] = useState<string | null>(null);
 
 	useEffect((): void => {
 		const initialToken = getAdminToken();
@@ -234,6 +236,27 @@ export default function SettingsPage(): React.ReactElement {
 		}
 		const targetCat: CategoryId = category === 'trains' ? 'trains' : category === 'stations' ? 'stations' : 'tracks';
 		setActiveCategory(targetCat);
+	}, [config, adminMode, adminToken, tokenVerified, flash, refreshCatalog]);
+
+	const handleFreesoundImport = useCallback((category: string, soundId: string): void => {
+		refreshCatalog();
+		if (!config) return;
+
+		const next = setSelectedId(config, category as CategoryId, soundId);
+		setConfig(next);
+		saveUserConfig(next);
+
+		if (adminMode && adminToken && tokenVerified) {
+			pushConfigToServer(next, adminToken).then(ok => {
+				flash(ok
+					? `Imported and set as default ${category} sound for all users`
+					: `Imported and saved locally, but server update failed`
+				);
+			});
+		} else {
+			flash(`Imported and selected as active ${category} sound`);
+		}
+		setActiveCategory(category as CategoryId);
 	}, [config, adminMode, adminToken, tokenVerified, flash, refreshCatalog]);
 
 	const handleSelect = useCallback((category: CategoryId, id: string): void => {
@@ -434,6 +457,46 @@ export default function SettingsPage(): React.ReactElement {
 		}
 	}, [adminToken, tokenVerified, flash]);
 
+	const handleReassign = useCallback(async (entry: AssetEntry, targetSub: string): Promise<void> => {
+		setReassigningId(null);
+		let token = adminToken;
+		if (!token || !tokenVerified) {
+			token = prompt('Enter admin token to reassign assets:');
+			if (!token) return;
+			const valid = await verifyToken(token);
+			if (!valid) {
+				flash('Invalid admin token');
+				return;
+			}
+			try { sessionStorage.setItem('metrorider-admin-token', token); } catch (_e) { /* noop */ }
+			setAdminToken(token);
+			setTokenVerified(true);
+		}
+		try {
+			const resp = await fetch(`/api/assets/reassign?token=${token}`, {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({assetId: entry.id, toCategory: targetSub}),
+			});
+			if (resp.ok) {
+				flash(`Moved "${entry.name}" to ${targetSub}`);
+				refreshCatalog();
+			} else if (resp.status === 401 || resp.status === 403) {
+				try { sessionStorage.removeItem('metrorider-admin-token'); } catch (_e) { /* noop */ }
+				setAdminToken(null);
+				setTokenVerified(false);
+				flash('Invalid admin token. Please try again.');
+			} else {
+				const body = await resp.json().catch((): {error: string} => ({error: `HTTP ${resp.status}`}));
+				flash(`Reassign failed: ${body.error ?? resp.status}`);
+			}
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			console.error('[Settings] Reassign failed:', msg);
+			flash('Reassign failed');
+		}
+	}, [adminToken, tokenVerified, flash, refreshCatalog]);
+
 	if (error) {
 		return <div className="settings-page"><div className="settings-error">{error}</div></div>;
 	}
@@ -505,6 +568,12 @@ export default function SettingsPage(): React.ReactElement {
 							>
 								Sketchfab Browser
 							</button>
+							<button
+								className={`sidebar-item ${activeCategory === 'freesound' ? 'active' : ''}`}
+								onClick={(): void => { setActiveCategory('freesound'); setAssetFilter(''); }}
+							>
+								Freesound Browser
+							</button>
 						</>
 					)}
 				</nav>
@@ -514,6 +583,13 @@ export default function SettingsPage(): React.ReactElement {
 						<SketchfabPanel
 							adminToken={adminToken}
 							onModelImported={handleSketchfabImport}
+							onImportComplete={refreshCatalog}
+						/>
+					) : activeCategory === 'freesound' && adminMode && adminToken ? (
+						<FreesoundPanel
+							adminToken={adminToken}
+							onSoundImported={handleFreesoundImport}
+							onImportComplete={refreshCatalog}
 						/>
 					) : (
 						<>
@@ -561,6 +637,8 @@ export default function SettingsPage(): React.ReactElement {
 									trainModels={allItems}
 									onSlotsChange={handleSlotsChange}
 									onDelete={handleDelete}
+									onReassign={(entry, targetSub) => handleReassign(entry, targetSub)}
+									adminMode={adminMode}
 								/>
 							) : (
 								<div className="asset-grid">
@@ -613,6 +691,42 @@ export default function SettingsPage(): React.ReactElement {
 													>
 														&#x2715;
 													</button>
+												)}
+
+												{entry.type !== 'procedural' && adminMode && (
+													<div className="reassign-wrapper">
+														<button
+															className="reassign-btn"
+															onClick={(ev: React.MouseEvent): void => {
+																ev.stopPropagation();
+																setReassigningId(reassigningId === entry.id ? null : entry.id);
+															}}
+															title="Move to another category"
+														>
+															&#x21C4;
+														</button>
+														{reassigningId === entry.id && (
+															<div className="reassign-menu" onClick={(ev) => ev.stopPropagation()}>
+																<div className="reassign-menu-title">Move to:</div>
+																{CATEGORIES
+																	.filter(c => c.group === activeCat?.group && c.id !== activeCategory)
+																	.map(c => {
+																		const subFolder = isModelCategory
+																			? c.id
+																			: (c.id === 'horn' ? 'horns' : c.id);
+																		return (
+																			<button
+																				key={c.id}
+																				className="reassign-menu-item"
+																				onClick={() => handleReassign(entry, subFolder)}
+																			>
+																				{c.label}
+																			</button>
+																		);
+																	})}
+															</div>
+														)}
+													</div>
 												)}
 											</div>
 										);

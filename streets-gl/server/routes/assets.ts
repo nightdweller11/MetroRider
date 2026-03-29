@@ -164,6 +164,90 @@ export function createAssetsRouter(dataDir: string): Router {
 		res.json({ok: true, asset: {id: safeName, name: displayName, path: relativePath}});
 	});
 
+	router.post('/reassign', adminAuth, (req: Request, res: Response) => {
+		const assetId = req.body.assetId as string;
+		const toCategory = req.body.toCategory as string;
+
+		if (!assetId || !toCategory) {
+			res.status(400).json({error: 'assetId and toCategory are required'});
+			return;
+		}
+
+		const allSubs: {base: string; sub: string}[] = [
+			{base: 'models', sub: 'trains'},
+			{base: 'models', sub: 'tracks'},
+			{base: 'models', sub: 'stations'},
+			{base: 'sounds', sub: 'horns'},
+			{base: 'sounds', sub: 'engine'},
+			{base: 'sounds', sub: 'rail'},
+			{base: 'sounds', sub: 'wind'},
+			{base: 'sounds', sub: 'brake'},
+			{base: 'sounds', sub: 'doorChime'},
+			{base: 'sounds', sub: 'stationChime'},
+		];
+
+		const targetEntry = allSubs.find(s => s.sub === toCategory);
+		if (!targetEntry) {
+			res.status(400).json({error: `Invalid target category: ${toCategory}. Valid: ${allSubs.map(s => s.sub).join(', ')}`});
+			return;
+		}
+
+		let srcPath: string | null = null;
+		let srcBase = '';
+		let srcSub = '';
+		let srcFilename = '';
+
+		for (const {base, sub} of allSubs) {
+			const dir = path.join(assetsDir, base, sub);
+			const exts = base === 'models' ? MODEL_EXTS : SOUND_EXTS;
+			for (const ext of exts) {
+				const candidate = path.join(dir, `${assetId}${ext}`);
+				if (fs.existsSync(candidate)) {
+					srcPath = candidate;
+					srcBase = base;
+					srcSub = sub;
+					srcFilename = `${assetId}${ext}`;
+					break;
+				}
+			}
+			if (srcPath) break;
+		}
+
+		if (!srcPath) {
+			res.status(404).json({error: `Asset "${assetId}" not found`});
+			return;
+		}
+
+		if (srcBase !== targetEntry.base) {
+			res.status(400).json({error: `Cannot move ${srcBase} asset to ${targetEntry.base} category`});
+			return;
+		}
+
+		if (srcSub === toCategory) {
+			res.status(400).json({error: 'Asset is already in this category'});
+			return;
+		}
+
+		const destDir = path.join(assetsDir, targetEntry.base, toCategory);
+		fs.mkdirSync(destDir, {recursive: true});
+
+		const destPath = path.join(destDir, srcFilename);
+		if (fs.existsSync(destPath)) {
+			res.status(409).json({error: `Asset "${srcFilename}" already exists in ${toCategory}`});
+			return;
+		}
+
+		try {
+			fs.renameSync(srcPath, destPath);
+			console.log(`[Assets] Admin reassigned ${assetId}: ${srcBase}/${srcSub} -> ${srcBase}/${toCategory}`);
+			res.json({ok: true, from: `${srcBase}/${srcSub}`, to: `${targetEntry.base}/${toCategory}`});
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : String(err);
+			console.error(`[Assets] Reassign error for ${assetId}: ${msg}`);
+			res.status(500).json({error: 'Failed to reassign asset'});
+		}
+	});
+
 	router.delete('/:id', adminAuth, (req: Request, res: Response) => {
 		const assetId = req.params.id;
 

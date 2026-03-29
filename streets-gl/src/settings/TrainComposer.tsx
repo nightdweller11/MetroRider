@@ -14,14 +14,22 @@ interface TrainComposerProps {
 	trainModels: AssetEntry[];
 	onSlotsChange: (slots: string[]) => void;
 	onDelete?: (entry: AssetEntry) => void;
+	onReassign?: (entry: AssetEntry, targetSub: string) => void;
+	adminMode?: boolean;
 }
 
 const MAX_SLOTS = 12;
 const MIN_SLOTS = 1;
 
-export default function TrainComposer({slots, trainModels, onSlotsChange, onDelete}: TrainComposerProps): React.ReactElement {
+const REASSIGN_TARGETS = [
+	{sub: 'tracks', label: 'Track Models'},
+	{sub: 'stations', label: 'Station Models'},
+];
+
+export default function TrainComposer({slots, trainModels, onSlotsChange, onDelete, onReassign, adminMode}: TrainComposerProps): React.ReactElement {
 	const [selectedSlot, setSelectedSlot] = useState<number>(0);
 	const [filter, setFilter] = useState('');
+	const [reassigningId, setReassigningId] = useState<string | null>(null);
 
 	const nameMap = useMemo((): Map<string, string> => {
 		const m = new Map<string, string>();
@@ -157,6 +165,30 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 										onClick={(ev: React.MouseEvent): void => { ev.stopPropagation(); onDelete(entry); }}
 										title="Delete (requires admin token)"
 									>&#x2715;</button>
+								)}
+								{entry.type !== 'procedural' && adminMode && onReassign && (
+									<div className="reassign-wrapper">
+										<button
+											className="reassign-btn"
+											onClick={(ev: React.MouseEvent): void => {
+												ev.stopPropagation();
+												setReassigningId(reassigningId === entry.id ? null : entry.id);
+											}}
+											title="Move to another category"
+										>&#x21C4;</button>
+										{reassigningId === entry.id && (
+											<div className="reassign-menu" onClick={(ev) => ev.stopPropagation()}>
+												<div className="reassign-menu-title">Move to:</div>
+												{REASSIGN_TARGETS.map(t => (
+													<button
+														key={t.sub}
+														className="reassign-menu-item"
+														onClick={() => { onReassign(entry, t.sub); setReassigningId(null); }}
+													>{t.label}</button>
+												))}
+											</div>
+										)}
+									</div>
 								)}
 							</div>
 						);

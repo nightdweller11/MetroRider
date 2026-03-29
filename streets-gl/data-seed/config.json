@@ -1,11 +1,16 @@
 {
-  "trainSlots": ["locomotive-classic", "procedural-default", "procedural-default"],
+  "trainSlots": [
+    "651c32eb-717c-44f6-99be-878908b404d7",
+    "train-electric-bullet-b",
+    "8ad982e3-1bfc-44a0-943f-fdab823b6ce2",
+    "8ad982e3-1bfc-44a0-943f-fdab823b6ce2"
+  ],
   "trackModel": "procedural-default",
   "stationModel": "station-platform-basic",
   "sounds": {
-    "horn": "metro-horn",
+    "horn": "train-horn-73-short-mp3",
     "engine": "procedural",
-    "rail": "procedural",
+    "rail": "train-loud-metal-slamming-wav",
     "wind": "procedural",
     "brake": "procedural",
     "doorChime": "procedural",
