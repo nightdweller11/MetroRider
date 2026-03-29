@@ -1129,9 +1129,9 @@ export default class GameUISystem extends System {
 		const trainRendering = this.systemManager.getSystem(TrainRenderingSystem);
 		if (trainRendering) {
 			const trackReady = trainRendering.trackMesh?.isMeshReady() ?? false;
-			const trainReady = trainRendering.trainMesh?.isMeshReady() ?? false;
+			const carsReady = trainRendering.carMeshes.filter(m => m.isMeshReady()).length;
 			const stationCount = trainRendering.stationMeshes.length;
-			lines.push(`Meshes:  train=${trainReady ? 'OK' : 'NO'} track=${trackReady ? 'OK' : 'NO'} stations=${stationCount}`);
+			lines.push(`Meshes:  cars=${carsReady}/${trainRendering.carMeshes.length} track=${trackReady ? 'OK' : 'NO'} stations=${stationCount}`);
 		}
 
 		lines.push('');

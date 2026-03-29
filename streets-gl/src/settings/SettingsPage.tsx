@@ -2,6 +2,7 @@ import React, {useEffect, useState, useCallback, useRef} from 'react';
 import './settings.css';
 import ModelPreview from './ModelPreview';
 import SketchfabPanel from './SketchfabPanel';
+import TrainComposer from './TrainComposer';
 
 interface AssetEntry {
 	id: string;
@@ -17,11 +18,9 @@ interface AssetCatalog {
 }
 
 interface AssetConfig {
-	trainModel: string;
-	locomotiveModel: string;
+	trainSlots: string[];
 	trackModel: string;
 	stationModel: string;
-	carCount: number;
 	sounds: Record<string, string>;
 }
 
@@ -75,7 +74,6 @@ function saveUserConfig(config: AssetConfig): void {
 }
 
 function getSelectedId(config: AssetConfig, category: CategoryId): string {
-	if (category === 'trains') return config.trainModel;
 	if (category === 'tracks') return config.trackModel;
 	if (category === 'stations') return config.stationModel;
 	return config.sounds?.[category] ?? 'procedural';
@@ -83,15 +81,10 @@ function getSelectedId(config: AssetConfig, category: CategoryId): string {
 
 function setSelectedId(config: AssetConfig, category: CategoryId, id: string): AssetConfig {
 	const next = {...config, sounds: {...config.sounds}};
-	if (category === 'trains') next.trainModel = id;
-	else if (category === 'tracks') next.trackModel = id;
+	if (category === 'tracks') next.trackModel = id;
 	else if (category === 'stations') next.stationModel = id;
 	else next.sounds[category] = id;
 	return next;
-}
-
-function setLocomotiveId(config: AssetConfig, id: string): AssetConfig {
-	return {...config, sounds: {...config.sounds}, locomotiveModel: id};
 }
 
 function getItems(catalog: AssetCatalog, category: CategoryId): AssetEntry[] {
@@ -166,12 +159,24 @@ export default function SettingsPage(): React.ReactElement {
 			setCatalog(catalogData);
 			setServerConfig(serverCfg);
 			const userOverrides = loadUserConfig();
+			const defaultSlots = ['procedural-default', 'procedural-default', 'procedural-default'];
+			const migrateSlots = (raw: any): string[] => {
+				if (Array.isArray(raw.trainSlots) && raw.trainSlots.length > 0) return raw.trainSlots;
+				if (raw.trainModel || raw.locomotiveModel || raw.carCount) {
+					const car = raw.trainModel || 'procedural-default';
+					const loco = raw.locomotiveModel || 'procedural-default';
+					const count = raw.carCount ?? 3;
+					if (loco !== 'procedural-default' && loco !== car) return [loco, ...Array(count).fill(car)];
+					return Array(count).fill(car);
+				}
+				return defaultSlots;
+			};
+			const serverSlots = migrateSlots(serverCfg);
+			const userSlots = (userOverrides as any).trainSlots || (userOverrides as any).trainModel ? migrateSlots(userOverrides) : null;
 			const merged: AssetConfig = {
-				trainModel: userOverrides.trainModel ?? serverCfg.trainModel ?? 'procedural-default',
-				locomotiveModel: (userOverrides as any).locomotiveModel ?? (serverCfg as any).locomotiveModel ?? 'procedural-default',
+				trainSlots: userSlots || serverSlots,
 				trackModel: userOverrides.trackModel ?? serverCfg.trackModel ?? 'procedural-default',
 				stationModel: userOverrides.stationModel ?? serverCfg.stationModel ?? 'procedural-default',
-				carCount: (userOverrides as any).carCount ?? (serverCfg as any).carCount ?? 3,
 				sounds: {...(serverCfg.sounds ?? {}), ...(userOverrides.sounds ?? {})},
 			};
 			setConfig(merged);
@@ -200,25 +205,35 @@ export default function SettingsPage(): React.ReactElement {
 
 	const handleSketchfabImport = useCallback((category: 'stations' | 'trains' | 'tracks', modelId: string): void => {
 		refreshCatalog();
-		const categoryMap: Record<string, CategoryId> = {stations: 'stations', trains: 'trains', tracks: 'tracks'};
-		const targetCategory = categoryMap[category];
-		if (targetCategory && config) {
-			const next = setSelectedId(config, targetCategory, modelId);
-			setConfig(next);
-			saveUserConfig(next);
+		if (!config) return;
 
-			if (adminMode && adminToken && tokenVerified) {
-				pushConfigToServer(next, adminToken).then(ok => {
-					flash(ok
-						? `Imported and set as default ${category.slice(0, -1)} model for all users`
-						: `Imported and saved locally, but server update failed`
-					);
-				});
-			} else {
-				flash(`Imported and selected as active ${category.slice(0, -1)} model`);
-			}
-			setActiveCategory(targetCategory);
+		let next: AssetConfig;
+		if (category === 'trains') {
+			const newSlots = [...config.trainSlots];
+			newSlots[0] = modelId;
+			next = {...config, sounds: {...config.sounds}, trainSlots: newSlots};
+		} else {
+			const categoryMap: Record<string, CategoryId> = {stations: 'stations', tracks: 'tracks'};
+			const targetCategory = categoryMap[category];
+			if (!targetCategory) return;
+			next = setSelectedId(config, targetCategory, modelId);
 		}
+
+		setConfig(next);
+		saveUserConfig(next);
+
+		if (adminMode && adminToken && tokenVerified) {
+			pushConfigToServer(next, adminToken).then(ok => {
+				flash(ok
+					? `Imported and set as default ${category.slice(0, -1)} model for all users`
+					: `Imported and saved locally, but server update failed`
+				);
+			});
+		} else {
+			flash(`Imported and selected as active ${category.slice(0, -1)} model`);
+		}
+		const targetCat: CategoryId = category === 'trains' ? 'trains' : category === 'stations' ? 'stations' : 'tracks';
+		setActiveCategory(targetCat);
 	}, [config, adminMode, adminToken, tokenVerified, flash, refreshCatalog]);
 
 	const handleSelect = useCallback((category: CategoryId, id: string): void => {
@@ -236,33 +251,18 @@ export default function SettingsPage(): React.ReactElement {
 		}
 	}, [config, adminMode, adminToken, tokenVerified, flash]);
 
-	const handleLocoSelect = useCallback((id: string): void => {
+	const handleSlotsChange = useCallback((newSlots: string[]): void => {
 		if (!config) return;
-		const next = setLocomotiveId(config, id);
+		const next: AssetConfig = {...config, sounds: {...config.sounds}, trainSlots: newSlots};
 		setConfig(next);
 		saveUserConfig(next);
 
 		if (adminMode && adminToken && tokenVerified) {
 			pushConfigToServer(next, adminToken).then(ok => {
-				flash(ok ? 'Locomotive set as default for all users' : 'Saved locally, but server update failed');
+				flash(ok ? 'Train composition set as default for all users' : 'Saved locally, but server update failed');
 			});
 		} else {
-			flash('Locomotive selection saved');
-		}
-	}, [config, adminMode, adminToken, tokenVerified, flash]);
-
-	const handleCarCountChange = useCallback((count: number): void => {
-		if (!config) return;
-		const next = {...config, sounds: {...config.sounds}, carCount: count};
-		setConfig(next);
-		saveUserConfig(next);
-
-		if (adminMode && adminToken && tokenVerified) {
-			pushConfigToServer(next, adminToken).then(ok => {
-				flash(ok ? 'Car count set as default for all users' : 'Saved locally, but server update failed');
-			});
-		} else {
-			flash('Car count updated');
+			flash('Train composition updated');
 		}
 	}, [config, adminMode, adminToken, tokenVerified, flash]);
 
@@ -556,99 +556,12 @@ export default function SettingsPage(): React.ReactElement {
 							)}
 
 							{activeCategory === 'trains' && config ? (
-								<>
-									<div className="car-count-control">
-										<label>Number of Passenger Cars: </label>
-										<select
-											value={config.carCount}
-											onChange={(e: React.ChangeEvent<HTMLSelectElement>): void => {
-												handleCarCountChange(parseInt(e.target.value, 10));
-											}}
-										>
-											{[1, 2, 3, 4, 5, 6, 8].map(n => (
-												<option key={n} value={n}>{n} {n === 1 ? 'car' : 'cars'}</option>
-											))}
-										</select>
-									</div>
-
-									<h3 className="train-section-heading">Locomotive</h3>
-									<p className="train-section-desc">The engine at the front of the train. Selecting "Procedural" uses the same model as the passenger cars.</p>
-									<div className="asset-grid">
-										{items.map(entry => {
-											const isLocoSelected = entry.id === config.locomotiveModel;
-											const isLocoServerDefault = serverConfig && (serverConfig as any).locomotiveModel === entry.id;
-											return (
-												<div
-													key={`loco-${entry.id}`}
-													className={`asset-card ${isLocoSelected ? 'selected' : ''}`}
-													onClick={(): void => handleLocoSelect(entry.id)}
-												>
-													{entry.path ? (
-														<div className="asset-preview">
-															<ModelPreview modelPath={`/data/assets/${entry.path}`} />
-														</div>
-													) : (
-														<div className="asset-preview procedural-preview">
-															<span>Procedural</span>
-														</div>
-													)}
-													<div className="asset-info">
-														<div className="asset-name">{entry.name}</div>
-														<div className="asset-source">{entry.source}</div>
-														{isLocoSelected && <div className="asset-selected-badge">Locomotive</div>}
-														{isLocoServerDefault && !isLocoSelected && <div className="asset-default-badge">Server Default</div>}
-													</div>
-													{entry.type !== 'procedural' && (
-														<button
-															className="delete-btn"
-															onClick={(ev: React.MouseEvent): void => { ev.stopPropagation(); handleDelete(entry); }}
-															title="Delete (requires admin token)"
-														>&#x2715;</button>
-													)}
-												</div>
-											);
-										})}
-									</div>
-
-									<h3 className="train-section-heading">Passenger Cars</h3>
-									<p className="train-section-desc">The repeating cars behind the locomotive ({config.carCount} car{config.carCount !== 1 ? 's' : ''}).</p>
-									<div className="asset-grid">
-										{items.map(entry => {
-											const isCarSelected = entry.id === selectedId;
-											const isCarServerDefault = serverConfig && getSelectedId(serverConfig, activeCategory) === entry.id;
-											return (
-												<div
-													key={`car-${entry.id}`}
-													className={`asset-card ${isCarSelected ? 'selected' : ''}`}
-													onClick={(): void => handleSelect(activeCategory, entry.id)}
-												>
-													{entry.path ? (
-														<div className="asset-preview">
-															<ModelPreview modelPath={`/data/assets/${entry.path}`} />
-														</div>
-													) : (
-														<div className="asset-preview procedural-preview">
-															<span>Procedural</span>
-														</div>
-													)}
-													<div className="asset-info">
-														<div className="asset-name">{entry.name}</div>
-														<div className="asset-source">{entry.source}</div>
-														{isCarSelected && <div className="asset-selected-badge">Passenger Car</div>}
-														{isCarServerDefault && !isCarSelected && <div className="asset-default-badge">Server Default</div>}
-													</div>
-													{entry.type !== 'procedural' && (
-														<button
-															className="delete-btn"
-															onClick={(ev: React.MouseEvent): void => { ev.stopPropagation(); handleDelete(entry); }}
-															title="Delete (requires admin token)"
-														>&#x2715;</button>
-													)}
-												</div>
-											);
-										})}
-									</div>
-								</>
+								<TrainComposer
+									slots={config.trainSlots}
+									trainModels={allItems}
+									onSlotsChange={handleSlotsChange}
+									onDelete={handleDelete}
+								/>
 							) : (
 								<div className="asset-grid">
 									{items.map(entry => {

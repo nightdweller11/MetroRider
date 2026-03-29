@@ -17,10 +17,9 @@ interface AssetEntry {
 }
 
 interface AssetConfig {
-	trainModel: string;
+	trainSlots: string[];
 	trackModel: string;
 	stationModel: string;
-	carCount: number;
 	sounds: Record<string, string>;
 }
 
@@ -31,8 +30,8 @@ interface AssetCatalog {
 
 type Category = 'trains' | 'tracks' | 'stations' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime';
 
-const MODEL_CATEGORIES: {key: string; label: string; configKey: keyof AssetConfig}[] = [
-	{key: 'trains', label: 'Train Models', configKey: 'trainModel'},
+const MODEL_CATEGORIES: {key: string; label: string; configKey: keyof AssetConfig | null}[] = [
+	{key: 'trains', label: 'Train Models', configKey: null},
 	{key: 'tracks', label: 'Track Models', configKey: 'trackModel'},
 	{key: 'stations', label: 'Station Models', configKey: 'stationModel'},
 ];
@@ -46,8 +45,6 @@ const SOUND_CATEGORIES: {key: string; label: string}[] = [
 	{key: 'doorChime', label: 'Door Chime'},
 	{key: 'stationChime', label: 'Station Chime'},
 ];
-
-const CAR_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 8];
 
 function getAssetConfigSystem(): any {
 	return (window as any).__assetConfigSystem;
@@ -102,9 +99,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({visible, onClose}) => {
 
 	const getSelectedId = (): string => {
 		if (!config) return '';
+		if (activeCategory === 'trains') {
+			return config.trainSlots?.[0] || 'procedural-default';
+		}
 		if (isModelCategory) {
 			const mc = MODEL_CATEGORIES.find(c => c.key === activeCategory);
-			return mc ? (config as any)[mc.configKey] : '';
+			return mc?.configKey ? (config as any)[mc.configKey] : '';
 		}
 		return config.sounds[activeCategory] || '';
 	};
@@ -113,22 +113,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({visible, onClose}) => {
 		const sys = getAssetConfigSystem();
 		if (!sys) return;
 
-		if (isModelCategory) {
+		if (activeCategory === 'trains') {
+			const currentSlots = config?.trainSlots || ['procedural-default', 'procedural-default', 'procedural-default'];
+			const newSlots = currentSlots.map(() => assetId);
+			sys.setUserConfig({trainSlots: newSlots});
+		} else if (isModelCategory) {
 			const mc = MODEL_CATEGORIES.find(c => c.key === activeCategory);
-			if (mc) {
+			if (mc?.configKey) {
 				sys.setUserConfig({[mc.configKey]: assetId});
 			}
 		} else {
 			sys.setUserConfig({sounds: {[activeCategory]: assetId}});
 		}
-		const cfg = sys.getConfig();
-		setConfig({...cfg, sounds: {...cfg.sounds}});
-	};
-
-	const handleCarCountChange = (count: number): void => {
-		const sys = getAssetConfigSystem();
-		if (!sys) return;
-		sys.setUserConfig({carCount: count});
 		const cfg = sys.getConfig();
 		setConfig({...cfg, sounds: {...cfg.sounds}});
 	};
@@ -271,20 +267,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({visible, onClose}) => {
 								onChange={handleFileSelected}
 							/>
 						</div>
-
-						{activeCategory === 'trains' && config && (
-							<div className="car-count-control">
-								<label>Number of Cars</label>
-								<select
-									value={config.carCount || 3}
-									onChange={(e): void => handleCarCountChange(parseInt(e.target.value, 10))}
-								>
-									{CAR_COUNT_OPTIONS.map(n => (
-										<option key={n} value={n}>{n} car{n > 1 ? 's' : ''}</option>
-									))}
-								</select>
-							</div>
-						)}
 
 						<div className="asset-grid">
 							{items.map(asset => (

@@ -11,11 +11,9 @@ export interface SoundConfig {
 }
 
 export interface AssetConfig {
-	trainModel: string;
-	locomotiveModel: string;
+	trainSlots: string[];
 	trackModel: string;
 	stationModel: string;
-	carCount: number;
 	sounds: SoundConfig;
 }
 
@@ -48,12 +46,28 @@ export interface AssetCatalog {
 type ConfigChangeListener = (config: AssetConfig) => void;
 
 const LOCAL_STORAGE_KEY = 'metrorider-user-config';
+const DEFAULT_SLOTS: string[] = ['procedural-default', 'procedural-default', 'procedural-default'];
+
+function migrateToSlots(raw: any): string[] | null {
+	if (Array.isArray(raw.trainSlots) && raw.trainSlots.length > 0) {
+		return raw.trainSlots;
+	}
+	if (raw.trainModel || raw.locomotiveModel || raw.carCount) {
+		const car = raw.trainModel || 'procedural-default';
+		const loco = raw.locomotiveModel || 'procedural-default';
+		const count = raw.carCount ?? 3;
+		if (loco !== 'procedural-default' && loco !== car) {
+			return [loco, ...Array(count).fill(car)];
+		}
+		return Array(count).fill(car);
+	}
+	return null;
+}
+
 const DEFAULT_CONFIG: AssetConfig = {
-	trainModel: 'procedural-default',
-	locomotiveModel: 'procedural-default',
+	trainSlots: [...DEFAULT_SLOTS],
 	trackModel: 'procedural-default',
 	stationModel: 'station-platform-basic',
-	carCount: 3,
 	sounds: {
 		horn: 'procedural',
 		engine: 'procedural',
@@ -180,12 +194,12 @@ export default class AssetConfigSystem extends System {
 	}
 
 	private rebuildMergedConfig(): void {
+		const userSlots = migrateToSlots(this.userOverrides);
+		const serverSlots = migrateToSlots(this.serverConfig) || [...DEFAULT_SLOTS];
 		this.mergedConfig = {
-			trainModel: (this.userOverrides as any).trainModel || this.serverConfig.trainModel,
-			locomotiveModel: (this.userOverrides as any).locomotiveModel || this.serverConfig.locomotiveModel || 'procedural-default',
+			trainSlots: userSlots || serverSlots,
 			trackModel: (this.userOverrides as any).trackModel || this.serverConfig.trackModel,
 			stationModel: (this.userOverrides as any).stationModel || this.serverConfig.stationModel,
-			carCount: (this.userOverrides as any).carCount ?? this.serverConfig.carCount ?? 3,
 			sounds: {
 				...this.serverConfig.sounds,
 				...((this.userOverrides as any).sounds || {}),
@@ -205,20 +219,17 @@ export default class AssetConfigSystem extends System {
 	}
 
 	public setUserConfig(partial: Partial<AssetConfig>): void {
-		if (partial.trainModel !== undefined) {
-			(this.userOverrides as any).trainModel = partial.trainModel;
-		}
-		if (partial.locomotiveModel !== undefined) {
-			(this.userOverrides as any).locomotiveModel = partial.locomotiveModel;
+		if (partial.trainSlots !== undefined) {
+			(this.userOverrides as any).trainSlots = partial.trainSlots;
+			delete (this.userOverrides as any).trainModel;
+			delete (this.userOverrides as any).locomotiveModel;
+			delete (this.userOverrides as any).carCount;
 		}
 		if (partial.trackModel !== undefined) {
 			(this.userOverrides as any).trackModel = partial.trackModel;
 		}
 		if (partial.stationModel !== undefined) {
 			(this.userOverrides as any).stationModel = partial.stationModel;
-		}
-		if (partial.carCount !== undefined) {
-			(this.userOverrides as any).carCount = partial.carCount;
 		}
 		if (partial.sounds) {
 			if (!(this.userOverrides as any).sounds) {
@@ -343,16 +354,17 @@ export default class AssetConfigSystem extends System {
 				this.lastLocalStorageHash = raw;
 				if (raw) {
 					const parsed = JSON.parse(raw);
+					const oldSlots = JSON.stringify((this.userOverrides as any).trainSlots || []);
+					const newSlots = JSON.stringify(parsed.trainSlots || []);
 					const changed =
-						(parsed.trainModel && parsed.trainModel !== (this.userOverrides as any).trainModel) ||
-						(parsed.locomotiveModel && parsed.locomotiveModel !== (this.userOverrides as any).locomotiveModel) ||
+						oldSlots !== newSlots ||
 						(parsed.trackModel && parsed.trackModel !== (this.userOverrides as any).trackModel) ||
 						(parsed.stationModel && parsed.stationModel !== (this.userOverrides as any).stationModel);
 
 					if (changed) {
 						this.userOverrides = parsed;
 						this.rebuildMergedConfig();
-						console.log('[AssetConfig] Detected localStorage change, config updated:', JSON.stringify(this.mergedConfig));
+						console.log('[AssetConfig] Detected localStorage change, config updated');
 					}
 				}
 			}

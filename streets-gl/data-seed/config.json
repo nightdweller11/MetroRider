@@ -1,8 +1,7 @@
 {
-  "trainModel": "locomotive-classic",
+  "trainSlots": ["locomotive-classic", "procedural-default", "procedural-default"],
   "trackModel": "procedural-default",
   "stationModel": "station-platform-basic",
-  "carCount": 3,
   "sounds": {
     "horn": "metro-horn",
     "engine": "procedural",

@@ -9,6 +9,34 @@ interface Props {
 let sharedRenderer: THREE.WebGLRenderer | null = null;
 let rendererRefCount = 0;
 
+const snapshotCache = new Map<string, string>();
+
+const SESSION_KEY_PREFIX = 'model-preview:';
+
+function getCachedSnapshot(modelPath: string): string | null {
+	const mem = snapshotCache.get(modelPath);
+	if (mem) return mem;
+	try {
+		const stored = sessionStorage.getItem(SESSION_KEY_PREFIX + modelPath);
+		if (stored) {
+			snapshotCache.set(modelPath, stored);
+			return stored;
+		}
+	} catch (e) {
+		// sessionStorage unavailable
+	}
+	return null;
+}
+
+function setCachedSnapshot(modelPath: string, dataUrl: string): void {
+	snapshotCache.set(modelPath, dataUrl);
+	try {
+		sessionStorage.setItem(SESSION_KEY_PREFIX + modelPath, dataUrl);
+	} catch (e) {
+		// storage full or unavailable
+	}
+}
+
 function getSharedRenderer(): THREE.WebGLRenderer {
 	if (!sharedRenderer) {
 		sharedRenderer = new THREE.WebGLRenderer({antialias: true, alpha: true});
@@ -28,13 +56,35 @@ function releaseSharedRenderer(): void {
 	}
 }
 
+function createCaseInsensitiveLoader(modelPath: string): GLTFLoader {
+	const manager = new THREE.LoadingManager();
+	const baseUrl = modelPath.substring(0, modelPath.lastIndexOf('/') + 1);
+	manager.setURLModifier((url: string): string => {
+		if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http')) return url;
+		if (url === modelPath) return url;
+		const relative = url.startsWith(baseUrl) ? url.substring(baseUrl.length) : url;
+		const lowered = relative.split('/').map(s => s.toLowerCase()).join('/');
+		if (lowered !== relative) {
+			return baseUrl + lowered;
+		}
+		return url;
+	});
+	return new GLTFLoader(manager);
+}
+
 export default function ModelPreview({modelPath}: Props): React.ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
-	const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
+	const [imageDataUrl, setImageDataUrl] = useState<string | null>(() => getCachedSnapshot(modelPath));
 	const [loadError, setLoadError] = useState(false);
 
 	useEffect((): (() => void) => {
 		let cancelled = false;
+
+		const cached = getCachedSnapshot(modelPath);
+		if (cached) {
+			setImageDataUrl(cached);
+			return (): void => { cancelled = true; };
+		}
 
 		const renderSnapshot = (): void => {
 			const renderer = getSharedRenderer();
@@ -53,7 +103,7 @@ export default function ModelPreview({modelPath}: Props): React.ReactElement {
 			fillLight.position.set(-4, 2, -3);
 			scene.add(fillLight);
 
-			const loader = new GLTFLoader();
+			const loader = createCaseInsensitiveLoader(modelPath);
 			loader.load(
 				modelPath,
 				(gltf): void => {
@@ -79,6 +129,7 @@ export default function ModelPreview({modelPath}: Props): React.ReactElement {
 					try {
 						const dataUrl = renderer.domElement.toDataURL('image/png');
 						if (!cancelled) {
+							setCachedSnapshot(modelPath, dataUrl);
 							setImageDataUrl(dataUrl);
 						}
 					} catch (err) {

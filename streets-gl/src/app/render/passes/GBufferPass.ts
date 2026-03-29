@@ -514,7 +514,7 @@ export default class GBufferPass extends Pass<{
 
 		const camera = this.manager.sceneSystem.objects.camera;
 		const allMeshes = [
-			trainRenderingSystem.trainMesh,
+			...trainRenderingSystem.carMeshes,
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
 		].filter(Boolean);

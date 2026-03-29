@@ -14,22 +14,36 @@ interface SoundConfig {
 }
 
 interface AssetConfig {
-	trainModel: string;
+	trainSlots: string[];
 	trackModel: string;
 	stationModel: string;
-	carCount: number;
 	sounds: SoundConfig;
 }
 
-function mergeConfig(serverConfig: AssetConfig, userOverrides: Partial<AssetConfig>): AssetConfig {
+function migrateToSlots(raw: any): string[] | null {
+	if (Array.isArray(raw.trainSlots) && raw.trainSlots.length > 0) return raw.trainSlots;
+	if (raw.trainModel || raw.locomotiveModel || raw.carCount) {
+		const car = raw.trainModel || 'procedural-default';
+		const loco = raw.locomotiveModel || 'procedural-default';
+		const count = raw.carCount ?? 3;
+		if (loco !== 'procedural-default' && loco !== car) return [loco, ...Array(count).fill(car)];
+		return Array(count).fill(car);
+	}
+	return null;
+}
+
+const DEFAULT_SLOTS = ['procedural-default', 'procedural-default', 'procedural-default'];
+
+function mergeConfig(serverConfig: any, userOverrides: any): AssetConfig {
+	const userSlots = migrateToSlots(userOverrides);
+	const serverSlots = migrateToSlots(serverConfig) || [...DEFAULT_SLOTS];
 	return {
-		trainModel: (userOverrides as any).trainModel || serverConfig.trainModel,
-		trackModel: (userOverrides as any).trackModel || serverConfig.trackModel,
-		stationModel: (userOverrides as any).stationModel || serverConfig.stationModel,
-		carCount: (userOverrides as any).carCount ?? serverConfig.carCount ?? 3,
+		trainSlots: userSlots || serverSlots,
+		trackModel: userOverrides.trackModel || serverConfig.trackModel,
+		stationModel: userOverrides.stationModel || serverConfig.stationModel,
 		sounds: {
 			...serverConfig.sounds,
-			...((userOverrides as any).sounds || {}),
+			...(userOverrides.sounds || {}),
 		},
 	};
 }
@@ -133,41 +147,39 @@ function sampleTextureColors(
 	return outColors;
 }
 
-describe('Config merge with carCount', () => {
-	const serverConfig: AssetConfig = {
-		trainModel: 'procedural-default',
+describe('Config merge with trainSlots', () => {
+	const serverConfig = {
+		trainSlots: ['procedural-default', 'procedural-default', 'procedural-default'],
 		trackModel: 'procedural-default',
 		stationModel: 'procedural-default',
-		carCount: 3,
 		sounds: {horn: 'procedural', engine: 'procedural', rail: 'procedural', wind: 'procedural', brake: 'procedural', doorChime: 'procedural', stationChime: 'procedural'},
 	};
 
-	test('default carCount is 3', () => {
+	test('default has 3 slots', () => {
 		const result = mergeConfig(serverConfig, {});
-		expect(result.carCount).toBe(3);
+		expect(result.trainSlots.length).toBe(3);
 	});
 
-	test('user overrides carCount', () => {
-		const result = mergeConfig(serverConfig, {carCount: 5} as any);
-		expect(result.carCount).toBe(5);
+	test('user overrides trainSlots', () => {
+		const result = mergeConfig(serverConfig, {trainSlots: ['a', 'b', 'c', 'd', 'e']});
+		expect(result.trainSlots.length).toBe(5);
 	});
 
-	test('user overrides carCount to 1', () => {
-		const result = mergeConfig(serverConfig, {carCount: 1} as any);
-		expect(result.carCount).toBe(1);
+	test('user overrides to 1 slot', () => {
+		const result = mergeConfig(serverConfig, {trainSlots: ['loco-a']});
+		expect(result.trainSlots.length).toBe(1);
+		expect(result.trainSlots[0]).toBe('loco-a');
 	});
 
-	test('missing carCount in server config defaults to 3', () => {
-		const noCarCount = {...serverConfig} as any;
-		delete noCarCount.carCount;
-		const result = mergeConfig(noCarCount, {});
-		expect(result.carCount).toBe(3);
+	test('backward compat: old carCount migrates to correct number of slots', () => {
+		const result = mergeConfig({trainModel: 'subway-a', carCount: 6, trackModel: 'procedural-default', stationModel: 'procedural-default', sounds: serverConfig.sounds}, {});
+		expect(result.trainSlots.length).toBe(6);
+		expect(result.trainSlots[0]).toBe('subway-a');
 	});
 
-	test('user model override and carCount combined', () => {
-		const result = mergeConfig(serverConfig, {trainModel: 'kenney-subway-a', carCount: 6} as any);
-		expect(result.trainModel).toBe('kenney-subway-a');
-		expect(result.carCount).toBe(6);
+	test('mixed slots work correctly', () => {
+		const result = mergeConfig(serverConfig, {trainSlots: ['loco', 'car-a', 'car-b', 'car-a']});
+		expect(result.trainSlots).toEqual(['loco', 'car-a', 'car-b', 'car-a']);
 	});
 });
 
@@ -363,22 +375,22 @@ describe('GLB JSON structure validation', () => {
 });
 
 describe('localStorage change detection', () => {
-	test('detects model change from localStorage raw string comparison', () => {
-		const oldRaw = JSON.stringify({trainModel: 'procedural-default'});
-		const newRaw = JSON.stringify({trainModel: 'kenney-subway-a'});
+	test('detects slot change from localStorage raw string comparison', () => {
+		const oldRaw = JSON.stringify({trainSlots: ['procedural-default']});
+		const newRaw = JSON.stringify({trainSlots: ['kenney-subway-a']});
 		expect(oldRaw !== newRaw).toBe(true);
 	});
 
 	test('same config produces same raw string', () => {
-		const config = {trainModel: 'kenney-subway-a', carCount: 3};
+		const config = {trainSlots: ['kenney-subway-a', 'kenney-subway-a', 'kenney-subway-a']};
 		const raw1 = JSON.stringify(config);
 		const raw2 = JSON.stringify(config);
 		expect(raw1).toBe(raw2);
 	});
 
-	test('carCount change produces different raw string', () => {
-		const config1 = JSON.stringify({trainModel: 'kenney-subway-a', carCount: 3});
-		const config2 = JSON.stringify({trainModel: 'kenney-subway-a', carCount: 5});
+	test('slot count change produces different raw string', () => {
+		const config1 = JSON.stringify({trainSlots: ['a', 'a', 'a']});
+		const config2 = JSON.stringify({trainSlots: ['a', 'a', 'a', 'a', 'a']});
 		expect(config1 !== config2).toBe(true);
 	});
 });

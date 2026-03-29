@@ -13,23 +13,22 @@ import {debugLog} from '~/app/game/debug';
 const TRACK_HEIGHT_OFFSET = 0.05;
 const STATION_PLATFORM_OFFSET = 7;
 const TARGET_CAR_WIDTH = 3.0;
-const DEFAULT_CAR_COUNT = 3;
-const CAR_GAP = 0.5;
+const CAR_GAP = 0.15;
 const TARGET_STATION_LENGTH = 40;
 const MAX_STATION_SCALE = 100;
 const MIN_STATION_SCALE = 0.01;
 
 export default class TrainRenderingSystem extends System {
-	public trainMesh: TrainMeshObject | null = null;
+	public carMeshes: TrainMeshObject[] = [];
 	public trackMesh: TrainMeshObject | null = null;
 	public stationMeshes: TrainMeshObject[] = [];
 
+	private carOffsets: number[] = [];
 	private lastLineIdx: number = -1;
 	private terrainCheckTimer: number = 0;
 	private lastTerrainSample: number = 0;
 	private terrainSettled: boolean = false;
-	private lastTrainModelId: string = '';
-	private lastLocoModelId: string = '';
+	private lastSlotsHash: string = '';
 	private lastStationModelId: string = '';
 	private glbCache: Map<string, GeometryBuffers> = new Map();
 	private catalogReady: boolean = false;
@@ -54,11 +53,11 @@ export default class TrainRenderingSystem extends System {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 		const ls = trainSystem?.getCurrentLine();
 
-		const locoId = config.locomotiveModel || 'procedural-default';
-		if (config.trainModel !== this.lastTrainModelId || locoId !== this.lastLocoModelId) {
-			debugLog(`[TrainRenderingSystem] Config changed: train=${this.lastTrainModelId}->${config.trainModel}, loco=${this.lastLocoModelId}->${locoId}`);
+		const slotsHash = JSON.stringify(config.trainSlots);
+		if (slotsHash !== this.lastSlotsHash) {
+			debugLog(`[TrainRenderingSystem] Config changed: slots updated`);
 			if (ls) {
-				this.rebuildTrainMesh(ls.parsed.color);
+				this.rebuildTrainFromSlots(config.trainSlots, ls.parsed.color);
 			}
 		}
 
@@ -77,7 +76,9 @@ export default class TrainRenderingSystem extends System {
 		const ls = trainSystem.getCurrentLine();
 		if (!ls) return;
 
-		this.rebuildTrainMesh(ls.parsed.color);
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const slots = assetConfig?.getConfig().trainSlots || ['procedural-default', 'procedural-default', 'procedural-default'];
+		this.rebuildTrainFromSlots(slots, ls.parsed.color);
 		this.rebuildTrack(trainSystem);
 		this.rebuildStations(trainSystem);
 	}
@@ -89,297 +90,218 @@ export default class TrainRenderingSystem extends System {
 		return h ?? 0;
 	}
 
-	private rebuildTrainMesh(color: string): void {
-		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
-		if (!assetConfig) {
-			this.applyTrainBuffers(buildTrainCarGeometry(color));
-			return;
+	private removeCarMeshes(): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		for (const mesh of this.carMeshes) {
+			if (sceneSystem) sceneSystem.objects.wrapper.remove(mesh);
 		}
-		const config = assetConfig.getConfig();
-		const catalog = assetConfig.getCatalog();
-		const carModelId = config.trainModel || 'procedural-default';
-		const locoModelId = config.locomotiveModel || 'procedural-default';
-		const carCount = config.carCount ?? DEFAULT_CAR_COUNT;
-
-		this.lastTrainModelId = carModelId;
-		this.lastLocoModelId = locoModelId;
-
-		const hasDistinctLoco = locoModelId !== 'procedural-default' && locoModelId !== carModelId;
-
-		if (carModelId !== 'procedural-default' || hasDistinctLoco) {
-			if (!catalog) {
-				debugLog(`[TrainRenderingSystem] Catalog not loaded yet, will retry`);
-				this.pendingModelRebuild = true;
-				this.applyTrainBuffers(buildTrainCarGeometry(color));
-				return;
-			}
-
-			if (hasDistinctLoco) {
-				this.loadLocoAndCars(catalog, assetConfig, locoModelId, carModelId, carCount, color);
-			} else if (carModelId !== 'procedural-default') {
-				const entry = catalog.models.trains.find(e => e.id === carModelId);
-				if (entry?.path) {
-					if (this.glbCache.has(carModelId)) {
-						const cached = this.glbCache.get(carModelId);
-						if (cached) {
-							const assembled = this.assembleMultiCar(cached, carCount);
-							this.applyTrainBuffers(assembled);
-							debugLog(`[TrainRenderingSystem] Applied cached car model: ${carModelId} (${carCount} cars)`);
-							return;
-						}
-					}
-					const url = assetConfig.getAssetUrl(entry.path);
-					debugLog(`[TrainRenderingSystem] Loading GLB model: ${carModelId} from ${url}`);
-					this.loadGLBModel(url, carModelId, color, carCount);
-					return;
-				} else {
-					console.warn(`[TrainRenderingSystem] No path for car model: ${carModelId}`);
-				}
-			}
-
-			if (hasDistinctLoco) return;
-		}
-
-		this.applyTrainBuffers(buildTrainCarGeometry(color));
+		this.carMeshes = [];
+		this.carOffsets = [];
 	}
 
-	private async loadLocoAndCars(
-		catalog: any,
-		assetConfig: AssetConfigSystem,
-		locoModelId: string,
-		carModelId: string,
-		carCount: number,
-		fallbackColor: string,
-	): Promise<void> {
-		try {
-			const locoEntry = catalog.models.trains.find((e: any) => e.id === locoModelId);
-			const carEntry = carModelId !== 'procedural-default'
-				? catalog.models.trains.find((e: any) => e.id === carModelId)
-				: null;
-
-			if (!locoEntry?.path) {
-				console.warn(`[TrainRenderingSystem] No path for locomotive model: ${locoModelId}`);
-				this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
-				return;
-			}
-
-			let locoBuffers: GeometryBuffers | null = this.glbCache.get(locoModelId) || null;
-			if (!locoBuffers) {
-				const url = assetConfig.getAssetUrl(locoEntry.path);
-				debugLog(`[TrainRenderingSystem] Loading locomotive GLB: ${locoModelId}`);
-				const resp = await fetch(url);
-				if (!resp.ok) throw new Error(`HTTP ${resp.status} loading loco ${url}`);
-				const ab = await resp.arrayBuffer();
-				const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-				locoBuffers = await this.parseGLBWithTextures(ab, baseUrl);
-				if (locoBuffers) this.glbCache.set(locoModelId, locoBuffers);
-			}
-
-			if (!locoBuffers) {
-				console.error(`[TrainRenderingSystem] Failed to parse loco GLB: ${locoModelId}`);
-				this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
-				return;
-			}
-
-			let carBuffers: GeometryBuffers | null = null;
-			if (carEntry?.path && carCount > 0) {
-				carBuffers = this.glbCache.get(carModelId) || null;
-				if (!carBuffers) {
-					const url = assetConfig.getAssetUrl(carEntry.path);
-					debugLog(`[TrainRenderingSystem] Loading car GLB: ${carModelId}`);
-					const resp = await fetch(url);
-					if (!resp.ok) throw new Error(`HTTP ${resp.status} loading car ${url}`);
-					const ab = await resp.arrayBuffer();
-					const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-					carBuffers = await this.parseGLBWithTextures(ab, baseUrl);
-					if (carBuffers) this.glbCache.set(carModelId, carBuffers);
-				}
-			}
-
-			const assembled = this.assembleLocoAndCars(locoBuffers, carBuffers, carCount);
-			this.applyTrainBuffers(assembled);
-			debugLog(`[TrainRenderingSystem] Assembled loco + ${carCount} cars (loco=${locoModelId}, car=${carModelId})`);
-		} catch (err) {
-			console.error(`[TrainRenderingSystem] Failed to load loco+car models:`, err);
-			this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
-		}
-	}
-
-	private applyTrainBuffers(buffers: GeometryBuffers): void {
-		if (this.trainMesh) {
-			this.trainMesh.setBuffers(buffers);
-		} else {
-			this.trainMesh = new TrainMeshObject(buffers);
-			const sceneSystem = this.systemManager.getSystem(SceneSystem);
-			if (sceneSystem) {
-				sceneSystem.objects.wrapper.add(this.trainMesh);
-			}
-		}
-	}
-
-	private async loadGLBModel(url: string, modelId: string, fallbackColor: string, carCount: number): Promise<void> {
-		try {
-			const response = await fetch(url);
-			if (!response.ok) {
-				throw new Error(`HTTP ${response.status} loading ${url}`);
-			}
-			const arrayBuffer = await response.arrayBuffer();
-			const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-			const singleCar = await this.parseGLBWithTextures(arrayBuffer, baseUrl);
-
-			if (singleCar) {
-				this.glbCache.set(modelId, singleCar);
-				const assembled = this.assembleMultiCar(singleCar, carCount);
-				this.applyTrainBuffers(assembled);
-				debugLog(`[TrainRenderingSystem] Loaded GLB: ${modelId} (${singleCar.position.length / 3} verts/car, ${carCount} cars)`);
-			} else {
-				console.error(`[TrainRenderingSystem] Failed to parse GLB: ${modelId}`);
-				this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
-			}
-		} catch (err) {
-			console.error(`[TrainRenderingSystem] Failed to load GLB model ${modelId}:`, err);
-			this.applyTrainBuffers(buildTrainCarGeometry(fallbackColor));
-		}
-	}
-
-	private assembleMultiCar(singleCar: GeometryBuffers, carCount: number): GeometryBuffers {
-		const vertCount = singleCar.position.length / 3;
-		const idxCount = singleCar.indices.length;
-
+	private getCarLength(buf: GeometryBuffers): number {
 		let minZ = Infinity, maxZ = -Infinity;
-		for (let i = 0; i < vertCount; i++) {
-			const z = singleCar.position[i * 3 + 2];
+		const vc = buf.position.length / 3;
+		for (let i = 0; i < vc; i++) {
+			const z = buf.position[i * 3 + 2];
 			if (z < minZ) minZ = z;
 			if (z > maxZ) maxZ = z;
 		}
-		const carLength = maxZ - minZ;
-		const spacing = carLength + CAR_GAP;
-
-		const totalVerts = vertCount * carCount;
-		const totalIdx = idxCount * carCount;
-		const positions = new Float32Array(totalVerts * 3);
-		const normals = new Float32Array(totalVerts * 3);
-		const colors = new Float32Array(totalVerts * 3);
-		const indices = new Uint32Array(totalIdx);
-
-		for (let c = 0; c < carCount; c++) {
-			const zOffset = (c - (carCount - 1) / 2) * spacing;
-			const vBase = c * vertCount;
-
-			for (let v = 0; v < vertCount; v++) {
-				positions[(vBase + v) * 3] = singleCar.position[v * 3];
-				positions[(vBase + v) * 3 + 1] = singleCar.position[v * 3 + 1];
-				positions[(vBase + v) * 3 + 2] = singleCar.position[v * 3 + 2] + zOffset;
-
-				normals[(vBase + v) * 3] = singleCar.normal[v * 3];
-				normals[(vBase + v) * 3 + 1] = singleCar.normal[v * 3 + 1];
-				normals[(vBase + v) * 3 + 2] = singleCar.normal[v * 3 + 2];
-
-				colors[(vBase + v) * 3] = singleCar.color[v * 3];
-				colors[(vBase + v) * 3 + 1] = singleCar.color[v * 3 + 1];
-				colors[(vBase + v) * 3 + 2] = singleCar.color[v * 3 + 2];
-			}
-
-			const iBase = c * idxCount;
-			for (let i = 0; i < idxCount; i++) {
-				indices[iBase + i] = singleCar.indices[i] + vBase;
-			}
-		}
-
-		return {position: positions, normal: normals, color: colors, indices};
+		return maxZ - minZ;
 	}
 
-	private assembleLocoAndCars(
-		loco: GeometryBuffers,
-		car: GeometryBuffers | null,
-		carCount: number,
-	): GeometryBuffers {
-		const getZExtent = (buf: GeometryBuffers): {minZ: number; maxZ: number; length: number} => {
-			let mn = Infinity, mx = -Infinity;
-			const vc = buf.position.length / 3;
-			for (let i = 0; i < vc; i++) {
-				const z = buf.position[i * 3 + 2];
-				if (z < mn) mn = z;
-				if (z > mx) mx = z;
+	private rebuildTrainFromSlots(slots: string[], fallbackColor: string): void {
+		this.lastSlotsHash = JSON.stringify(slots);
+		this.removeCarMeshes();
+
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const catalog = assetConfig?.getCatalog();
+
+		const allProcedural = slots.every(s => s === 'procedural-default');
+		if (!allProcedural && !catalog) {
+			debugLog('[TrainRenderingSystem] Catalog not loaded yet, will retry');
+			this.pendingModelRebuild = true;
+			this.applyProceduralFallback(slots.length, fallbackColor);
+			return;
+		}
+
+		const uniqueIds = [...new Set(slots.filter(s => s !== 'procedural-default'))];
+		const toLoad: {id: string; url: string}[] = [];
+		for (const id of uniqueIds) {
+			if (this.glbCache.has(id)) continue;
+			const entry = catalog?.models.trains.find((e: any) => e.id === id);
+			if (entry?.path && assetConfig) {
+				toLoad.push({id, url: assetConfig.getAssetUrl(entry.path)});
+			} else {
+				console.warn(`[TrainRenderingSystem] No path for model: ${id}`);
 			}
-			return {minZ: mn, maxZ: mx, length: mx - mn};
+		}
+
+		if (toLoad.length > 0) {
+			this.loadAndBuildSlots(toLoad, slots, fallbackColor);
+		} else {
+			this.buildCarMeshes(slots, fallbackColor);
+		}
+	}
+
+	private async loadAndBuildSlots(
+		toLoad: {id: string; url: string}[],
+		slots: string[],
+		fallbackColor: string,
+	): Promise<void> {
+		try {
+			await Promise.all(toLoad.map(async ({id, url}) => {
+				const resp = await fetch(url);
+				if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
+				const ab = await resp.arrayBuffer();
+				const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+				const parsed = await this.parseGLBWithTextures(ab, baseUrl);
+				if (parsed) {
+					this.glbCache.set(id, parsed);
+					debugLog(`[TrainRenderingSystem] Cached model: ${id} (${parsed.position.length / 3} verts)`);
+				} else {
+					console.error(`[TrainRenderingSystem] Failed to parse GLB: ${id}`);
+				}
+			}));
+		} catch (err) {
+			console.error('[TrainRenderingSystem] Error loading slot models:', err);
+		}
+		this.buildCarMeshes(slots, fallbackColor);
+	}
+
+	private buildCarMeshes(slots: string[], fallbackColor: string): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		if (!sceneSystem) return;
+
+		this.removeCarMeshes();
+
+		const proceduralBuf = buildTrainCarGeometry(fallbackColor);
+		const proceduralSingleCar = this.extractSingleProceduralCar(proceduralBuf);
+
+		const carLengths: number[] = [];
+		for (let i = 0; i < slots.length; i++) {
+			const modelId = slots[i];
+			let buf: GeometryBuffers;
+			if (modelId === 'procedural-default') {
+				buf = proceduralSingleCar;
+			} else {
+				buf = this.glbCache.get(modelId) || proceduralSingleCar;
+			}
+			const mesh = new TrainMeshObject({
+				position: new Float32Array(buf.position),
+				normal: new Float32Array(buf.normal),
+				color: new Float32Array(buf.color),
+				indices: new Uint32Array(buf.indices),
+			});
+			sceneSystem.objects.wrapper.add(mesh);
+			this.carMeshes.push(mesh);
+			carLengths.push(this.getCarLength(buf));
+		}
+
+		this.carOffsets = [];
+		let cumOffset = 0;
+		for (let i = 0; i < carLengths.length; i++) {
+			if (i === 0) {
+				this.carOffsets.push(0);
+				cumOffset = carLengths[0] / 2;
+			} else {
+				cumOffset += CAR_GAP + carLengths[i] / 2;
+				this.carOffsets.push(cumOffset);
+				cumOffset += carLengths[i] / 2;
+			}
+		}
+
+		debugLog(`[TrainRenderingSystem] Built ${slots.length} car meshes, offsets=[${this.carOffsets.map(o => o.toFixed(1)).join(', ')}]`);
+	}
+
+	private extractSingleProceduralCar(fullBuf: GeometryBuffers): GeometryBuffers {
+		const vertCount = fullBuf.position.length / 3;
+		const CAR_LENGTH = 20;
+		const BOGIE_GAP = 1.5;
+		const spacing = CAR_LENGTH + BOGIE_GAP;
+
+		const singlePositions: number[] = [];
+		const singleNormals: number[] = [];
+		const singleColors: number[] = [];
+		const singleIndices: number[] = [];
+		const vertMap = new Map<number, number>();
+
+		for (let i = 0; i < fullBuf.indices.length; i++) {
+			const origIdx = fullBuf.indices[i];
+			const z = fullBuf.position[origIdx * 3 + 2];
+			if (z >= -spacing / 2 && z <= spacing / 2) {
+				if (!vertMap.has(origIdx)) {
+					const newIdx = singlePositions.length / 3;
+					vertMap.set(origIdx, newIdx);
+					singlePositions.push(
+						fullBuf.position[origIdx * 3],
+						fullBuf.position[origIdx * 3 + 1],
+						fullBuf.position[origIdx * 3 + 2],
+					);
+					singleNormals.push(
+						fullBuf.normal[origIdx * 3],
+						fullBuf.normal[origIdx * 3 + 1],
+						fullBuf.normal[origIdx * 3 + 2],
+					);
+					singleColors.push(
+						fullBuf.color[origIdx * 3],
+						fullBuf.color[origIdx * 3 + 1],
+						fullBuf.color[origIdx * 3 + 2],
+					);
+				}
+			}
+		}
+
+		for (let i = 0; i < fullBuf.indices.length; i += 3) {
+			const a = fullBuf.indices[i], b = fullBuf.indices[i + 1], c = fullBuf.indices[i + 2];
+			if (vertMap.has(a) && vertMap.has(b) && vertMap.has(c)) {
+				singleIndices.push(
+					vertMap.get(a) as number,
+					vertMap.get(b) as number,
+					vertMap.get(c) as number,
+				);
+			}
+		}
+
+		return {
+			position: new Float32Array(singlePositions),
+			normal: new Float32Array(singleNormals),
+			color: new Float32Array(singleColors),
+			indices: new Uint32Array(singleIndices),
 		};
+	}
 
-		const locoZ = getZExtent(loco);
-		const effectiveCarCount = car ? carCount : 0;
-		const totalPieces = 1 + effectiveCarCount;
+	private applyProceduralFallback(slotCount: number, color: string): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		if (!sceneSystem) return;
 
-		let carZ = {minZ: 0, maxZ: 0, length: 0};
-		if (car) {
-			carZ = getZExtent(car);
+		const proceduralBuf = buildTrainCarGeometry(color);
+		const singleCar = this.extractSingleProceduralCar(proceduralBuf);
+		const carLen = this.getCarLength(singleCar);
+
+		for (let i = 0; i < slotCount; i++) {
+			const mesh = new TrainMeshObject({
+				position: new Float32Array(singleCar.position),
+				normal: new Float32Array(singleCar.normal),
+				color: new Float32Array(singleCar.color),
+				indices: new Uint32Array(singleCar.indices),
+			});
+			sceneSystem.objects.wrapper.add(mesh);
+			this.carMeshes.push(mesh);
 		}
 
-		const locoVerts = loco.position.length / 3;
-		const locoIdxCount = loco.indices.length;
-		const carVerts = car ? car.position.length / 3 : 0;
-		const carIdxCount = car ? car.indices.length : 0;
-
-		const totalVerts = locoVerts + carVerts * effectiveCarCount;
-		const totalIdx = locoIdxCount + carIdxCount * effectiveCarCount;
-
-		const positions = new Float32Array(totalVerts * 3);
-		const normals = new Float32Array(totalVerts * 3);
-		const colors = new Float32Array(totalVerts * 3);
-		const indices = new Uint32Array(totalIdx);
-
-		const totalTrainLength = locoZ.length + effectiveCarCount * (carZ.length + CAR_GAP) + (effectiveCarCount > 0 ? CAR_GAP : 0);
-		const frontOffset = totalTrainLength / 2;
-		const locoOffset = frontOffset - locoZ.length / 2;
-
-		for (let v = 0; v < locoVerts; v++) {
-			positions[v * 3] = loco.position[v * 3];
-			positions[v * 3 + 1] = loco.position[v * 3 + 1];
-			positions[v * 3 + 2] = loco.position[v * 3 + 2] + locoOffset;
-			normals[v * 3] = loco.normal[v * 3];
-			normals[v * 3 + 1] = loco.normal[v * 3 + 1];
-			normals[v * 3 + 2] = loco.normal[v * 3 + 2];
-			colors[v * 3] = loco.color[v * 3];
-			colors[v * 3 + 1] = loco.color[v * 3 + 1];
-			colors[v * 3 + 2] = loco.color[v * 3 + 2];
-		}
-		for (let i = 0; i < locoIdxCount; i++) {
-			indices[i] = loco.indices[i];
-		}
-
-		if (car) {
-			const carSpacing = carZ.length + CAR_GAP;
-			let carStartZ = locoOffset - locoZ.length / 2 - CAR_GAP - carZ.length / 2;
-
-			for (let c = 0; c < effectiveCarCount; c++) {
-				const zOff = carStartZ - c * carSpacing;
-				const vBase = locoVerts + c * carVerts;
-
-				for (let v = 0; v < carVerts; v++) {
-					positions[(vBase + v) * 3] = car.position[v * 3];
-					positions[(vBase + v) * 3 + 1] = car.position[v * 3 + 1];
-					positions[(vBase + v) * 3 + 2] = car.position[v * 3 + 2] + zOff;
-					normals[(vBase + v) * 3] = car.normal[v * 3];
-					normals[(vBase + v) * 3 + 1] = car.normal[v * 3 + 1];
-					normals[(vBase + v) * 3 + 2] = car.normal[v * 3 + 2];
-					colors[(vBase + v) * 3] = car.color[v * 3];
-					colors[(vBase + v) * 3 + 1] = car.color[v * 3 + 1];
-					colors[(vBase + v) * 3 + 2] = car.color[v * 3 + 2];
-				}
-
-				const iBase = locoIdxCount + c * carIdxCount;
-				for (let i = 0; i < carIdxCount; i++) {
-					indices[iBase + i] = car.indices[i] + vBase;
-				}
+		this.carOffsets = [];
+		let cumOffset = 0;
+		for (let i = 0; i < slotCount; i++) {
+			if (i === 0) {
+				this.carOffsets.push(0);
+				cumOffset = carLen / 2;
+			} else {
+				cumOffset += CAR_GAP + carLen / 2;
+				this.carOffsets.push(cumOffset);
+				cumOffset += carLen / 2;
 			}
 		}
-
-		debugLog(
-			`[TrainRenderingSystem] AssembleLocoAndCars: loco=${locoVerts} verts, ` +
-			`car=${carVerts} verts x ${effectiveCarCount}, total=${totalVerts} verts, ` +
-			`total length=${totalTrainLength.toFixed(1)}m`
-		);
-
-		return {position: positions, normal: normals, color: colors, indices};
 	}
 
 	private async parseGLBWithTextures(buffer: ArrayBuffer, baseUrl: string, skipScaling = false): Promise<GeometryBuffers | null> {
@@ -1199,7 +1121,10 @@ export default class TrainRenderingSystem extends System {
 				this.pendingModelRebuild = false;
 				console.log('[TrainRenderingSystem] Catalog now available, rebuilding model');
 				const ls = trainSystem.getCurrentLine();
-				if (ls) this.rebuildTrainMesh(ls.parsed.color);
+				if (ls) {
+					const slots = assetConfig.getConfig().trainSlots || ['procedural-default'];
+					this.rebuildTrainFromSlots(slots, ls.parsed.color);
+				}
 			}
 		}
 
@@ -1209,12 +1134,17 @@ export default class TrainRenderingSystem extends System {
 			this.pollConfigChanges(trainSystem);
 		}
 
-		if (!trainSystem.gameActive || !trainSystem.trainPosition || !this.trainMesh) return;
+		if (!trainSystem.gameActive || !trainSystem.trainPosition || this.carMeshes.length === 0) return;
 
-		const tp = trainSystem.trainPosition;
-		this.trainMesh.position.set(tp.x, tp.height, tp.y);
-		this.trainMesh.rotation.set(0, tp.heading, 0);
-		this.trainMesh.updateMatrix();
+		const cosLat = Math.cos(trainSystem.trainPosition.lat * Math.PI / 180);
+
+		for (let i = 0; i < this.carMeshes.length; i++) {
+			const carPos = trainSystem.getCarPosition(this.carOffsets[i] * cosLat);
+			if (!carPos) continue;
+			this.carMeshes[i].position.set(carPos.x, carPos.height, carPos.y);
+			this.carMeshes[i].rotation.set(0, carPos.heading, 0);
+			this.carMeshes[i].updateMatrix();
+		}
 	}
 
 	private pollConfigChanges(trainSystem: TrainSystem): void {
@@ -1222,13 +1152,12 @@ export default class TrainRenderingSystem extends System {
 		if (!assetConfig) return;
 
 		const config = assetConfig.getConfig();
-		const currentTrainModelId = config.trainModel || 'procedural-default';
-		const currentLocoModelId = config.locomotiveModel || 'procedural-default';
-		if (currentTrainModelId !== this.lastTrainModelId || currentLocoModelId !== this.lastLocoModelId) {
-			debugLog(`[TrainRenderingSystem] Poll detected model change: train=${this.lastTrainModelId}->${currentTrainModelId}, loco=${this.lastLocoModelId}->${currentLocoModelId}`);
+		const slotsHash = JSON.stringify(config.trainSlots);
+		if (slotsHash !== this.lastSlotsHash) {
+			debugLog('[TrainRenderingSystem] Poll detected slots change');
 			const ls = trainSystem.getCurrentLine();
 			if (ls) {
-				this.rebuildTrainMesh(ls.parsed.color);
+				this.rebuildTrainFromSlots(config.trainSlots, ls.parsed.color);
 			}
 		}
 

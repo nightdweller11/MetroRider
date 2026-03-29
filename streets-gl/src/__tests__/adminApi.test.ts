@@ -34,7 +34,7 @@ beforeAll(() => {
 	fs.writeFileSync(TOKEN_PATH, ADMIN_TOKEN, 'utf-8');
 
 	const defaultConfig = {
-		trainModel: 'procedural-default',
+		trainSlots: ['procedural-default', 'procedural-default', 'procedural-default'],
 		trackModel: 'procedural-default',
 		stationModel: 'procedural-default',
 		sounds: {
@@ -191,7 +191,7 @@ describe('GET /api/config', () => {
 	test('returns valid config JSON', async () => {
 		const res = await request(app).get('/api/config');
 		expect(res.status).toBe(200);
-		expect(res.body).toHaveProperty('trainModel');
+		expect(res.body).toHaveProperty('trainSlots');
 		expect(res.body).toHaveProperty('sounds');
 		expect(res.body.sounds).toHaveProperty('horn');
 	});
@@ -201,20 +201,20 @@ describe('PUT /api/config', () => {
 	test('rejects without admin token', async () => {
 		const res = await request(app)
 			.put('/api/config')
-			.send({trainModel: 'kenney-subway-a'});
+			.send({trainSlots: ['kenney-subway-a']});
 		expect(res.status).toBe(403);
 	});
 
 	test('rejects with wrong token', async () => {
 		const res = await request(app)
 			.put('/api/config?token=wrong-token')
-			.send({trainModel: 'kenney-subway-a'});
+			.send({trainSlots: ['kenney-subway-a']});
 		expect(res.status).toBe(403);
 	});
 
 	test('accepts with valid admin token', async () => {
 		const newConfig = {
-			trainModel: 'kenney-subway-a',
+			trainSlots: ['kenney-subway-a', 'kenney-subway-a', 'kenney-subway-a'],
 			trackModel: 'procedural-default',
 			stationModel: 'procedural-default',
 			sounds: {
@@ -235,7 +235,7 @@ describe('PUT /api/config', () => {
 		expect(res.body.ok).toBe(true);
 
 		const readBack = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-		expect(readBack.trainModel).toBe('kenney-subway-a');
+		expect(readBack.trainSlots).toEqual(['kenney-subway-a', 'kenney-subway-a', 'kenney-subway-a']);
 		expect(readBack.sounds.horn).toBe('metro-horn');
 	});
 });

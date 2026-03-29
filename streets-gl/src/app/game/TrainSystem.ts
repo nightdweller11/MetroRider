@@ -381,6 +381,43 @@ export default class TrainSystem extends System {
 		};
 	}
 
+	public getCarPosition(offsetFromFront: number): TrainWorldPosition | null {
+		const ls = this.getCurrentLine();
+		if (!ls) return null;
+
+		const carDist = this.physicsState.trainDist - offsetFromFront * this.physicsState.direction;
+		const pos: PositionOnTrack = getPositionAtDistance(
+			ls.track.spline.points, ls.track.cumDist, carDist,
+		);
+		const nextPos = getPositionAtDistance(
+			ls.track.spline.points, ls.track.cumDist,
+			carDist + 5 * this.physicsState.direction,
+		);
+
+		const carBearing = bearing(pos.lat, pos.lng, nextPos.lat, nextPos.lng);
+		const meterPos: Vec2 = MathUtils.degrees2meters(pos.lat, pos.lng);
+
+		const terrainSystem = this.systemManager.getSystem(TerrainSystem);
+		let height = 0;
+		if (terrainSystem && terrainSystem.terrainHeightProvider) {
+			const terrainHeight = terrainSystem.terrainHeightProvider.getHeightGlobalInterpolated(
+				meterPos.x, meterPos.y, true,
+			);
+			if (terrainHeight !== null) {
+				height = terrainHeight;
+			}
+		}
+
+		return {
+			x: meterPos.x,
+			y: meterPos.y,
+			height: height + 0.4,
+			heading: Math.PI / 2 - MathUtils.toRad(carBearing),
+			lat: pos.lat,
+			lon: pos.lng,
+		};
+	}
+
 	private lastStationChimeIdx: number = -1;
 
 	private updateStationState(ls: LineState): void {

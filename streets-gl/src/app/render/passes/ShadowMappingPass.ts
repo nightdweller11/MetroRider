@@ -259,7 +259,7 @@ export default class ShadowMappingPass extends Pass<{
 		if (!trainRenderingSystem) return;
 
 		const allMeshes = [
-			trainRenderingSystem.trainMesh,
+			...trainRenderingSystem.carMeshes,
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
 		].filter(Boolean);
