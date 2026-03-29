@@ -18,6 +18,7 @@ import TextureResource from "./render-graph/resources/TextureResource";
 import SettingsContainer from "~/app/settings/SettingsContainer";
 import SettingsSystem from "~/app/systems/SettingsSystem";
 import TexturePool from "~/app/render/TexturePool";
+import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 interface SharedResources {
 	BackbufferRenderPass: RenderPassResource;
@@ -78,6 +79,7 @@ export default class PassManager {
 	public readonly settings: SettingsContainer;
 	public readonly passes: Set<Pass> = new Set();
 	public readonly texturePool: TexturePool;
+	public readonly tileMegaBuffers: TileMegaBuffers | null;
 	private readonly passMap: Map<string, Pass> = new Map();
 	private readonly sharedResources: SharedResourcesMap = new Map();
 
@@ -94,6 +96,7 @@ export default class PassManager {
 		this.renderGraph = renderGraph;
 		this.settings = settings;
 		this.texturePool = new TexturePool(renderer);
+		this.tileMegaBuffers = renderer.supportsBatchDraw ? new TileMegaBuffers(renderer) : null;
 
 		this.initSharedResources();
 		this.resize();

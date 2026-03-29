@@ -13,4 +13,5 @@ export default interface WebGL2Extensions {
 	floatLinear: OES_texture_float_linear;
 	timerQuery: EXT_disjoint_timer_query_webgl2;
 	rendererInfo: WEBGL_debug_renderer_info;
+	multiDraw: WEBGL_multi_draw | null;
 }

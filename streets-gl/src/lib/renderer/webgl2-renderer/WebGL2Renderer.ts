@@ -1,4 +1,4 @@
-import AbstractRenderer from "~/lib/renderer/abstract-renderer/AbstractRenderer";
+import AbstractRenderer, {BatchDrawParams} from "~/lib/renderer/abstract-renderer/AbstractRenderer";
 import {AbstractTexture2DParams} from "~/lib/renderer/abstract-renderer/AbstractTexture2D";
 import WebGL2Texture from "~/lib/renderer/webgl2-renderer/WebGL2Texture";
 import WebGL2Extensions from "~/lib/renderer/webgl2-renderer/WebGL2Extensions";
@@ -68,7 +68,8 @@ export default class WebGL2Renderer implements AbstractRenderer {
 			floatBlend: this.gl.getExtension("EXT_float_blend"),
 			floatLinear: this.gl.getExtension("OES_texture_float_linear"),
 			timerQuery: this.gl.getExtension("EXT_disjoint_timer_query_webgl2"),
-			rendererInfo: this.gl.getExtension("WEBGL_debug_renderer_info")
+			rendererInfo: this.gl.getExtension("WEBGL_debug_renderer_info"),
+			multiDraw: this.gl.getExtension("WEBGL_multi_draw")
 		};
 	}
 
@@ -397,6 +398,29 @@ export default class WebGL2Renderer implements AbstractRenderer {
 				resolve(result);
 			}, 1000);
 		});
+	}
+
+	public get supportsBatchDraw(): boolean {
+		return this.extensions.multiDraw !== null;
+	}
+
+	public batchDrawArrays(params: BatchDrawParams): void {
+		if (this.extensions.multiDraw) {
+			this.extensions.multiDraw.multiDrawArraysWEBGL(
+				WebGL2Constants.TRIANGLES,
+				params.firsts, 0,
+				params.counts, 0,
+				params.drawCount
+			);
+		} else {
+			for (let i = 0; i < params.drawCount; i++) {
+				this.gl.drawArrays(
+					WebGL2Constants.TRIANGLES,
+					params.firsts[i],
+					params.counts[i]
+				);
+			}
+		}
 	}
 
 	public get resolution(): {x: number; y: number} {

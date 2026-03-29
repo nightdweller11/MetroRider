@@ -14,6 +14,7 @@ import {HeightLoaderTile} from "~/app/terrain/TerrainHeightLoader";
 import ControlsSystem, {NavigationMode} from "~/app/systems/ControlsSystem";
 import Tile3DBuffers from "~/lib/tile-processing/tile3d/buffers/Tile3DBuffers";
 import SettingsSystem from "~/app/systems/SettingsSystem";
+import RenderSystem from "~/app/systems/RenderSystem";
 
 interface QueueItem {
 	position: Vec2;
@@ -100,7 +101,8 @@ export default class TileSystem extends System {
 				}
 
 				const instancedObjects = this.systemManager.getSystem(SceneSystem).objects.instancedObjects;
-				tile.load(tileData);
+				const megaBuffers = this.systemManager.getSystem(RenderSystem).tileMegaBuffers;
+				tile.load(tileData, megaBuffers);
 				tile.updateInstancesBoundingBoxes(instancedObjects);
 			}
 		});
@@ -125,7 +127,8 @@ export default class TileSystem extends System {
 			}
 		}
 
-		tile.dispose();
+		const megaBuffers = this.systemManager.getSystem(RenderSystem).tileMegaBuffers;
+		tile.dispose(megaBuffers);
 		this.tiles.delete(`${x},${y}`);
 	}
 

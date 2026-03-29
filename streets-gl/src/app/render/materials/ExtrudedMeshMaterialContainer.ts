@@ -8,8 +8,15 @@ export default class ExtrudedMeshMaterialContainer extends MaterialContainer {
 	public constructor(renderer: AbstractRenderer) {
 		super(renderer);
 
+		const defines: Record<string, string> = {};
+		if (renderer.supportsBatchDraw) {
+			defines['MULTI_DRAW_ENABLED'] = '1';
+			defines['MAX_BATCH_SIZE'] = '32';
+		}
+
 		this.material = this.renderer.createMaterial({
 			name: 'Extruded mesh material',
+			defines,
 			uniforms: [
 				{
 					name: 'modelViewMatrix',

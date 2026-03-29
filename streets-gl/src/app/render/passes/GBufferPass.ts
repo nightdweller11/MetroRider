@@ -41,6 +41,7 @@ import {AircraftPartTextures} from "~/app/render/textures/createAircraftTexture"
 import PerspectiveCamera from "~/lib/core/PerspectiveCamera";
 import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContainer";
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
+import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 export default class GBufferPass extends Pass<{
 	GBufferRenderPass: {
@@ -239,6 +240,7 @@ export default class GBufferPass extends Pass<{
 		const windowLightThreshold = this.manager.systemManager.getSystem(MapTimeSystem).windowLightThreshold;
 		const camera = this.manager.sceneSystem.objects.camera;
 		const tiles = this.manager.sceneSystem.objects.tiles;
+		const megaBuffers = this.manager.tileMegaBuffers;
 
 		this.renderer.useMaterial(this.extrudedMeshMaterial);
 
@@ -247,11 +249,36 @@ export default class GBufferPass extends Pass<{
 		this.extrudedMeshMaterial.getUniform<UniformFloat1>('windowLightThreshold', 'PerMaterial').value[0] = windowLightThreshold;
 		this.extrudedMeshMaterial.updateUniformBlock('PerMaterial');
 
+		const visibleTiles: Tile[] = [];
 		for (const tile of tiles) {
 			if (!tile.extrudedMesh || !tile.extrudedMesh.inCameraFrustum(camera)) {
 				continue;
 			}
+			visibleTiles.push(tile);
+		}
 
+		if (megaBuffers && this.renderer.supportsBatchDraw && visibleTiles.length > 0) {
+			const tilesWithSlots = visibleTiles.filter(t => t.extrudedSlot);
+
+			if (tilesWithSlots.length > 0) {
+				const tileData = tilesWithSlots.map(tile => ({
+					modelViewMatrix: new Float32Array(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values),
+					modelViewMatrixPrev: new Float32Array(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values),
+					tileId: tile.localId,
+				}));
+
+				const {buffer, byteLength} = megaBuffers.packExtrudedUBO(tileData);
+				this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
+
+				const batchParams = megaBuffers.buildBatchParams(tilesWithSlots.map(t => t.extrudedSlot));
+
+				megaBuffers.extruded.sharedMesh.bind();
+				this.renderer.batchDrawArrays(batchParams);
+				return;
+			}
+		}
+
+		for (const tile of visibleTiles) {
 			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
 			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
 

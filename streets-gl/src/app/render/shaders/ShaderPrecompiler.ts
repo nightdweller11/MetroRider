@@ -31,7 +31,13 @@ export default class ShaderPrecompiler {
 			}
 		}
 
-		let definesString = `#define SHADER_NAME ${name}\n`;
+		let definesString = '';
+
+		if ('MULTI_DRAW_ENABLED' in defines) {
+			definesString += `#extension GL_ANGLE_multi_draw : require\n`;
+		}
+
+		definesString += `#define SHADER_NAME ${name}\n`;
 
 		for (const [key, value] of Object.entries(defines)) {
 			definesString += `#define ${key} ${value}\n`;

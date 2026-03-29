@@ -92,7 +92,7 @@ export default class WebGL2Material implements AbstractMaterial {
 				const ubo = this.ubos.get(uniform.block);
 
 				if (!ubo) {
-					throw new Error();
+					continue;
 				}
 
 				ubo.setUniformValue(uniform.name, uniform.value as TypedArray);
@@ -141,6 +141,11 @@ export default class WebGL2Material implements AbstractMaterial {
 
 		const ubo = this.ubos.get(blockName);
 
+		if (!ubo) {
+			console.error(`WebGL2Material.updateUniformBlock: UBO block "${blockName}" not found in material "${this.name}"`);
+			return;
+		}
+
 		for (const uniform of this.uniforms) {
 			if (uniform.block === blockName) {
 				ubo.setUniformValue(uniform.name, uniform.value as TypedArray);
@@ -148,6 +153,18 @@ export default class WebGL2Material implements AbstractMaterial {
 		}
 
 		ubo.applyUpdates();
+	}
+
+	public updateUniformBlockRaw(blockName: string, data: ArrayBufferView, byteLength?: number): void {
+		this.renderer.useMaterial(this);
+
+		const ubo = this.ubos.get(blockName);
+		if (!ubo) {
+			console.error(`WebGL2Material.updateUniformBlockRaw: UBO block "${blockName}" not found in material "${this.name}"`);
+			return;
+		}
+
+		ubo.setRawData(data, byteLength);
 	}
 
 	private getUniformLocation(uniform: Uniform): WebGLUniformLocation {

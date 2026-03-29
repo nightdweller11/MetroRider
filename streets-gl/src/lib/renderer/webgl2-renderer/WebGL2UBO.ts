@@ -109,4 +109,15 @@ export default class WebGL2UBO {
 			this.data
 		);
 	}
+
+	public setRawData(data: ArrayBufferView, byteLength?: number): void {
+		this.bind();
+
+		if (byteLength !== undefined && byteLength < data.byteLength) {
+			const view = new Uint8Array(data.buffer, data.byteOffset, byteLength);
+			this.gl.bufferSubData(WebGL2Constants.UNIFORM_BUFFER, 0, view);
+		} else {
+			this.gl.bufferSubData(WebGL2Constants.UNIFORM_BUFFER, 0, data);
+		}
+	}
 }

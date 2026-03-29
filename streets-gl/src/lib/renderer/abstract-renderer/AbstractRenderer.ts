@@ -10,6 +10,12 @@ import AbstractAttributeBuffer, {
 	AbstractAttributeBufferParams
 } from "~/lib/renderer/abstract-renderer/AbstractAttributeBuffer";
 
+export interface BatchDrawParams {
+	firsts: Int32Array;
+	counts: Int32Array;
+	drawCount: number;
+}
+
 export default interface AbstractRenderer {
 	setSize(width: number, height: number): void;
 	createTexture2D(params: AbstractTexture2DParams): AbstractTexture2D;
@@ -23,9 +29,11 @@ export default interface AbstractRenderer {
 	createMesh(params: AbstractMeshParams): AbstractMesh;
 	beginRenderPass(renderPass: AbstractRenderPass): void;
 	useMaterial(material: AbstractMaterial): void;
+	batchDrawArrays(params: BatchDrawParams): void;
 	startTimer(): void;
 	finishTimer(): Promise<number>;
 	fence(): Promise<void>;
+	readonly supportsBatchDraw: boolean;
 	readonly rendererInfo: [string, string];
 	readonly resolution: { x: number; y: number };
 }

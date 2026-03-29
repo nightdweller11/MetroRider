@@ -86,6 +86,10 @@ export default class WebGL2Mesh implements AbstractMesh {
 		}
 	}
 
+	public bind(): void {
+		this.bindVAO(this.renderer.boundMaterial);
+	}
+
 	public draw(): void {
 		this.bindVAO(this.renderer.boundMaterial);
 

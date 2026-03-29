@@ -210,6 +210,15 @@ const Config = {
 			statusLabels: ['512px', '1024px', '2048px'],
 			statusDefault: _lowMemory ? '512' : '2048',
 			category: 'graphics'
+		},
+		shadowCascades: {
+			label: 'Shadow cascades',
+			parent: 'shadows',
+			parentStatusCondition: ['medium', 'high'],
+			status: ['2', '3'],
+			statusLabels: ['2 cascades', '3 cascades'],
+			statusDefault: _lowMemory ? '2' : '3',
+			category: 'graphics'
 		}
 	} as SettingsSchema,
 	OverpassEndpoints: [

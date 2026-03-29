@@ -50,7 +50,7 @@ export default class ProjectedMeshDepthMaterialContainer extends MaterialContain
 				}
 			],
 			defines: {
-				USE_HEIGHT: '1'
+				USE_HEIGHT: '1',
 			},
 			primitive: {
 				frontFace: RendererTypes.FrontFace.CCW,

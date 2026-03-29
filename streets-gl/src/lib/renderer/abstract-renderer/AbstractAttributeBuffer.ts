@@ -8,5 +8,6 @@ export interface AbstractAttributeBufferParams {
 export default interface AbstractAttributeBuffer {
 	data: TypedArray;
 	setData(data: TypedArray): void;
+	setSubData(data: TypedArray, byteOffset: number): void;
 	delete(): void;
 }

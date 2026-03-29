@@ -20,6 +20,7 @@ import {
 import InstancedObject from "~/app/objects/InstancedObject";
 import TerrainMask from "~/app/objects/TerrainMask";
 import EventEmitter from "~/app/EventEmitter";
+import TileMegaBuffers, {TileSlotSet} from "~/lib/renderer/TileMegaBuffers";
 
 export type InstanceBufferInterleaved = Float32Array;
 
@@ -62,6 +63,10 @@ export default class Tile extends Object3D {
 	public huggingMesh: TileHuggingMesh;
 	public terrainMaskMesh: TerrainMask;
 
+	public extrudedSlot: TileSlotSet = null;
+	public projectedSlot: TileSlotSet = null;
+	public huggingSlot: TileSlotSet = null;
+
 	public readonly usedHeightTiles: Vec2[] = [];
 
 	public terrainMaskSliceIndex: number = null;
@@ -88,13 +93,41 @@ export default class Tile extends Object3D {
 		this.updateMatrix();
 	}
 
-	public load(buffers: Tile3DBuffers): void {
+	public load(buffers: Tile3DBuffers, megaBuffers?: TileMegaBuffers): void {
 		this.updateExtrudedGeometryOffsets(buffers.extruded);
 
 		this.extrudedMesh = new TileExtrudedMesh(buffers.extruded);
 		this.projectedMesh = new TileProjectedMesh(buffers.projected);
 		this.huggingMesh = new TileHuggingMesh(buffers.hugging);
 		this.terrainMaskMesh = new TerrainMask(buffers.terrainMask.positionBuffer);
+
+		if (megaBuffers) {
+			const key = `${this.x},${this.y}`;
+
+			this.extrudedSlot = megaBuffers.allocateTile(megaBuffers.extruded, key, {
+				position: buffers.extruded.positionBuffer,
+				normal: buffers.extruded.normalBuffer,
+				color: buffers.extruded.colorBuffer,
+				uv: buffers.extruded.uvBuffer,
+				textureId: buffers.extruded.textureIdBuffer,
+				localId: buffers.extruded.localIdBuffer,
+				display: new Uint8Array(buffers.extruded.localIdBuffer.length),
+			});
+
+			this.projectedSlot = megaBuffers.allocateTile(megaBuffers.projected, key + ':proj', {
+				position: buffers.projected.positionBuffer,
+				normal: buffers.projected.normalBuffer,
+				uv: buffers.projected.uvBuffer,
+				textureId: buffers.projected.textureIdBuffer,
+			});
+
+			this.huggingSlot = megaBuffers.allocateTile(megaBuffers.hugging, key + ':hug', {
+				position: buffers.hugging.positionBuffer,
+				normal: buffers.hugging.normalBuffer,
+				uv: buffers.hugging.uvBuffer,
+				textureId: buffers.hugging.textureIdBuffer,
+			});
+		}
 
 		this.add(this.extrudedMesh, this.projectedMesh, this.huggingMesh);
 		this.updateLabelBufferList(buffers.labels);
@@ -247,8 +280,25 @@ export default class Tile extends Object3D {
 		return this.buildingVisibilityMap.get(id);
 	}
 
-	public dispose(): void  {
+	public dispose(megaBuffers?: TileMegaBuffers): void  {
 		this.disposed = true;
+
+		if (megaBuffers) {
+			const key = `${this.x},${this.y}`;
+
+			if (this.extrudedSlot) {
+				megaBuffers.freeTile(megaBuffers.extruded, key);
+				this.extrudedSlot = null;
+			}
+			if (this.projectedSlot) {
+				megaBuffers.freeTile(megaBuffers.projected, key + ':proj');
+				this.projectedSlot = null;
+			}
+			if (this.huggingSlot) {
+				megaBuffers.freeTile(megaBuffers.hugging, key + ':hug');
+				this.huggingSlot = null;
+			}
+		}
 
 		if (this.extrudedMesh) {
 			this.extrudedMesh.dispose();

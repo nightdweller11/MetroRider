@@ -24,6 +24,9 @@ import VehicleSystem from "~/app/systems/VehicleSystem";
 import {AircraftPartType} from "~/app/vehicles/aircraft/Aircraft";
 import TrainDepthMaterialContainer from "~/app/render/materials/TrainDepthMaterialContainer";
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
+import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
+import Tile from "~/app/objects/Tile";
+import Config from "~/app/Config";
 
 const SkippedAircraftParts: AircraftPartType[] = [
 	AircraftPartType.HelicopterRotorSpinning,
@@ -80,6 +83,8 @@ export default class ShadowMappingPass extends Pass<{
 		this.listenToSettings();
 	}
 
+	private shadowDrawDistance: number = Config.TileSize * 3;
+
 	private listenToSettings(): void {
 		this.manager.settings.onChange('shadows', ({statusValue}) => {
 			const csm = this.manager.sceneSystem.objects.csm;
@@ -89,11 +94,11 @@ export default class ShadowMappingPass extends Pass<{
 				csm.far = 3000;
 				csm.biasScale = 1;
 			} else if (statusValue === 'medium') {
-				csm.cascades = 3;
+				this.applyCascadeCount();
 				csm.far = 4000;
 				csm.biasScale = 1;
 			} else {
-				csm.cascades = 3;
+				this.applyCascadeCount();
 				csm.far = 5000;
 				csm.biasScale = 0.5;
 			}
@@ -109,6 +114,20 @@ export default class ShadowMappingPass extends Pass<{
 			csm.updateCascades();
 			this.updateShadowMapDescriptor();
 		}, true);
+
+		this.manager.settings.onChange('shadowCascades', () => {
+			this.applyCascadeCount();
+			const csm = this.manager.sceneSystem.objects.csm;
+			csm.updateCascades();
+			this.updateShadowMapDescriptor();
+		}, true);
+	}
+
+	private applyCascadeCount(): void {
+		const csm = this.manager.sceneSystem.objects.csm;
+		const cascadeStr = this.manager.settings.get('shadowCascades')?.statusValue;
+
+		csm.cascades = cascadeStr === '2' ? 2 : 3;
 	}
 
 	private applyShadowResolution(): void {
@@ -140,6 +159,7 @@ export default class ShadowMappingPass extends Pass<{
 
 	private renderExtrudedMeshes(shadowCamera: CSMCascadeCamera): void {
 		const tiles = this.manager.sceneSystem.objects.tiles;
+		const megaBuffers = this.manager.tileMegaBuffers;
 
 		this.renderer.useMaterial(this.extrudedMeshMaterial);
 
@@ -147,11 +167,38 @@ export default class ShadowMappingPass extends Pass<{
 		this.extrudedMeshMaterial.getUniform('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
 		this.extrudedMeshMaterial.updateUniformBlock('PerMaterial');
 
+		const mainCamera = this.manager.sceneSystem.objects.camera;
+		const visibleTiles: Tile[] = [];
 		for (const tile of tiles) {
 			if (!tile.extrudedMesh || !tile.extrudedMesh.inCameraFrustum(shadowCamera)) {
 				continue;
 			}
+			if (tile.distanceToCamera !== null && tile.distanceToCamera > this.shadowDrawDistance) {
+				continue;
+			}
+			visibleTiles.push(tile);
+		}
 
+		if (megaBuffers && this.renderer.supportsBatchDraw && visibleTiles.length > 0) {
+			const tilesWithSlots = visibleTiles.filter(t => t.extrudedSlot);
+
+			if (tilesWithSlots.length > 0) {
+				const matrices = tilesWithSlots.map(tile =>
+					new Float32Array(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values)
+				);
+
+				const {buffer, byteLength} = megaBuffers.packDepthUBO(matrices);
+				this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
+
+				const batchParams = megaBuffers.buildBatchParams(tilesWithSlots.map(t => t.extrudedSlot));
+
+				megaBuffers.extruded.sharedMesh.bind();
+				this.renderer.batchDrawArrays(batchParams);
+				return;
+			}
+		}
+
+		for (const tile of visibleTiles) {
 			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values);
 			this.extrudedMeshMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.extrudedMeshMaterial.updateUniformBlock('PerMesh');
@@ -175,6 +222,10 @@ export default class ShadowMappingPass extends Pass<{
 
 		for (const tile of tiles) {
 			if (!tile.huggingMesh || !tile.huggingMesh.inCameraFrustum(shadowCamera)) {
+				continue;
+			}
+
+			if (tile.distanceToCamera !== null && tile.distanceToCamera > this.shadowDrawDistance) {
 				continue;
 			}
 

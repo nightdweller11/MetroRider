@@ -47,5 +47,6 @@ export default interface AbstractMaterial {
 	getUniform<T extends Uniform>(name: string, block?: string): T;
 	updateUniform(name: string): void;
 	updateUniformBlock(name: string): void;
+	updateUniformBlockRaw(blockName: string, data: ArrayBufferView, byteLength?: number): void;
 	recompile(): void;
 }

@@ -29,6 +29,7 @@ import ResourceLoader from "~/app/world/ResourceLoader";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
 import ControlsSystem from "~/app/systems/ControlsSystem";
 import CursorStyleSystem from "~/app/systems/CursorStyleSystem";
+import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 export default class RenderSystem extends System {
 	private renderer: AbstractRenderer;
@@ -38,6 +39,10 @@ export default class RenderSystem extends System {
 	private renderGraphResourceFactory: RenderGraphResourceFactory;
 	private passManager: PassManager;
 	public fullScreenTriangle: FullScreenTriangle;
+
+	public get tileMegaBuffers(): TileMegaBuffers | null {
+		return this.passManager?.tileMegaBuffers ?? null;
+	}
 
 	private _cachedResolutionUI: Vec2 = new Vec2(0, 0);
 	private _cachedResolutionScene: Vec2 = new Vec2(0, 0);
