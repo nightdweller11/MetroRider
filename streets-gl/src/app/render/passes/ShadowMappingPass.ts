@@ -183,17 +183,22 @@ export default class ShadowMappingPass extends Pass<{
 			const tilesWithSlots = visibleTiles.filter(t => t.extrudedSlot);
 
 			if (tilesWithSlots.length > 0) {
-				const matrices = tilesWithSlots.map(tile =>
-					new Float32Array(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values)
-				);
-
-				const {buffer, byteLength} = megaBuffers.packDepthUBO(matrices);
-				this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
-
-				const batchParams = megaBuffers.buildBatchParams(tilesWithSlots.map(t => t.extrudedSlot));
-
 				megaBuffers.extruded.sharedMesh.bind();
-				this.renderer.batchDrawArrays(batchParams);
+
+				for (let batchStart = 0; batchStart < tilesWithSlots.length; batchStart += 32) {
+					const batchSlice = tilesWithSlots.slice(batchStart, batchStart + 32);
+
+					const matrices = batchSlice.map(tile =>
+						new Float32Array(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values)
+					);
+
+					const {buffer, byteLength} = megaBuffers.packDepthUBO(matrices);
+					this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
+
+					const batchParams = megaBuffers.buildBatchParams(batchSlice.map(t => t.extrudedSlot));
+					this.renderer.batchDrawArrays(batchParams);
+				}
+
 				return;
 			}
 		}

@@ -54,7 +54,7 @@ export default class MapWorker {
 		this.sendMessage({
 			type: WorkerMessage.ToWorkerType.Start,
 			tile: [x, y],
-			...params
+			...params,
 		});
 
 		return promise;

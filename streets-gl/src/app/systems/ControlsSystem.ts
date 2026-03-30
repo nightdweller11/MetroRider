@@ -128,7 +128,15 @@ export default class ControlsSystem extends System {
 		this.updatePositionFromState(this.state);
 	}
 
+	public isReady(): boolean {
+		return !!this.state;
+	}
+
 	public setState(lat: number, lon: number, pitch: number, yaw: number, distance: number): void {
+		if (!this.state) {
+			throw new Error('ControlsSystem not yet initialized (state is undefined)');
+		}
+
 		const position = MathUtils.degrees2meters(lat, lon);
 
 		this.state.x = position.x;

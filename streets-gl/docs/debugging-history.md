@@ -50,7 +50,7 @@ Buildings remained in the train's path despite corridor clearing code being pres
 
 ### Recommended Next Steps
 - Fix Issue 1 first (GPU mesh upload) to enable visual verification.
-- Include corridor segments in every `Start` message payload to eliminate the race condition entirely.
+- ~~Include corridor segments in every `Start` message payload to eliminate the race condition entirely.~~ **Done** — corridor segments are now included in every Start message via `MapWorker.requestTile()`.
 - Add debug overlay showing clearing statistics in real-time.
 
 ---

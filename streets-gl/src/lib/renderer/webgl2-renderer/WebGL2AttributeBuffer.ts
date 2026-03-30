@@ -47,6 +47,12 @@ export default class WebGL2AttributeBuffer implements AbstractAttributeBuffer {
 		this.renderer.gl.bindBuffer(WebGL2Constants.ARRAY_BUFFER, this.buffer);
 		this.renderer.gl.bufferSubData(WebGL2Constants.ARRAY_BUFFER, byteOffset, data);
 		this.renderer.gl.bindBuffer(WebGL2Constants.ARRAY_BUFFER, null);
+
+		if (this.data) {
+			const dst = new Uint8Array(this.data.buffer, this.data.byteOffset, this.data.byteLength);
+			const src = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+			dst.set(src, byteOffset);
+		}
 	}
 
 	public bind(): void {

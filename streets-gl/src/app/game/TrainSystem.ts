@@ -104,10 +104,7 @@ export default class TrainSystem extends System {
 		this.updateCorridorSegments();
 
 		const firstStation = ls.parsed.allPoints[0];
-		try {
-			this.moveCameraToLatLon(firstStation.lat, firstStation.lng);
-		} catch (err) {
-			console.warn('[TrainSystem] Camera not ready during init, will position on first update:', err);
+		if (!this.moveCameraToLatLon(firstStation.lat, firstStation.lng)) {
 			this.pendingCameraMove = {lat: firstStation.lat, lng: firstStation.lng};
 		}
 
@@ -199,14 +196,8 @@ export default class TrainSystem extends System {
 		this.gameActive = true;
 		this.input.enable();
 
-		this.updateCorridorSegments();
-
 		if (this.pendingCameraMove) {
-			try {
-				this.moveCameraToLatLon(this.pendingCameraMove.lat, this.pendingCameraMove.lng);
-			} catch (err) {
-				console.warn('[TrainSystem] Camera still not ready at startGame:', err);
-			}
+			this.moveCameraToLatLon(this.pendingCameraMove.lat, this.pendingCameraMove.lng);
 			this.pendingCameraMove = null;
 		}
 
@@ -308,22 +299,21 @@ export default class TrainSystem extends System {
 		return getMaxSpeed() * 3.6;
 	}
 
-	private moveCameraToLatLon(lat: number, lon: number): void {
+	private moveCameraToLatLon(lat: number, lon: number): boolean {
 		const controls = this.systemManager.getSystem(ControlsSystem);
-		if (controls) {
+		if (controls?.isReady()) {
 			controls.setState(lat, lon, 45, 0, 500);
+			return true;
 		}
+		return false;
 	}
 
 	public update(deltaTime: number): void {
 		if (!this.gameActive) return;
 
 		if (this.pendingCameraMove) {
-			try {
-				this.moveCameraToLatLon(this.pendingCameraMove.lat, this.pendingCameraMove.lng);
+			if (this.moveCameraToLatLon(this.pendingCameraMove.lat, this.pendingCameraMove.lng)) {
 				this.pendingCameraMove = null;
-			} catch (_) {
-				// still not ready
 			}
 		}
 

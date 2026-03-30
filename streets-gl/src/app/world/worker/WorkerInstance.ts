@@ -121,25 +121,22 @@ class WorkerInstance {
 			? new SegmentGrid(this.corridorSegments)
 			: null;
 		if (data.debug !== undefined) this.debug = data.debug;
-		if (this.debug) {
-			console.log(`[Worker] Received ${this.corridorSegments.length} corridor segments, grid built`);
-		}
 		return;
 	}
 
-			if (data.type === WorkerMessage.ToWorkerType.Start) {
-				this.requestTerrainHeight = data.isTerrainHeightEnabled;
-				if (data.debug !== undefined) this.debug = data.debug;
+		if (data.type === WorkerMessage.ToWorkerType.Start) {
+			this.requestTerrainHeight = data.isTerrainHeightEnabled;
+			if (data.debug !== undefined) this.debug = data.debug;
 
-				this.fetchTile(
-					x,
-					y,
-					data.overpassEndpoints,
-					data.tileServerEndpoint,
-					data.vectorTilesEndpointTemplate,
-					data.useOverpassForBuildings,
-				);
-			}
+			this.fetchTile(
+				x,
+				y,
+				data.overpassEndpoints,
+				data.tileServerEndpoint,
+				data.vectorTilesEndpointTemplate,
+				data.useOverpassForBuildings,
+			);
+		}
 		});
 	}
 
@@ -274,11 +271,12 @@ class WorkerInstance {
 
 		if (this.debug) {
 			const removedExtruded = origExtruded - collection.extruded.length;
-			console.log(
-				`[Worker] Tile ${tileX},${tileY}: corridor clearing removed ` +
-				`${removedExtruded}/${origExtruded} extruded ` +
-				`(${this.corridorSegments.length} segments)`
-			);
+			if (removedExtruded > 0) {
+				console.log(
+					`[Worker] Tile ${tileX},${tileY}: corridor clearing removed ` +
+					`${removedExtruded}/${origExtruded} extruded`
+				);
+			}
 		}
 	}
 

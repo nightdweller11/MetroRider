@@ -87,6 +87,7 @@ export default class GBufferPass extends Pass<{
 	public objectIdBuffer: Uint32Array = new Uint32Array(1);
 	public objectIdX = 0;
 	public objectIdY = 0;
+	private objectIdReadInFlight = false;
 	private fullScreenTriangle: FullScreenTriangle;
 
 	private readonly _tmpMat4A: Float32Array = new Float32Array(16);
@@ -261,19 +262,24 @@ export default class GBufferPass extends Pass<{
 			const tilesWithSlots = visibleTiles.filter(t => t.extrudedSlot);
 
 			if (tilesWithSlots.length > 0) {
-				const tileData = tilesWithSlots.map(tile => ({
-					modelViewMatrix: new Float32Array(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values),
-					modelViewMatrixPrev: new Float32Array(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values),
-					tileId: tile.localId,
-				}));
-
-				const {buffer, byteLength} = megaBuffers.packExtrudedUBO(tileData);
-				this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
-
-				const batchParams = megaBuffers.buildBatchParams(tilesWithSlots.map(t => t.extrudedSlot));
-
 				megaBuffers.extruded.sharedMesh.bind();
-				this.renderer.batchDrawArrays(batchParams);
+
+				for (let batchStart = 0; batchStart < tilesWithSlots.length; batchStart += 32) {
+					const batchSlice = tilesWithSlots.slice(batchStart, batchStart + 32);
+
+					const tileData = batchSlice.map(tile => ({
+						modelViewMatrix: new Float32Array(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values),
+						modelViewMatrixPrev: new Float32Array(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values),
+						tileId: tile.localId,
+					}));
+
+					const {buffer, byteLength} = megaBuffers.packExtrudedUBO(tileData);
+					this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
+
+					const batchParams = megaBuffers.buildBatchParams(batchSlice.map(t => t.extrudedSlot));
+					this.renderer.batchDrawArrays(batchParams);
+				}
+
 				return;
 			}
 		}
@@ -611,8 +617,19 @@ export default class GBufferPass extends Pass<{
 	}
 
 	private writeToObjectIdBuffer(): void {
+		if (this.objectIdReadInFlight) {
+			return;
+		}
+
+		this.objectIdReadInFlight = true;
 		const mainRenderPass = this.getPhysicalResource('GBufferRenderPass');
-		mainRenderPass.readColorAttachmentPixel(4, this.objectIdBuffer, this.objectIdX, this.objectIdY);
+		mainRenderPass.readColorAttachmentPixel(4, this.objectIdBuffer, this.objectIdX, this.objectIdY)
+			.then(() => {
+				this.objectIdReadInFlight = false;
+			}, (err: unknown) => {
+				this.objectIdReadInFlight = false;
+				console.error('[GBufferPass] objectId readback failed:', err);
+			});
 	}
 
 	private getInstancesOrigin(camera: Camera): Vec2 {
