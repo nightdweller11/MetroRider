@@ -75,7 +75,7 @@ export default class GameUISystem extends System {
 	private createMobileTopStrip(): void {
 		const strip = document.createElement('div');
 		strip.style.cssText = `
-			position: absolute; top: 4px; right: 4px;
+			position: absolute; top: 40px; right: 4px;
 			display: flex; flex-direction: column; gap: 4px;
 			pointer-events: auto; align-items: center;
 		`;
@@ -140,7 +140,7 @@ export default class GameUISystem extends System {
 		const wrap = document.createElement('div');
 		if (this.mobile) {
 			wrap.style.cssText = `
-				position: absolute; top: 30px; left: 4px; right: 48px;
+				position: absolute; top: 108px; left: 4px; right: 48px;
 				background: rgba(0,0,0,0.7); color: #fff; padding: 4px 10px;
 				border-radius: 6px; text-align: center; backdrop-filter: blur(10px);
 				display: none; overflow: hidden;
@@ -301,7 +301,7 @@ export default class GameUISystem extends System {
 
 	private createLineSelector(trainSystem: TrainSystem): void {
 		const m = this.mobile;
-		const topOffset = m ? 60 : 70;
+		const topOffset = m ? 112 : 70;
 
 		this.lineListWrap = document.createElement('div');
 		this.lineListWrap.style.cssText = `
@@ -410,8 +410,8 @@ export default class GameUISystem extends System {
 
 		const panel = document.createElement('div');
 		panel.style.cssText = `
-			position: absolute; top: ${m ? 60 : 70}px; right: ${m ? 8 : 20}px;
-			width: ${m ? 220 : 260}px; max-height: calc(100vh - ${m ? 100 : 120}px);
+			position: absolute; top: ${m ? 112 : 70}px; right: ${m ? 8 : 20}px;
+			width: ${m ? 220 : 260}px; max-height: calc(100vh - ${m ? 160 : 120}px);
 			background: rgba(0,0,0,0.85); border-radius: 12px;
 			backdrop-filter: blur(12px); pointer-events: auto;
 			border: 1px solid rgba(255,255,255,0.12);

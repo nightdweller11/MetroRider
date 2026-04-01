@@ -133,7 +133,7 @@ const Config = {
 			label: 'TAA',
 			status: ['off', 'on'],
 			statusLabels: ['Disabled', 'Enabled'],
-			statusDefault: _lowMemory ? 'off' : 'on',
+			statusDefault: 'on',
 			category: 'graphics'
 		},
 		dof: {
@@ -185,7 +185,7 @@ const Config = {
 		renderScale: {
 			label: 'Render resolution scale',
 			selectRange: [0.25, 1.0, 0.05],
-			selectRangeDefault: _lowMemory ? 0.65 : 1.0,
+			selectRangeDefault: 1.0,
 			category: 'graphics'
 		},
 		fpsLimit: {
