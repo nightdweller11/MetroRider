@@ -4,6 +4,7 @@ import ModelPreview from './ModelPreview';
 import SketchfabPanel from './SketchfabPanel';
 import FreesoundPanel from './FreesoundPanel';
 import TrainComposer from './TrainComposer';
+import {releaseLabel} from '~/app/game/version';
 
 interface AssetEntry {
 	id: string;
@@ -517,7 +518,13 @@ export default function SettingsPage(): React.ReactElement {
 		<div className={`settings-page ${adminMode ? 'admin-active' : ''}`}>
 			<header className="settings-header">
 				<a href="/" className="settings-back">&larr; Back to Game</a>
-				<h1>MetroRider Settings</h1>
+				<h1>
+					MetroRider Settings
+					<span
+						title={`MetroRider ${releaseLabel()}`}
+						style={{fontSize: 11, fontWeight: 600, color: '#7fb2ff', marginLeft: 10, verticalAlign: 'middle'}}
+					>{releaseLabel()}</span>
+				</h1>
 				<div className="settings-header-actions">
 					<button
 						className={`btn ${adminMode ? 'btn-admin-on' : 'btn-admin-off'}`}

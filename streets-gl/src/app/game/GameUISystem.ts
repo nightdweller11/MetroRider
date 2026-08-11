@@ -6,6 +6,14 @@ import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
 import MapWorkerSystem from '../systems/MapWorkerSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
+import {
+	releaseLabel,
+	RELEASE_VERSION,
+	RELEASE_CODENAME,
+	RELEASE_HIGHLIGHTS,
+	isReleaseAnnouncementUnseen,
+	markReleaseAnnouncementSeen,
+} from './version';
 
 
 const DEFAULT_MAP_URL = 'https://metrodreamin.com/view/QVQ2V2ZIYVpyUFEzNE1acEVLcGhlVkdqR3BPMnwxNg%3D%3D';
@@ -72,7 +80,100 @@ export default class GameUISystem extends System {
 		this.createStartButton(trainSystem);
 		this.createDebugOverlay();
 
+		// Announce a new release once per version (tracked in localStorage).
+		if (isReleaseAnnouncementUnseen()) {
+			this.showReleaseSplash();
+		}
+
 		this.initialized = true;
+	}
+
+	private releaseSplashEl: HTMLElement | null = null;
+
+	/**
+	 * Full-screen release splash: version, codename, and what the update
+	 * contains. Shown automatically once per version; reopenable any time
+	 * via the version badge on the start screen.
+	 */
+	private showReleaseSplash(): void {
+		if (this.releaseSplashEl) return;
+
+		const overlay = document.createElement('div');
+		overlay.id = 'release-splash';
+		overlay.style.cssText = `
+			position: fixed; inset: 0; z-index: 99999;
+			background: rgba(0, 0, 0, 0.78); backdrop-filter: blur(6px);
+			display: flex; align-items: center; justify-content: center;
+			pointer-events: auto; padding: 16px;
+			font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+		`;
+
+		const card = document.createElement('div');
+		card.style.cssText = `
+			background: linear-gradient(160deg, rgba(20, 28, 48, 0.98), rgba(10, 12, 20, 0.98));
+			border: 1px solid rgba(127, 178, 255, 0.35); border-radius: 16px;
+			max-width: 440px; width: 94vw; max-height: 85vh; overflow-y: auto;
+			padding: 26px 28px; color: #fff; text-align: center;
+			box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+		`;
+
+		const emblem = document.createElement('div');
+		emblem.textContent = '🔄🚇';
+		emblem.style.cssText = 'font-size: 40px; margin-bottom: 8px;';
+
+		const heading = document.createElement('div');
+		heading.textContent = RELEASE_CODENAME;
+		heading.style.cssText = 'font-size: 24px; font-weight: 700; margin-bottom: 2px;';
+
+		const versionLine = document.createElement('div');
+		versionLine.textContent = `MetroRider v${RELEASE_VERSION}`;
+		versionLine.style.cssText = 'font-size: 12px; color: #7fb2ff; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.5px;';
+
+		const blurb = document.createElement('div');
+		blurb.textContent =
+			'This update is all about going in circles — in a good way. ' +
+			'Circular metro lines finally work like real loop services, and your ' +
+			'train got a whole lot more customizable:';
+		blurb.style.cssText = 'font-size: 13px; color: #ccc; line-height: 1.55; margin-bottom: 14px; text-align: left;';
+
+		const list = document.createElement('ul');
+		list.style.cssText = 'text-align: left; margin: 0 0 18px; padding-left: 20px; color: #ddd; font-size: 13px; line-height: 1.7;';
+		for (const item of RELEASE_HIGHLIGHTS) {
+			const li = document.createElement('li');
+			li.textContent = item;
+			list.appendChild(li);
+		}
+
+		const dismissBtn = document.createElement('button');
+		dismissBtn.id = 'release-splash-dismiss';
+		dismissBtn.textContent = "Let's ride";
+		dismissBtn.style.cssText = `
+			padding: 11px 36px; border-radius: 10px; border: none;
+			background: #3b82f6; color: #fff; font-size: 15px; font-weight: 600;
+			cursor: pointer;
+		`;
+		dismissBtn.addEventListener('mouseenter', () => { dismissBtn.style.background = '#2563eb'; });
+		dismissBtn.addEventListener('mouseleave', () => { dismissBtn.style.background = '#3b82f6'; });
+
+		const dismiss = (): void => {
+			markReleaseAnnouncementSeen();
+			overlay.remove();
+			this.releaseSplashEl = null;
+		};
+		dismissBtn.addEventListener('click', dismiss);
+		overlay.addEventListener('click', (ev) => {
+			if (ev.target === overlay) dismiss();
+		});
+
+		card.appendChild(emblem);
+		card.appendChild(heading);
+		card.appendChild(versionLine);
+		card.appendChild(blurb);
+		card.appendChild(list);
+		card.appendChild(dismissBtn);
+		overlay.appendChild(card);
+		document.body.appendChild(overlay);
+		this.releaseSplashEl = overlay;
 	}
 
 	private createMobileTopStrip(): void {
@@ -690,7 +791,26 @@ export default class GameUISystem extends System {
 
 		const title = document.createElement('div');
 		title.textContent = '\uD83D\uDE87 MetroRider';
-		title.style.cssText = 'font-size: 22px; margin-bottom: 8px;';
+		title.style.cssText = 'font-size: 22px; margin-bottom: 2px;';
+
+		// Clickable version badge \u2014 reopens the release splash any time.
+		const versionBadge = document.createElement('button');
+		versionBadge.id = 'game-version-badge';
+		versionBadge.textContent = releaseLabel();
+		versionBadge.title = 'See what is new in this release';
+		versionBadge.style.cssText = `
+			font-size: 11px; font-weight: 600; color: #7fb2ff;
+			background: rgba(127, 178, 255, 0.12);
+			border: 1px solid rgba(127, 178, 255, 0.3);
+			border-radius: 999px; padding: 3px 12px; margin-bottom: 10px;
+			letter-spacing: 0.3px; cursor: pointer; pointer-events: auto;
+		`;
+		versionBadge.addEventListener('mouseenter', () => { versionBadge.style.background = 'rgba(127, 178, 255, 0.25)'; });
+		versionBadge.addEventListener('mouseleave', () => { versionBadge.style.background = 'rgba(127, 178, 255, 0.12)'; });
+		versionBadge.addEventListener('click', (ev) => {
+			ev.stopPropagation();
+			this.showReleaseSplash();
+		});
 
 		const subtitle = document.createElement('div');
 		subtitle.textContent = 'Load a MetroDreamin map or user profile, or play the built-in map';
@@ -975,6 +1095,7 @@ export default class GameUISystem extends System {
 		renderSavedMaps();
 
 		startBtn.appendChild(title);
+		startBtn.appendChild(versionBadge);
 		startBtn.appendChild(subtitle);
 		startBtn.appendChild(playBtn);
 		startBtn.appendChild(statusEl);
