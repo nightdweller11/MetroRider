@@ -4,240 +4,398 @@
       {
         "id": "procedural-default",
         "name": "Default (Procedural)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       },
       {
-        "id": "kenney-subway-a",
-        "name": "Subway Train (Front)",
-        "path": "models/trains/train-electric-subway-a.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-subway-b",
-        "name": "Subway Train (Middle)",
-        "path": "models/trains/train-electric-subway-b.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-subway-c",
-        "name": "Subway Train (Rear)",
-        "path": "models/trains/train-electric-subway-c.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-city-a",
-        "name": "City Train (Front)",
-        "path": "models/trains/train-electric-city-a.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-city-b",
-        "name": "City Train (Middle)",
-        "path": "models/trains/train-electric-city-b.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-city-c",
-        "name": "City Train (Rear)",
-        "path": "models/trains/train-electric-city-c.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-bullet-a",
-        "name": "Bullet Train (Front)",
-        "path": "models/trains/train-electric-bullet-a.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-bullet-b",
-        "name": "Bullet Train (Middle)",
-        "path": "models/trains/train-electric-bullet-b.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-bullet-c",
-        "name": "Bullet Train (Rear)",
-        "path": "models/trains/train-electric-bullet-c.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-double-a",
-        "name": "Double-Decker (Front)",
-        "path": "models/trains/train-electric-double-a.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-double-b",
-        "name": "Double-Decker (Middle)",
-        "path": "models/trains/train-electric-double-b.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-double-c",
-        "name": "Double-Decker (Rear)",
-        "path": "models/trains/train-electric-double-c.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-square-a",
-        "name": "Square Metro (Front)",
-        "path": "models/trains/train-electric-square-a.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-square-b",
-        "name": "Square Metro (Middle)",
-        "path": "models/trains/train-electric-square-b.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-square-c",
-        "name": "Square Metro (Rear)",
-        "path": "models/trains/train-electric-square-c.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-tram-classic",
-        "name": "Classic Tram",
-        "path": "models/trains/train-tram-classic.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-tram-modern",
-        "name": "Modern Tram",
-        "path": "models/trains/train-tram-modern.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-tram-round",
-        "name": "Round Tram",
-        "path": "models/trains/train-tram-round.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-diesel-a",
-        "name": "Diesel Locomotive (Front)",
-        "path": "models/trains/train-diesel-a.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-diesel-b",
-        "name": "Diesel Locomotive (Middle)",
-        "path": "models/trains/train-diesel-b.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-diesel-c",
-        "name": "Diesel Locomotive (Rear)",
-        "path": "models/trains/train-diesel-c.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "uploaded-2d0a6c5a",
-        "name": "bombardier_s_train_carriage_-_london_underground",
-        "path": "models/trains/8ad982e3-1bfc-44a0-943f-fdab823b6ce2.glb",
-        "type": "gltf",
-        "source": "User Upload",
-        "uploaded": true
-      },
-      {
-        "id": "uploaded-23e553f9",
-        "name": "high-speed_train",
-        "path": "models/trains/a77944b2-3b61-44a4-acc6-6494f922b27a.glb",
-        "type": "gltf",
-        "source": "User Upload",
-        "uploaded": true
-      },
-      {
-        "id": "uploaded-44228de4",
-        "name": "train_-_intercity_125_executive_with_buffers",
+        "id": "651c32eb-717c-44f6-99be-878908b404d7",
+        "name": "651c32eb 717c 44f6 99be 878908b404d7",
         "path": "models/trains/651c32eb-717c-44f6-99be-878908b404d7.glb",
         "type": "gltf",
-        "source": "User Upload",
-        "uploaded": true
+        "source": "filesystem"
+      },
+      {
+        "id": "8ad982e3-1bfc-44a0-943f-fdab823b6ce2",
+        "name": "8ad982e3 1bfc 44a0 943f Fdab823b6ce2",
+        "path": "models/trains/8ad982e3-1bfc-44a0-943f-fdab823b6ce2.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "a77944b2-3b61-44a4-acc6-6494f922b27a",
+        "name": "A77944b2 3b61 44a4 Acc6 6494f922b27a",
+        "path": "models/trains/a77944b2-3b61-44a4-acc6-6494f922b27a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "diesel-locomotive-chme3",
+        "name": "Diesel Locomotive Chme3",
+        "path": "models/trains/diesel-locomotive-chme3.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "funicular",
+        "name": "Funicular",
+        "path": "models/trains/funicular.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "generic-town-bus",
+        "name": "Generic Town Bus",
+        "path": "models/trains/generic-town-bus.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "jinty-steam-locomotive",
+        "name": "Jinty Steam Locomotive",
+        "path": "models/trains/jinty-steam-locomotive.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "locomotive-classic",
+        "name": "Locomotive Classic",
+        "path": "models/trains/locomotive-classic.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "locomotive-d75bb",
+        "name": "Locomotive D75bb",
+        "path": "models/trains/locomotive-d75bb.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "locomotive",
+        "name": "Locomotive",
+        "path": "models/trains/locomotive.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "metro-car-ezh3",
+        "name": "Metro Car Ezh3",
+        "path": "models/trains/metro-car-ezh3.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "moscow-metro-81-717",
+        "name": "Moscow Metro 81 717",
+        "path": "models/trains/moscow-metro-81-717.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-diesel-a",
+        "name": "Train Diesel A",
+        "path": "models/trains/train-diesel-a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-diesel-b",
+        "name": "Train Diesel B",
+        "path": "models/trains/train-diesel-b.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-diesel-c",
+        "name": "Train Diesel C",
+        "path": "models/trains/train-diesel-c.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-bullet-a",
+        "name": "Train Electric Bullet A",
+        "path": "models/trains/train-electric-bullet-a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-bullet-b",
+        "name": "Train Electric Bullet B",
+        "path": "models/trains/train-electric-bullet-b.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-bullet-c",
+        "name": "Train Electric Bullet C",
+        "path": "models/trains/train-electric-bullet-c.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-city-a",
+        "name": "Train Electric City A",
+        "path": "models/trains/train-electric-city-a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-city-b",
+        "name": "Train Electric City B",
+        "path": "models/trains/train-electric-city-b.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-city-c",
+        "name": "Train Electric City C",
+        "path": "models/trains/train-electric-city-c.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-double-a",
+        "name": "Train Electric Double A",
+        "path": "models/trains/train-electric-double-a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-double-b",
+        "name": "Train Electric Double B",
+        "path": "models/trains/train-electric-double-b.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-double-c",
+        "name": "Train Electric Double C",
+        "path": "models/trains/train-electric-double-c.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-square-a",
+        "name": "Train Electric Square A",
+        "path": "models/trains/train-electric-square-a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-square-b",
+        "name": "Train Electric Square B",
+        "path": "models/trains/train-electric-square-b.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-square-c",
+        "name": "Train Electric Square C",
+        "path": "models/trains/train-electric-square-c.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-subway-a",
+        "name": "Train Electric Subway A",
+        "path": "models/trains/train-electric-subway-a.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-subway-b",
+        "name": "Train Electric Subway B",
+        "path": "models/trains/train-electric-subway-b.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-electric-subway-c",
+        "name": "Train Electric Subway C",
+        "path": "models/trains/train-electric-subway-c.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-locomotive-sd40-2",
+        "name": "Train Locomotive Sd40 2",
+        "path": "models/trains/train-locomotive-sd40-2.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-tram-classic",
+        "name": "Train Tram Classic",
+        "path": "models/trains/train-tram-classic.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-tram-modern",
+        "name": "Train Tram Modern",
+        "path": "models/trains/train-tram-modern.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-tram-round",
+        "name": "Train Tram Round",
+        "path": "models/trains/train-tram-round.glb",
+        "type": "gltf",
+        "source": "filesystem"
       }
     ],
     "tracks": [
       {
         "id": "procedural-default",
         "name": "Default (Procedural)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       },
       {
-        "id": "kenney-track",
-        "name": "Track",
-        "path": "models/tracks/track.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-track-detailed",
-        "name": "Track (Detailed)",
+        "id": "track-detailed",
+        "name": "Track Detailed",
         "path": "models/tracks/track-detailed.glb",
         "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
+        "source": "filesystem"
       },
       {
-        "id": "kenney-track-rail",
+        "id": "track-rail",
         "name": "Track Rail",
         "path": "models/tracks/track-rail.glb",
         "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
+        "source": "filesystem"
       },
       {
-        "id": "kenney-track-segment",
+        "id": "track-segment",
         "name": "Track Segment",
         "path": "models/tracks/track-segment.glb",
         "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
+        "source": "filesystem"
       },
       {
-        "id": "kenney-track-single",
-        "name": "Single Track",
-        "path": "models/tracks/track-single.glb",
-        "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
-      },
-      {
-        "id": "kenney-track-single-detailed",
-        "name": "Single Track (Detailed)",
+        "id": "track-single-detailed",
+        "name": "Track Single Detailed",
         "path": "models/tracks/track-single-detailed.glb",
         "type": "gltf",
-        "source": "Kenney Train Kit (CC0)"
+        "source": "filesystem"
+      },
+      {
+        "id": "track-single",
+        "name": "Track Single",
+        "path": "models/tracks/track-single.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "track",
+        "name": "Track",
+        "path": "models/tracks/track.glb",
+        "type": "gltf",
+        "source": "filesystem"
       }
     ],
     "stations": [
       {
         "id": "procedural-default",
         "name": "Default (Procedural)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
+      },
+      {
+        "id": "berlin-ubahn-station",
+        "name": "Berlin Ubahn Station",
+        "path": "models/stations/berlin-ubahn-station.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "bus-stop-shelter",
+        "name": "Bus Stop Shelter",
+        "path": "models/stations/bus-stop-shelter.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "gare-saint-remy",
+        "name": "Gare Saint Remy",
+        "path": "models/stations/gare-saint-remy.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "indian-railway-station-psx",
+        "name": "Indian Railway Station Psx",
+        "path": "models/stations/indian-railway-station-psx.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "milwaukee-road-depot",
+        "name": "Milwaukee Road Depot",
+        "path": "models/stations/milwaukee-road-depot.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "montreal-stm-metro-station",
+        "name": "Montreal Stm Metro Station",
+        "path": "models/stations/montreal-stm-metro-station.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "station-elevated",
+        "name": "Station Elevated",
+        "path": "models/stations/station-elevated.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "station-modern",
+        "name": "Station Modern",
+        "path": "models/stations/station-modern.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "station-platform-basic",
+        "name": "Station Platform Basic",
+        "path": "models/stations/station-platform-basic.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "station-platform-covered",
+        "name": "Station Platform Covered",
+        "path": "models/stations/station-platform-covered.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "station-subway-entrance",
+        "name": "Station Subway Entrance",
+        "path": "models/stations/station-subway-entrance.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "station-tram-stop",
+        "name": "Station Tram Stop",
+        "path": "models/stations/station-tram-stop.glb",
+        "type": "gltf",
+        "source": "filesystem"
+      },
+      {
+        "id": "subway-station-platform-urban",
+        "name": "Subway Station Platform Urban",
+        "path": "models/stations/subway-station-platform-urban.glb",
+        "type": "gltf",
+        "source": "filesystem"
       }
     ]
   },
@@ -246,37 +404,51 @@
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       },
       {
-        "id": "metro-horn",
-        "name": "Tokyo Metro Horn",
-        "path": "sounds/horns/metro-horn.mp3",
-        "type": "sample",
-        "source": "Wikimedia Commons"
-      },
-      {
         "id": "jp-horn",
-        "name": "Japanese Train Horn",
+        "name": "Jp Horn",
         "path": "sounds/horns/jp-horn.mp3",
         "type": "sample",
-        "source": "Wikimedia Commons"
+        "source": "filesystem"
       },
       {
         "id": "kawasaki-horn",
         "name": "Kawasaki Horn",
         "path": "sounds/horns/kawasaki-horn.mp3",
         "type": "sample",
-        "source": "Wikimedia Commons"
+        "source": "filesystem"
+      },
+      {
+        "id": "metro-horn",
+        "name": "Metro Horn",
+        "path": "sounds/horns/metro-horn.mp3",
+        "type": "sample",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-horn-62-clean-mp3",
+        "name": "Train Horn 62 Clean Mp3",
+        "path": "sounds/horns/train-horn-62-clean-mp3.mp3",
+        "type": "sample",
+        "source": "filesystem"
+      },
+      {
+        "id": "train-horn-73-short-mp3",
+        "name": "Train Horn 73 Short Mp3",
+        "path": "sounds/horns/train-horn-73-short-mp3.mp3",
+        "type": "sample",
+        "source": "filesystem"
       }
     ],
     "engine": [
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       }
@@ -285,16 +457,23 @@
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
+      },
+      {
+        "id": "train-loud-metal-slamming-wav",
+        "name": "Train Loud Metal Slamming Wav",
+        "path": "sounds/rail/train-loud-metal-slamming-wav.mp3",
+        "type": "sample",
+        "source": "filesystem"
       }
     ],
     "wind": [
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       }
@@ -303,7 +482,7 @@
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       }
@@ -312,7 +491,7 @@
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       }
@@ -321,7 +500,7 @@
       {
         "id": "procedural",
         "name": "Procedural (Synthesized)",
-        "path": null,
+        "path": "",
         "type": "procedural",
         "source": "Built-in"
       }

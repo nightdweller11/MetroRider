@@ -1,19 +1,16 @@
 {
   "trainSlots": [
-    "651c32eb-717c-44f6-99be-878908b404d7",
-    "train-electric-bullet-b",
-    "8ad982e3-1bfc-44a0-943f-fdab823b6ce2",
-    "8ad982e3-1bfc-44a0-943f-fdab823b6ce2"
+    "procedural-default"
   ],
-  "trackModel": "procedural-default",
-  "stationModel": "station-platform-basic",
+  "trackModel": "track-detailed",
+  "stationModel": "procedural-default",
   "sounds": {
-    "horn": "train-horn-73-short-mp3",
+    "horn": "procedural",
     "engine": "procedural",
-    "rail": "train-loud-metal-slamming-wav",
+    "rail": "procedural",
     "wind": "procedural",
     "brake": "procedural",
-    "doorChime": "procedural",
-    "stationChime": "procedural"
+    "doorChime": "toronto-subway-door-chime",
+    "stationChime": "russian-railways-station-announcement-chime"
   }
 }
