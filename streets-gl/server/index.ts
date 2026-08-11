@@ -31,6 +31,19 @@ app.use(compression({
 app.use(cors());
 app.use(express.json());
 
+// Reject malformed percent-encoding up front (vulnerability scanners send
+// paths like /app%C0%AE.js which otherwise throw URIError stack traces
+// from deep inside the router on every probe).
+app.use((req, res, next) => {
+	try {
+		decodeURIComponent(req.path);
+	} catch {
+		res.status(400).send('Bad request');
+		return;
+	}
+	next();
+});
+
 app.get('/api/health', (_req, res) => {
 	res.json({status: 'ok', timestamp: Date.now()});
 });
@@ -173,9 +186,33 @@ app.get('/api/metrodreamin/user/:userId', (req, res) => {
 	fsReq.end();
 });
 
+// Short-lived cache for MetroDreamin map pages: the game fetches the default
+// map on every page load, and the upstream page is ~500 KB of HTML.
+const mdViewCache = new Map<string, {html: string; at: number}>();
+const MD_VIEW_CACHE_TTL_MS = 10 * 60 * 1000;
+const MD_VIEW_CACHE_MAX = 30;
+
 app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 	const systemId = req.params.systemId;
 	const targetUrl = `https://metrodreamin.com/view/${systemId}`;
+
+	const cached = mdViewCache.get(systemId);
+	if (cached && Date.now() - cached.at < MD_VIEW_CACHE_TTL_MS) {
+		res.type('text/html').send(cached.html);
+		return;
+	}
+
+	const cacheAndSend = (html: string): void => {
+		if (html.includes('__NEXT_DATA__')) {
+			mdViewCache.set(systemId, {html, at: Date.now()});
+			if (mdViewCache.size > MD_VIEW_CACHE_MAX) {
+				const oldest = [...mdViewCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
+				if (oldest) mdViewCache.delete(oldest[0]);
+			}
+		}
+		res.type('text/html').send(html);
+	};
+
 	console.log(`[Server] MetroDreamin proxy: fetching ${targetUrl}`);
 
 	const proxyReq = https.get(targetUrl, {
@@ -198,7 +235,7 @@ app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 				redirectRes.on('end', () => {
 					const html = Buffer.concat(chunks).toString('utf-8');
 					console.log(`[Server] MetroDreamin proxy: redirect response ${redirectRes.statusCode}, ${html.length} bytes`);
-					res.type('text/html').send(html);
+					cacheAndSend(html);
 				});
 			}).on('error', (err) => {
 				console.error(`[Server] MetroDreamin proxy redirect error: ${err.message}`);
@@ -218,7 +255,7 @@ app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 		proxyRes.on('end', () => {
 			const html = Buffer.concat(chunks).toString('utf-8');
 			console.log(`[Server] MetroDreamin proxy: success, ${html.length} bytes`);
-			res.type('text/html').send(html);
+			cacheAndSend(html);
 		});
 	});
 

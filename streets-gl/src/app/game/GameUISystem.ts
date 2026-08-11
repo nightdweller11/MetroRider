@@ -45,6 +45,9 @@ export default class GameUISystem extends System {
 		if (assetConfig) {
 			(window as any).__assetConfigSystem = assetConfig;
 		}
+		// Debug/testing handles (used by automated browser tests).
+		(window as any).__trainSystem = trainSystem;
+		(window as any).__gameSystems = this.systemManager;
 
 		this.mobile = window.innerWidth <= 768 || ('ontouchstart' in window && window.innerWidth <= 1024);
 		this.lineListExpanded = !this.mobile;
@@ -375,7 +378,7 @@ export default class GameUISystem extends System {
 				background: ${ls.parsed.color}; flex-shrink: 0;
 			`;
 			const label = document.createElement('span');
-			label.textContent = ls.parsed.name;
+			label.textContent = ls.parsed.isLoop ? `${ls.parsed.name} ⟳` : ls.parsed.name;
 
 			const arrow = document.createElement('span');
 			arrow.style.cssText = 'margin-left: auto; opacity: 0.5; font-size: 10px;';
@@ -457,8 +460,9 @@ export default class GameUISystem extends System {
 			border-bottom: 1px solid rgba(255,255,255,0.1); flex-shrink: 0;
 		`;
 
-		const firstStation = stations[0]?.name ?? '?';
-		const lastStation = stations[stations.length - 1]?.name ?? '?';
+		const isLoop = ls.parsed.isLoop;
+		const firstStation = isLoop ? 'Loop ⟲' : (stations[0]?.name ?? '?');
+		const lastStation = isLoop ? 'Loop ⟳' : (stations[stations.length - 1]?.name ?? '?');
 
 		const styleDirBtns = (): void => {
 			dirSection.querySelectorAll('div[data-dir]').forEach(b => {
@@ -1066,8 +1070,9 @@ export default class GameUISystem extends System {
 		`;
 		this.container.appendChild(this.debugEl);
 
+		// Backquote (`) — KeyD is taken by the door toggle (InputHandler KEY_MAP).
 		window.addEventListener('keydown', (e: KeyboardEvent) => {
-			if (e.code === 'KeyD' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+			if (e.code === 'Backquote' && !e.ctrlKey && !e.metaKey && !e.altKey) {
 				this.debugVisible = !this.debugVisible;
 				if (this.debugEl) {
 					this.debugEl.style.display = this.debugVisible ? 'block' : 'none';
@@ -1210,7 +1215,7 @@ export default class GameUISystem extends System {
 		}
 
 		lines.push('');
-		lines.push('Press D to hide');
+		lines.push('Press ` to hide');
 
 		this.debugEl.textContent = lines.join('\n');
 	}
