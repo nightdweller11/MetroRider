@@ -353,19 +353,12 @@ export default class AssetConfigSystem extends System {
 			if (raw !== this.lastLocalStorageHash) {
 				this.lastLocalStorageHash = raw;
 				if (raw) {
-					const parsed = JSON.parse(raw);
-					const oldSlots = JSON.stringify((this.userOverrides as any).trainSlots || []);
-					const newSlots = JSON.stringify(parsed.trainSlots || []);
-					const changed =
-						oldSlots !== newSlots ||
-						(parsed.trackModel && parsed.trackModel !== (this.userOverrides as any).trackModel) ||
-						(parsed.stationModel && parsed.stationModel !== (this.userOverrides as any).stationModel);
-
-					if (changed) {
-						this.userOverrides = parsed;
-						this.rebuildMergedConfig();
-						console.log('[AssetConfig] Detected localStorage change, config updated');
-					}
+					// The raw string changed — apply ALL of it (slots, track,
+					// station AND sounds; sound edits used to be silently
+					// skipped here and never reached the running game).
+					this.userOverrides = JSON.parse(raw);
+					this.rebuildMergedConfig();
+					console.log('[AssetConfig] Detected localStorage change, config updated');
 				}
 			}
 		} catch (err) {

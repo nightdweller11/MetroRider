@@ -1,6 +1,9 @@
 {
   "trainSlots": [
-    "procedural-default"
+    "train-locomotive-sd40-2",
+    "train-electric-city-b",
+    "train-electric-city-b",
+    "train-electric-city-c"
   ],
   "trackModel": "track-detailed",
   "stationModel": "procedural-default",

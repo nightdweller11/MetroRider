@@ -260,7 +260,15 @@ export default class GameUISystem extends System {
 		this.cameraEl = createBtn('\uD83C\uDFA5', 'Camera');
 		this.cameraEl.addEventListener('click', () => {
 			const camSystem = this.systemManager.getSystem(GameCameraSystem);
-			if (camSystem) camSystem.cycleMode();
+			if (!camSystem) return;
+			if (!camSystem.isActive()) {
+				// Follow camera should always own the view during a game;
+				// re-activate defensively if something turned it off.
+				camSystem.activate();
+				camSystem.snapToTrain();
+			}
+			camSystem.cycleMode();
+			this.showCameraModeToast(camSystem.getModeLabel());
 		});
 
 		if (m) {
@@ -566,6 +574,31 @@ export default class GameUISystem extends System {
 
 		this.stationPanelEl = panel;
 		this.container.appendChild(panel);
+	}
+
+	private cameraToastEl: HTMLElement | null = null;
+	private cameraToastTimer: number = 0;
+
+	private showCameraModeToast(label: string): void {
+		if (!this.container) return;
+		if (!this.cameraToastEl) {
+			this.cameraToastEl = document.createElement('div');
+			this.cameraToastEl.style.cssText = `
+				position: absolute; bottom: ${this.mobile ? 110 : 100}px; left: 50%;
+				transform: translateX(-50%);
+				background: rgba(0,0,0,0.8); color: #fff; padding: 8px 18px;
+				border-radius: 8px; font-size: 14px; font-weight: 600;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15);
+				pointer-events: none; transition: opacity 0.3s; z-index: 10;
+			`;
+			this.container.appendChild(this.cameraToastEl);
+		}
+		this.cameraToastEl.textContent = `Camera: ${label}`;
+		this.cameraToastEl.style.opacity = '1';
+		window.clearTimeout(this.cameraToastTimer);
+		this.cameraToastTimer = window.setTimeout(() => {
+			if (this.cameraToastEl) this.cameraToastEl.style.opacity = '0';
+		}, 1400);
 	}
 
 	private hideStationPanel(): void {

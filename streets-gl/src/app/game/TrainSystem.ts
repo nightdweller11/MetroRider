@@ -23,6 +23,7 @@ import {InputHandler} from './physics/InputHandler';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
 import AudioSystem from './audio/AudioSystem';
+import GameCameraSystem from './GameCameraSystem';
 import {debugLog} from './debug';
 
 export interface TrainWorldPosition {
@@ -196,6 +197,15 @@ export default class TrainSystem extends System {
 		if (this.pendingCameraMove) {
 			this.moveCameraToLatLon(this.pendingCameraMove.lat, this.pendingCameraMove.lng);
 			this.pendingCameraMove = null;
+		}
+
+		// The follow camera is the default view: activate it on EVERY start path
+		// (UI buttons, station picker, programmatic starts). Without this, the
+		// map controls keep the camera and the mode button appears to do nothing.
+		const camSystem = this.systemManager.getSystem(GameCameraSystem);
+		if (camSystem) {
+			camSystem.activate();
+			camSystem.snapToTrain();
 		}
 
 		debugLog('[TrainSystem] Game started');

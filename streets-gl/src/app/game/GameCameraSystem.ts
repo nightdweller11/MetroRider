@@ -44,6 +44,11 @@ export default class GameCameraSystem extends System {
 	private lastMouseX: number = 0;
 	private lastMouseY: number = 0;
 	private inputListenersAdded: boolean = false;
+	private pendingSnap: boolean = false;
+
+	public isActive(): boolean {
+		return this.active;
+	}
 
 	public postInit(): void {
 		window.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -182,6 +187,13 @@ export default class GameCameraSystem extends System {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 		if (!trainSystem || !trainSystem.trainPosition || !trainSystem.gameActive) return;
 
+		// snapToTrain() called before the first physics frame (trainPosition not
+		// yet computed) defers to here, so the camera never lerps in from (0,0,0).
+		if (this.pendingSnap) {
+			this.pendingSnap = false;
+			this.snapToTrain();
+		}
+
 		if (!this.camera) {
 			const sceneSystem = this.systemManager.getSystem(SceneSystem);
 			if (!sceneSystem) return;
@@ -265,7 +277,12 @@ export default class GameCameraSystem extends System {
 
 	public snapToTrain(): void {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
-		if (!trainSystem?.trainPosition) return;
+		if (!trainSystem?.trainPosition) {
+			// Train position isn't computed until the first active physics frame —
+			// remember to snap as soon as it exists.
+			this.pendingSnap = true;
+			return;
+		}
 
 		const pos = trainSystem.trainPosition;
 		this.smoothX = pos.x;
