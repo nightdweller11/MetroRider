@@ -1,3 +1,5 @@
+import { haversine } from './CoordinateSystem';
+
 export interface StationData {
   id: string;
   name: string;
@@ -25,7 +27,14 @@ export interface ParsedLine {
   color: string;
   stations: StationData[];
   allPoints: StationData[];
+  /** True when the line closes back on its first station (circle/loop service). */
+  isLoop: boolean;
+  /** For each entry of `stations`, its index into `allPoints`. */
+  stationPointIndices: number[];
 }
+
+/** Endpoints closer than this (meters) are treated as a closed loop. */
+const LOOP_CLOSE_DISTANCE_M = 150;
 
 export function parseMetroMap(data: MetroMapData): ParsedLine[] {
   if (!data || !data.stations || !data.lines) {
@@ -41,7 +50,40 @@ export function parseMetroMap(data: MetroMapData): ParsedLine[] {
       return { id, name: st.name, lat: st.lat, lng: st.lng, isWaypoint: st.isWaypoint };
     });
 
-    const stations = allPoints.filter(s => !s.isWaypoint);
+    let isLoop = false;
+    if (allPoints.length >= 3) {
+      const first = allPoints[0];
+      const last = allPoints[allPoints.length - 1];
+      if (first.id === last.id) {
+        isLoop = true;
+        // Make the closure exact so the track geometry closes cleanly.
+        last.lat = first.lat;
+        last.lng = first.lng;
+      } else if (haversine(first.lat, first.lng, last.lat, last.lng) < LOOP_CLOSE_DISTANCE_M) {
+        isLoop = true;
+        // Append an exact copy of the first point (as a waypoint) so the
+        // track closes back on itself without duplicating a stop.
+        allPoints.push({
+          id: `${first.id}__loop-close`,
+          name: first.name,
+          lat: first.lat,
+          lng: first.lng,
+          isWaypoint: true,
+        });
+      }
+    }
+
+    const stations: StationData[] = [];
+    const stationPointIndices: number[] = [];
+    for (let i = 0; i < allPoints.length; i++) {
+      const p = allPoints[i];
+      if (p.isWaypoint) continue;
+      // On a loop the closing point revisits the first station — it is the
+      // same stop, not a second one.
+      if (isLoop && i === allPoints.length - 1 && p.id === allPoints[0].id) continue;
+      stations.push(p);
+      stationPointIndices.push(i);
+    }
 
     if (stations.length < 2) {
       throw new Error(`Line "${line.name}" must have at least 2 real stations (has ${stations.length})`);
@@ -53,6 +95,8 @@ export function parseMetroMap(data: MetroMapData): ParsedLine[] {
       color: line.color,
       stations,
       allPoints,
+      isLoop,
+      stationPointIndices,
     };
   });
 }

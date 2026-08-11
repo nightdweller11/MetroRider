@@ -29,21 +29,32 @@ export class StationManager {
     trainDist: number,
     trainSpeed: number,
     direction: number,
+    isLoop = false,
+    totalLength = 0,
   ): StationState {
     let nearestStIdx = -1;
     let nearestStDist = Infinity;
     let nextStIdx = -1;
     let nextStDist = Infinity;
 
+    const circular = isLoop && totalLength > 0;
+
     for (let i = 0; i < stationDists.length; i++) {
-      const d = Math.abs(trainDist - stationDists[i]);
+      let d = Math.abs(trainDist - stationDists[i]);
+      if (circular) {
+        d = Math.min(d, totalLength - d);
+      }
       if (d < nearestStDist) {
         nearestStDist = d;
         nearestStIdx = i;
       }
-      const ahead = direction === 1
+      let ahead = direction === 1
         ? stationDists[i] - trainDist
         : trainDist - stationDists[i];
+      if (circular) {
+        // On a loop every station is always ahead — wrap into [0, L).
+        ahead = ((ahead % totalLength) + totalLength) % totalLength;
+      }
       if (ahead > 10 && ahead < nextStDist) {
         nextStDist = ahead;
         nextStIdx = i;

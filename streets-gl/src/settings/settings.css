@@ -2012,6 +2012,63 @@ body {
 	background: rgba(255, 60, 60, 0.9);
 }
 
+.tc-slot-flip {
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 18px;
+	height: 18px;
+	border: none;
+	background: rgba(59, 130, 246, 0.55);
+	color: white;
+	border-radius: 50%;
+	font-size: 12px;
+	line-height: 1;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.tc-slot-card:hover .tc-slot-flip {
+	opacity: 1;
+}
+
+.tc-slot-flip:hover {
+	background: rgba(59, 130, 246, 0.9);
+}
+
+.tc-slot-flip-active {
+	opacity: 1;
+	background: rgba(245, 158, 11, 0.85);
+}
+
+.tc-slot-card .tc-slot-flip-active {
+	opacity: 1;
+}
+
+.tc-slot-flip-badge {
+	font-size: 9px;
+	font-weight: 700;
+	color: #f59e0b;
+	background: rgba(245, 158, 11, 0.15);
+	border-radius: 4px;
+	padding: 1px 5px;
+	margin-top: 2px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+/* Touch devices have no hover — keep the per-slot action buttons visible. */
+@media (hover: none) {
+	.tc-slot-remove,
+	.tc-slot-flip {
+		opacity: 1;
+	}
+}
+
 .tc-slot-add {
 	min-width: 50px;
 	flex-shrink: 0;

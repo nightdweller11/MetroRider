@@ -8,6 +8,7 @@ import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
 import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
+import {parseSlot} from '~/app/game/assets/SlotSpec';
 import {debugLog} from '~/app/game/debug';
 import {
 	parseAnimations,
@@ -45,6 +46,7 @@ export default class TrainRenderingSystem extends System {
 	public stationMeshes: TrainMeshObject[] = [];
 
 	private carOffsets: number[] = [];
+	private carFlipped: boolean[] = [];
 	private lastLineIdx: number = -1;
 	private terrainCheckTimer: number = 0;
 	private lastTerrainSample: number = 0;
@@ -121,6 +123,7 @@ export default class TrainRenderingSystem extends System {
 		}
 		this.carMeshes = [];
 		this.carOffsets = [];
+		this.carFlipped = [];
 		this.carAnimStates = [];
 		this.lastDoorsOpen = false;
 	}
@@ -143,7 +146,7 @@ export default class TrainRenderingSystem extends System {
 		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
 		const catalog = assetConfig?.getCatalog();
 
-		const allProcedural = slots.every(s => s === 'procedural-default');
+		const allProcedural = slots.every(s => parseSlot(s).modelId === 'procedural-default');
 		if (!allProcedural && !catalog) {
 			debugLog('[TrainRenderingSystem] Catalog not loaded yet, will retry');
 			this.pendingModelRebuild = true;
@@ -151,7 +154,7 @@ export default class TrainRenderingSystem extends System {
 			return;
 		}
 
-		const uniqueIds = [...new Set(slots.filter(s => s !== 'procedural-default'))];
+		const uniqueIds = [...new Set(slots.map(s => parseSlot(s).modelId).filter(id => id !== 'procedural-default'))];
 		const toLoad: {id: string; url: string}[] = [];
 		for (const id of uniqueIds) {
 			if (this.glbCache.has(id)) continue;
@@ -206,7 +209,8 @@ export default class TrainRenderingSystem extends System {
 
 		const carLengths: number[] = [];
 		for (let i = 0; i < slots.length; i++) {
-			const modelId = slots[i];
+			const {modelId, flipped} = parseSlot(slots[i]);
+			this.carFlipped.push(flipped);
 			let buf: GeometryBuffers;
 			if (modelId === 'procedural-default') {
 				buf = proceduralSingleCar;
@@ -328,6 +332,7 @@ export default class TrainRenderingSystem extends System {
 			});
 			sceneSystem.objects.wrapper.add(mesh);
 			this.carMeshes.push(mesh);
+			this.carFlipped.push(false);
 		}
 
 		this.carOffsets = [];
@@ -1313,8 +1318,9 @@ export default class TrainRenderingSystem extends System {
 		for (let i = 0; i < this.carMeshes.length; i++) {
 			const carPos = trainSystem.getCarPosition(this.carOffsets[i] * cosLat);
 			if (!carPos) continue;
+			const flipOffset = this.carFlipped[i] ? Math.PI : 0;
 			this.carMeshes[i].position.set(carPos.x, carPos.height, carPos.y);
-			this.carMeshes[i].rotation.set(0, carPos.heading, 0);
+			this.carMeshes[i].rotation.set(0, carPos.heading + flipOffset, 0);
 			this.carMeshes[i].updateMatrix();
 		}
 	}

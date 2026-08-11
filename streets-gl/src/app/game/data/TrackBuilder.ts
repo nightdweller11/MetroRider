@@ -11,6 +11,8 @@ export interface TrackData {
   cumDist: number[];
   totalLength: number;
   stationDists: number[];
+  /** True when the track is a closed loop (train wraps around instead of stopping). */
+  isLoop: boolean;
 }
 
 function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
@@ -24,7 +26,7 @@ function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): 
   );
 }
 
-export function buildSplinePath(stations: StationData[], pointsPerSegment = 30): SplinePath {
+export function buildSplinePath(stations: StationData[], pointsPerSegment = 30, isLoop = false): SplinePath {
   const n = stations.length;
   if (n < 2) {
     return {
@@ -36,11 +38,25 @@ export function buildSplinePath(stations: StationData[], pointsPerSegment = 30):
   const pts: [number, number][] = [];
   const stationIndices: number[] = [];
 
+  // On a loop the last input point is an exact copy of the first, so the
+  // unique ring is stations[0..n-2]. Control points wrap around that ring,
+  // which keeps the curve smooth through the start/end seam.
+  const ringLength = n - 1;
+  const useWrap = isLoop && ringLength >= 3;
+
   for (let i = 0; i < n - 1; i++) {
-    const p0 = stations[Math.max(0, i - 1)];
-    const p1 = stations[i];
-    const p2 = stations[i + 1];
-    const p3 = stations[Math.min(n - 1, i + 2)];
+    let p0: StationData, p1: StationData, p2: StationData, p3: StationData;
+    if (useWrap) {
+      p0 = stations[(i - 1 + ringLength) % ringLength];
+      p1 = stations[i];
+      p2 = stations[(i + 1) % ringLength];
+      p3 = stations[(i + 2) % ringLength];
+    } else {
+      p0 = stations[Math.max(0, i - 1)];
+      p1 = stations[i];
+      p2 = stations[i + 1];
+      p3 = stations[Math.min(n - 1, i + 2)];
+    }
 
     stationIndices.push(pts.length);
     for (let j = 0; j < pointsPerSegment; j++) {
@@ -103,12 +119,25 @@ export function getPositionAtDistance(
   };
 }
 
-export function buildTrackData(stations: StationData[]): TrackData {
-  const spline = buildSplinePath(stations);
+export function buildTrackData(stations: StationData[], isLoop = false): TrackData {
+  const spline = buildSplinePath(stations, 30, isLoop);
   const cumDist = buildCumulativeDistances(spline.points);
   const totalLength = cumDist[cumDist.length - 1];
   const stationDists = spline.stationIndices.map(idx => cumDist[idx]);
-  return { spline, cumDist, totalLength, stationDists };
+  return { spline, cumDist, totalLength, stationDists, isLoop };
+}
+
+/**
+ * Wrap a distance onto a track. Loops wrap modulo the track length;
+ * regular tracks clamp to [0, totalLength].
+ */
+export function wrapTrackDistance(dist: number, track: TrackData): number {
+  const L = track.totalLength;
+  if (L <= 0) return 0;
+  if (track.isLoop) {
+    return ((dist % L) + L) % L;
+  }
+  return Math.max(0, Math.min(L, dist));
 }
 
 /**
@@ -225,5 +254,6 @@ export function buildTrackDataFromPolyline(
     cumDist,
     totalLength,
     stationDists,
+    isLoop: false,
   };
 }

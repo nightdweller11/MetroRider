@@ -50,10 +50,19 @@ export function updateTrainPhysics(
 	}
 
 	state.trainDist += state.trainSpeed * dt * state.direction;
-	state.trainDist = Math.max(0, Math.min(track.totalLength, state.trainDist));
 
-	if (state.trainDist <= 5 || state.trainDist >= track.totalLength - 5) {
-		state.trainSpeed = 0;
+	if (track.isLoop) {
+		// Closed loop: wrap around instead of stopping at the ends.
+		const L = track.totalLength;
+		if (L > 0) {
+			state.trainDist = ((state.trainDist % L) + L) % L;
+		}
+	} else {
+		state.trainDist = Math.max(0, Math.min(track.totalLength, state.trainDist));
+
+		if (state.trainDist <= 5 || state.trainDist >= track.totalLength - 5) {
+			state.trainSpeed = 0;
+		}
 	}
 }
 

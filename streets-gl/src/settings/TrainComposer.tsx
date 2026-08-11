@@ -1,5 +1,6 @@
 import React, {useState, useCallback, useMemo} from 'react';
 import ModelPreview from './ModelPreview';
+import {parseSlot, toggleSlotFlip, withSlotModel, isSlotFlipped} from '~/app/game/assets/SlotSpec';
 
 interface AssetEntry {
 	id: string;
@@ -40,8 +41,9 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 		return m;
 	}, [trainModels]);
 
-	const getModelName = useCallback((id: string): string => {
-		return nameMap.get(id) || id;
+	const getModelName = useCallback((slot: string): string => {
+		const {modelId} = parseSlot(slot);
+		return nameMap.get(modelId) || modelId;
 	}, [nameMap]);
 
 	const handleAddSlot = useCallback((): void => {
@@ -62,9 +64,16 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 	const handleAssignModel = useCallback((modelId: string): void => {
 		if (selectedSlot < 0 || selectedSlot >= slots.length) return;
 		const next = [...slots];
-		next[selectedSlot] = modelId;
+		next[selectedSlot] = withSlotModel(next[selectedSlot], modelId);
 		onSlotsChange(next);
 	}, [slots, selectedSlot, onSlotsChange]);
+
+	const handleToggleFlip = useCallback((idx: number): void => {
+		if (idx < 0 || idx >= slots.length) return;
+		const next = [...slots];
+		next[idx] = toggleSlotFlip(next[idx]);
+		onSlotsChange(next);
+	}, [slots, onSlotsChange]);
 
 	const filterLower = filter.toLowerCase().trim();
 	const filteredModels = filterLower
@@ -77,32 +86,41 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 				<h3 className="tc-section-title">Train Composition</h3>
 				<p className="tc-section-desc">Click a slot to select it, then choose a model below. Each slot is an independent car.</p>
 				<div className="tc-slot-strip">
-					{slots.map((modelId, i) => (
-						<div
-							key={i}
-							className={`tc-slot-card ${i === selectedSlot ? 'tc-slot-selected' : ''}`}
-							onClick={(): void => setSelectedSlot(i)}
-						>
-							<div className="tc-slot-position">#{i + 1}</div>
-							<div className="tc-slot-thumb">
-								{(() => {
-									const entry = trainModels.find(e => e.id === modelId);
-									if (entry?.path) {
-										return <ModelPreview modelPath={`/data/assets/${entry.path}`} />;
-									}
-									return <div className="tc-slot-procedural">P</div>;
-								})()}
-							</div>
-							<div className="tc-slot-name">{getModelName(modelId)}</div>
-							{slots.length > MIN_SLOTS && (
+					{slots.map((slot, i) => {
+						const {modelId, flipped} = parseSlot(slot);
+						return (
+							<div
+								key={i}
+								className={`tc-slot-card ${i === selectedSlot ? 'tc-slot-selected' : ''}`}
+								onClick={(): void => setSelectedSlot(i)}
+							>
+								<div className="tc-slot-position">#{i + 1}</div>
+								<div className="tc-slot-thumb" style={flipped ? {transform: 'scaleX(-1)'} : undefined}>
+									{(() => {
+										const entry = trainModels.find(e => e.id === modelId);
+										if (entry?.path) {
+											return <ModelPreview modelPath={`/data/assets/${entry.path}`} />;
+										}
+										return <div className="tc-slot-procedural">P</div>;
+									})()}
+								</div>
+								<div className="tc-slot-name">{getModelName(slot)}</div>
+								{flipped && <div className="tc-slot-flip-badge">Reversed</div>}
 								<button
-									className="tc-slot-remove"
-									onClick={(ev): void => { ev.stopPropagation(); handleRemoveSlot(i); }}
-									title="Remove this car"
-								>&times;</button>
-							)}
-						</div>
-					))}
+									className={`tc-slot-flip ${flipped ? 'tc-slot-flip-active' : ''}`}
+									onClick={(ev): void => { ev.stopPropagation(); handleToggleFlip(i); }}
+									title={flipped ? 'Facing backward — click to face forward' : 'Rotate this car 180°'}
+								>&#x21BB;</button>
+								{slots.length > MIN_SLOTS && (
+									<button
+										className="tc-slot-remove"
+										onClick={(ev): void => { ev.stopPropagation(); handleRemoveSlot(i); }}
+										title="Remove this car"
+									>&times;</button>
+								)}
+							</div>
+						);
+					})}
 					{slots.length < MAX_SLOTS && (
 						<button className="tc-slot-add" onClick={handleAddSlot} title="Add a car">
 							+
@@ -138,7 +156,7 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 
 				<div className="asset-grid">
 					{filteredModels.map(entry => {
-						const isAssigned = entry.id === slots[selectedSlot];
+						const isAssigned = entry.id === parseSlot(slots[selectedSlot] ?? '').modelId;
 						return (
 							<div
 								key={entry.id}

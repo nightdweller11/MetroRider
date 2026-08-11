@@ -9,7 +9,7 @@ import TileSystem from '../systems/TileSystem';
 import type {ParsedLine, MetroMapData} from './data/RouteParser';
 import {parseMetroMap} from './data/RouteParser';
 import type {TrackData, PositionOnTrack} from './data/TrackBuilder';
-import {buildTrackData, getPositionAtDistance} from './data/TrackBuilder';
+import {buildTrackData, getPositionAtDistance, wrapTrackDistance} from './data/TrackBuilder';
 import {bearing} from './data/CoordinateSystem';
 import {StationManager, StationState} from './data/StationManager';
 import {
@@ -70,13 +70,10 @@ export default class TrainSystem extends System {
 		const parsed = parseMetroMap(data);
 
 		this.lines = parsed.map(line => {
-			const track = buildTrackData(line.allPoints);
-			const realStationDists: number[] = [];
-			for (let i = 0; i < line.allPoints.length; i++) {
-				if (!line.allPoints[i].isWaypoint) {
-					realStationDists.push(track.stationDists[i]);
-				}
-			}
+			const track = buildTrackData(line.allPoints, line.isLoop);
+			// stationPointIndices keeps stations[] and realStationDists aligned,
+			// including on loops where the closing point revisits station 0.
+			const realStationDists = line.stationPointIndices.map(i => track.stationDists[i]);
 			return {parsed: line, track, realStationDists};
 		});
 
@@ -286,6 +283,9 @@ export default class TrainSystem extends System {
 		if (!ls) return '';
 
 		const stations = ls.parsed.stations;
+		if (ls.parsed.isLoop) {
+			return this.physicsState.direction === 1 ? 'Loop ⟳' : 'Loop ⟲';
+		}
 		return this.physicsState.direction === 1
 			? stations[stations.length - 1].name
 			: stations[0].name;
@@ -345,13 +345,13 @@ export default class TrainSystem extends System {
 		const pos: PositionOnTrack = getPositionAtDistance(
 			ls.track.spline.points,
 			ls.track.cumDist,
-			this.physicsState.trainDist,
+			wrapTrackDistance(this.physicsState.trainDist, ls.track),
 		);
 
 		const nextPos = getPositionAtDistance(
 			ls.track.spline.points,
 			ls.track.cumDist,
-			this.physicsState.trainDist + 5 * this.physicsState.direction,
+			wrapTrackDistance(this.physicsState.trainDist + 5 * this.physicsState.direction, ls.track),
 		);
 
 		const trainBearing = bearing(pos.lat, pos.lng, nextPos.lat, nextPos.lng);
@@ -383,13 +383,16 @@ export default class TrainSystem extends System {
 		const ls = this.getCurrentLine();
 		if (!ls) return null;
 
-		const carDist = this.physicsState.trainDist - offsetFromFront * this.physicsState.direction;
+		const carDist = wrapTrackDistance(
+			this.physicsState.trainDist - offsetFromFront * this.physicsState.direction,
+			ls.track,
+		);
 		const pos: PositionOnTrack = getPositionAtDistance(
 			ls.track.spline.points, ls.track.cumDist, carDist,
 		);
 		const nextPos = getPositionAtDistance(
 			ls.track.spline.points, ls.track.cumDist,
-			carDist + 5 * this.physicsState.direction,
+			wrapTrackDistance(carDist + 5 * this.physicsState.direction, ls.track),
 		);
 
 		const carBearing = bearing(pos.lat, pos.lng, nextPos.lat, nextPos.lng);
@@ -425,6 +428,8 @@ export default class TrainSystem extends System {
 			this.physicsState.trainDist,
 			this.physicsState.trainSpeed,
 			this.physicsState.direction,
+			ls.track.isLoop,
+			ls.track.totalLength,
 		);
 
 		if (this.stationState.arriving) {
