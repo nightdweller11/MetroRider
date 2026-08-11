@@ -18,8 +18,6 @@ export interface TileSlotSet {
 export default class TileMegaBuffers {
 	private readonly renderer: AbstractRenderer;
 	public readonly extruded: TileMegaBufferGroup;
-	public readonly projected: TileMegaBufferGroup;
-	public readonly hugging: TileMegaBufferGroup;
 
 	private readonly _batchFirsts: Int32Array = new Int32Array(MAX_BATCH_SIZE);
 	private readonly _batchCounts: Int32Array = new Int32Array(MAX_BATCH_SIZE);
@@ -34,6 +32,10 @@ export default class TileMegaBuffers {
 	public constructor(renderer: AbstractRenderer) {
 		this.renderer = renderer;
 
+		// NOTE: only the extruded (buildings) group exists. Projected and hugging
+		// tile meshes draw per-tile (GBufferPass/ShadowMappingPass have no batch
+		// path for them) — mega-buffer copies of that geometry were allocated and
+		// never read, wasting hundreds of MB of CPU+GPU memory.
 		this.extruded = this.createGroup([
 			{name: 'position', size: 3, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
 			{name: 'normal', size: 3, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
@@ -43,20 +45,19 @@ export default class TileMegaBuffers {
 			{name: 'localId', size: 1, type: RendererTypes.AttributeType.UnsignedInt, format: RendererTypes.AttributeFormat.Integer, bpe: 4},
 			{name: 'display', size: 1, type: RendererTypes.AttributeType.UnsignedByte, format: RendererTypes.AttributeFormat.Integer, bpe: 1},
 		]);
+	}
 
-		this.projected = this.createGroup([
-			{name: 'position', size: 3, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
-			{name: 'normal', size: 3, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
-			{name: 'uv', size: 2, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
-			{name: 'textureId', size: 1, type: RendererTypes.AttributeType.UnsignedByte, format: RendererTypes.AttributeFormat.Integer, bpe: 1},
-		]);
+	/**
+	 * Periodic maintenance: compacts fragmented allocators and shrinks
+	 * over-grown ones. Spread over calls (one allocator per invocation).
+	 */
+	private maintainCursor: number = 0;
 
-		this.hugging = this.createGroup([
-			{name: 'position', size: 3, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
-			{name: 'normal', size: 3, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
-			{name: 'uv', size: 2, type: RendererTypes.AttributeType.Float32, format: RendererTypes.AttributeFormat.Float, bpe: 4},
-			{name: 'textureId', size: 1, type: RendererTypes.AttributeType.UnsignedByte, format: RendererTypes.AttributeFormat.Integer, bpe: 1},
-		]);
+	public maintain(): void {
+		const allocators = [...this.extruded.allocators.values()];
+		if (allocators.length === 0) return;
+		this.maintainCursor = (this.maintainCursor + 1) % allocators.length;
+		allocators[this.maintainCursor].maintain();
 	}
 
 	private createGroup(attrDefs: Array<{

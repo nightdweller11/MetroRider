@@ -17,6 +17,7 @@ export default class MegaBufferAllocator {
 	private readonly slots: Map<string, BufferSlot> = new Map();
 	private readonly freeList: FreeRegion[] = [];
 	private capacity: number;
+	private readonly initialCapacity: number;
 	private used: number = 0;
 
 	public constructor(buffer: AbstractAttributeBuffer, capacity: number, bytesPerElement: number) {
@@ -32,6 +33,7 @@ export default class MegaBufferAllocator {
 
 		this.buffer = buffer;
 		this.capacity = capacity;
+		this.initialCapacity = capacity;
 		this.bytesPerElement = bytesPerElement;
 	}
 
@@ -115,6 +117,57 @@ export default class MegaBufferAllocator {
 
 	public getFreeRegionCount(): number {
 		return this.freeList.length;
+	}
+
+	/** Total elements currently held by live slots. */
+	public getLiveCount(): number {
+		let sum = 0;
+		for (const slot of this.slots.values()) {
+			sum += slot.count;
+		}
+		return sum;
+	}
+
+	/**
+	 * Periodic upkeep: compacts when fragmentation is significant, then shrinks
+	 * the backing buffer when it is far larger than what is live. Without this,
+	 * `used` only ever grows (frees just punch holes) and every overflow DOUBLES
+	 * the buffer — both CPU mirror and GPU copy — for the rest of the session.
+	 */
+	public maintain(): boolean {
+		const live = this.getLiveCount();
+		const wasted = this.used - live;
+
+		let didWork = false;
+
+		if (wasted > Math.max(live * 0.5, this.initialCapacity / 4)) {
+			this.compact();
+			didWork = true;
+		}
+
+		const shrinkThreshold = Math.max(this.initialCapacity, this.used * 2);
+		if (this.capacity > shrinkThreshold) {
+			this.shrink(Math.max(this.initialCapacity, Math.ceil(this.used * 1.5)));
+			didWork = true;
+		}
+
+		return didWork;
+	}
+
+	private shrink(newCapacity: number): void {
+		if (newCapacity >= this.capacity) return;
+
+		const oldData = this.buffer.data;
+		const Constructor = oldData ? (oldData.constructor as any) : Float32Array;
+		const newData = new Constructor(newCapacity);
+
+		if (oldData && this.used > 0) {
+			newData.set(oldData.subarray(0, Math.min(this.used, newCapacity)));
+		}
+
+		// setData reuses the same WebGLBuffer object, so existing VAOs stay valid.
+		this.buffer.setData(newData);
+		this.capacity = newCapacity;
 	}
 
 	public compact(): void {

@@ -225,14 +225,17 @@ describe('TileMegaBuffers / MegaBufferAllocator integration', () => {
 		const vertexCount = 5;
 		const position = new Float32Array(vertexCount * 3);
 
-		mega.allocateTile(mega.projected, key, {
+		mega.allocateTile(mega.extruded, key, {
 			position,
 			normal: new Float32Array(vertexCount * 3),
+			color: new Uint8Array(vertexCount * 3),
 			uv: new Float32Array(vertexCount * 2),
-			textureId: new Uint8Array(vertexCount)
+			textureId: new Uint8Array(vertexCount),
+			localId: new Uint32Array(vertexCount),
+			display: new Uint8Array(vertexCount)
 		});
 
-		const posSlot = mega.projected.allocators.get('position').getSlot(key);
+		const posSlot = mega.extruded.allocators.get('position').getSlot(key);
 		expect(posSlot.count).toBe(position.length);
 		expect(posSlot.count / 3).toBe(vertexCount);
 	});
@@ -403,7 +406,7 @@ describe('shared mesh uses mega-buffer attribute buffers', () => {
 });
 
 describe('Tile load / dispose with TileMegaBuffers', () => {
-	test('load sets slot sets; dispose clears them and frees allocators', () => {
+	test('load sets the extruded slot set; dispose clears it and frees allocators', () => {
 		const renderer = createMockRenderer();
 		const mega = new TileMegaBuffers(renderer);
 		const tile = new Tile(4, 5);
@@ -412,20 +415,14 @@ describe('Tile load / dispose with TileMegaBuffers', () => {
 
 		tile.load(buffers, mega);
 
+		// Only extruded geometry goes into the mega buffers — projected and
+		// hugging meshes draw per-tile, so they are not duplicated there.
 		expect(tile.extrudedSlot).not.toBeNull();
-		expect(tile.projectedSlot).not.toBeNull();
-		expect(tile.huggingSlot).not.toBeNull();
 		expect(mega.extruded.allocators.get('position').getSlot(key)).toBeDefined();
-		expect(mega.projected.allocators.get('position').getSlot(`${key}:proj`)).toBeDefined();
-		expect(mega.hugging.allocators.get('position').getSlot(`${key}:hug`)).toBeDefined();
 
 		tile.dispose(mega);
 
 		expect(tile.extrudedSlot).toBeNull();
-		expect(tile.projectedSlot).toBeNull();
-		expect(tile.huggingSlot).toBeNull();
 		expect(mega.extruded.allocators.get('position').getSlot(key)).toBeUndefined();
-		expect(mega.projected.allocators.get('position').getSlot(`${key}:proj`)).toBeUndefined();
-		expect(mega.hugging.allocators.get('position').getSlot(`${key}:hug`)).toBeUndefined();
 	});
 });

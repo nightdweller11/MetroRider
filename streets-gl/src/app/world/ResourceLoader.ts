@@ -40,6 +40,24 @@ export default new class ResourceLoader {
 		return this.resources.get(name);
 	}
 
+	/**
+	 * Drop references to loaded HTMLImageElements once they have been uploaded
+	 * to GPU textures. Every consumer (texture pools, material containers)
+	 * reads images during render-graph construction at startup; keeping ~250
+	 * decoded images referenced for the whole session pins hundreds of MB.
+	 * GLTF models are kept (small, and re-read by instanced objects).
+	 */
+	public releaseImages(): void {
+		let released = 0;
+		for (const [name, request] of this.requests) {
+			if (request.type === ResourceType.Image && this.resources.has(name)) {
+				this.resources.delete(name);
+				released++;
+			}
+		}
+		console.log(`[ResourceLoader] Released ${released} startup images`);
+	}
+
 	public async load(
 		{
 			onFileLoad,

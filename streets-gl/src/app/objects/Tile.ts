@@ -64,8 +64,6 @@ export default class Tile extends Object3D {
 	public terrainMaskMesh: TerrainMask;
 
 	public extrudedSlot: TileSlotSet = null;
-	public projectedSlot: TileSlotSet = null;
-	public huggingSlot: TileSlotSet = null;
 
 	public readonly usedHeightTiles: Vec2[] = [];
 
@@ -104,6 +102,9 @@ export default class Tile extends Object3D {
 		if (megaBuffers) {
 			const key = `${this.x},${this.y}`;
 
+			// Only extruded (buildings) geometry is batch-drawn from the mega
+			// buffers. Projected/hugging meshes draw per-tile, so copying them
+			// into mega buffers would just waste memory.
 			this.extrudedSlot = megaBuffers.allocateTile(megaBuffers.extruded, key, {
 				position: buffers.extruded.positionBuffer,
 				normal: buffers.extruded.normalBuffer,
@@ -112,20 +113,6 @@ export default class Tile extends Object3D {
 				textureId: buffers.extruded.textureIdBuffer,
 				localId: buffers.extruded.localIdBuffer,
 				display: new Uint8Array(buffers.extruded.localIdBuffer.length),
-			});
-
-			this.projectedSlot = megaBuffers.allocateTile(megaBuffers.projected, key + ':proj', {
-				position: buffers.projected.positionBuffer,
-				normal: buffers.projected.normalBuffer,
-				uv: buffers.projected.uvBuffer,
-				textureId: buffers.projected.textureIdBuffer,
-			});
-
-			this.huggingSlot = megaBuffers.allocateTile(megaBuffers.hugging, key + ':hug', {
-				position: buffers.hugging.positionBuffer,
-				normal: buffers.hugging.normalBuffer,
-				uv: buffers.hugging.uvBuffer,
-				textureId: buffers.hugging.textureIdBuffer,
 			});
 		}
 
@@ -289,14 +276,6 @@ export default class Tile extends Object3D {
 			if (this.extrudedSlot) {
 				megaBuffers.freeTile(megaBuffers.extruded, key);
 				this.extrudedSlot = null;
-			}
-			if (this.projectedSlot) {
-				megaBuffers.freeTile(megaBuffers.projected, key + ':proj');
-				this.projectedSlot = null;
-			}
-			if (this.huggingSlot) {
-				megaBuffers.freeTile(megaBuffers.hugging, key + ':hug');
-				this.huggingSlot = null;
 			}
 		}
 

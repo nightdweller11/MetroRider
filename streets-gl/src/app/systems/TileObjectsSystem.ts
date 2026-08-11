@@ -39,6 +39,12 @@ export default class TileObjectsSystem extends System {
 
 			if (object) {
 				object.removeParent(tile);
+
+				// Without this, an entry stays in the map for every building
+				// ever seen — a slow, unbounded leak over long sessions.
+				if (object.parents.length === 0) {
+					this.buildingsList.delete(packedId);
+				}
 			}
 		}
 	}

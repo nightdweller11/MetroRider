@@ -192,7 +192,9 @@ const Config = {
 			label: 'Frame rate limit',
 			status: ['off', '30', '60'],
 			statusLabels: ['Unlimited', '30 FPS', '60 FPS'],
-			statusDefault: _lowMemory ? '30' : 'off',
+			// Uncapped rendering pegs the GPU process at ~100% CPU for no visible
+			// benefit (measured 133 fps on desktop). Users can still choose Unlimited.
+			statusDefault: _lowMemory ? '30' : '60',
 			category: 'graphics'
 		},
 		terrainDetail: {

@@ -1,4 +1,5 @@
 import Vec2 from "~/lib/math/Vec2";
+import Config from "~/app/Config";
 import System from "../System";
 import PickingSystem from "./PickingSystem";
 import GBufferPass from "../render/passes/GBufferPass";
@@ -52,7 +53,27 @@ export default class RenderSystem extends System {
 	public postInit(): void {
 		const canvas = <HTMLCanvasElement>document.getElementById('canvas');
 
-		this.renderer = new WebGL2Renderer(canvas.getContext('webgl2', {powerPreference: "high-performance"}));
+		const gl = canvas.getContext('webgl2', {powerPreference: "high-performance"});
+		if (!gl) {
+			RenderSystem.showFatalOverlay(
+				'3D engine could not start',
+				'Your browser could not create a WebGL2 context. ' +
+				'Try closing other tabs and reloading, or use a different browser.',
+			);
+			throw new Error('[RenderSystem] WebGL2 context creation failed');
+		}
+
+		canvas.addEventListener('webglcontextlost', (e) => {
+			e.preventDefault();
+			console.error('[RenderSystem] WebGL context lost');
+			RenderSystem.showFatalOverlay(
+				'Graphics context lost',
+				'The device ran out of graphics resources (common on phones). ' +
+				'Tap reload to restart. If it keeps happening, lower the render resolution in Settings.',
+			);
+		});
+
+		this.renderer = new WebGL2Renderer(gl);
 		this.renderer.setSize(this.resolutionUI.x, this.resolutionUI.y);
 
 		console.log(`Vendor: ${this.renderer.rendererInfo[0]} \nRenderer: ${this.renderer.rendererInfo[1]}`);
@@ -61,6 +82,36 @@ export default class RenderSystem extends System {
 
 		this.initScene();
 		this.listenToPerformanceSettings();
+	}
+
+	private static showFatalOverlay(title: string, message: string): void {
+		if (document.getElementById('fatal-overlay')) return;
+		const overlay = document.createElement('div');
+		overlay.id = 'fatal-overlay';
+		overlay.style.cssText = `
+			position: fixed; inset: 0; z-index: 100000;
+			background: rgba(0, 0, 0, 0.92); color: #fff;
+			display: flex; flex-direction: column; align-items: center; justify-content: center;
+			font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+			text-align: center; padding: 24px; gap: 12px;
+		`;
+		const h = document.createElement('div');
+		h.style.cssText = 'font-size: 20px; font-weight: 700;';
+		h.textContent = title;
+		const p = document.createElement('div');
+		p.style.cssText = 'font-size: 14px; color: #bbb; max-width: 420px; line-height: 1.5;';
+		p.textContent = message;
+		const btn = document.createElement('button');
+		btn.textContent = 'Reload';
+		btn.style.cssText = `
+			margin-top: 8px; padding: 12px 32px; border-radius: 8px; border: none;
+			background: #3b82f6; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+		`;
+		btn.addEventListener('click', () => window.location.reload());
+		overlay.appendChild(h);
+		overlay.appendChild(p);
+		overlay.appendChild(btn);
+		document.body.appendChild(overlay);
 	}
 
 	private initScene(): void {
@@ -153,7 +204,20 @@ export default class RenderSystem extends System {
 		this.pickObjectId();
 
 		++this.frameCount;
+
+		// Memory upkeep, spread out over time:
+		// - mega-buffer compaction/shrink (stops unbounded fragmentation growth)
+		// - one-time release of startup images after they have been uploaded to GPU
+		if (this.frameCount % 240 === 0) {
+			this.passManager.tileMegaBuffers?.maintain();
+		}
+		if (!this._startupImagesReleased && this.frameCount > 300) {
+			this._startupImagesReleased = true;
+			ResourceLoader.releaseImages();
+		}
 	}
+
+	private _startupImagesReleased: boolean = false;
 
 	public getLastRenderGraph(): Set<RG.Node> {
 		return this.renderGraph.lastGraph;
@@ -218,7 +282,14 @@ export default class RenderSystem extends System {
 	}
 
 	private _updateResolutionCache(): void {
-		const pixelRatio = window.devicePixelRatio * this._renderScale;
+		// Phones report devicePixelRatio 3 — rendering the deferred pipeline at
+		// 3x costs ~2.25x the GPU memory/fill of 2x for no visible gain on a
+		// small screen, and is a major cause of load failures on phones.
+		// iPads report 2, so this cap leaves tablets unchanged.
+		const dpr = Config.LowMemoryMode
+			? Math.min(window.devicePixelRatio, 2)
+			: window.devicePixelRatio;
+		const pixelRatio = dpr * this._renderScale;
 		this._cachedResolutionUI.x = window.innerWidth * pixelRatio;
 		this._cachedResolutionUI.y = window.innerHeight * pixelRatio;
 		this._cachedResolutionScene.x = window.innerWidth * this._renderScale;

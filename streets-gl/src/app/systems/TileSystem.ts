@@ -231,6 +231,14 @@ export default class TileSystem extends System {
 	}
 
 	public getNextTileToLoad(): QueueItem {
+		// Hard cap on concurrently loaded tiles. Without this gate a high or
+		// wide camera view could keep hundreds of tiles loaded at once (each
+		// holding CPU geometry + GPU buffers), which is how long sessions used
+		// to grow to tens of GB. Eviction (removeCulledTiles) frees room based
+		// on demand; loading resumes as soon as there is capacity.
+		if (this.tiles.size >= Config.MaxConcurrentTiles) {
+			return undefined;
+		}
 		return this.queue.shift();
 	}
 
@@ -364,24 +372,48 @@ export default class TileSystem extends System {
 	}
 
 	private removeCulledTiles(): void {
-		const tileList: {tile: Tile; distance: number}[] = [];
+		const outOfFrustum: {tile: Tile; distance: number}[] = [];
 
 		for (const tile of this.tiles.values()) {
 			if (!tile.inFrustum) {
-				tileList.push({tile, distance: tile.distanceToCamera});
+				outOfFrustum.push({tile, distance: tile.distanceToCamera});
 			}
 		}
 
-		tileList.sort((a, b): number => {
+		// Farthest first.
+		outOfFrustum.sort((a, b): number => {
 			return b.distance - a.distance;
 		});
 
-		const tilesToRemove = Config.AggressiveEviction
-			? tileList.length
-			: Math.min(tileList.length, this.tiles.size - Config.MaxConcurrentTiles);
+		if (Config.AggressiveEviction) {
+			for (const {tile} of outOfFrustum) {
+				this.removeTile(tile.x, tile.y);
+			}
+			return;
+		}
 
-		for (let i = 0; i < tilesToRemove; i++) {
-			this.removeTile(tileList[i].tile.x, tileList[i].tile.y);
+		// Evict enough out-of-frustum tiles to stay within the cap AND to make
+		// room for tiles waiting in the load queue (otherwise a full cache of
+		// out-of-frustum tiles would block new nearby tiles forever).
+		const demand = Math.min(this.queue.length, 16);
+		let toFree = Math.max(0, this.tiles.size + demand - Config.MaxConcurrentTiles);
+
+		for (let i = 0; i < outOfFrustum.length && toFree > 0; i++, toFree--) {
+			this.removeTile(outOfFrustum[i].tile.x, outOfFrustum[i].tile.y);
+		}
+
+		// Safety net: if we are still above the cap (everything is in frustum),
+		// evict the farthest visible tiles. Bounded memory beats far scenery.
+		if (this.tiles.size > Config.MaxConcurrentTiles) {
+			const all = [...this.tiles.values()].sort(
+				(a, b) => b.distanceToCamera - a.distanceToCamera
+			);
+			let excess = this.tiles.size - Config.MaxConcurrentTiles;
+			for (const tile of all) {
+				if (excess <= 0) break;
+				this.removeTile(tile.x, tile.y);
+				excess--;
+			}
 		}
 	}
 
