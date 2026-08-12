@@ -43,6 +43,7 @@ import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContaine
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import TrainSystem from "~/app/game/TrainSystem";
 import PassengerRenderingSystem from "~/app/game/passengers/PassengerRenderingSystem";
+import TrackSignRenderingSystem from "~/app/game/limits/TrackSignRenderingSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 export default class GBufferPass extends Pass<{
@@ -612,6 +613,8 @@ export default class GBufferPass extends Pass<{
 			// Platform crowds: static world geometry like the stations, so they
 			// take the same material and the same zero motion flag.
 			...(passengerRendering?.crowdMeshes ?? []),
+			// Lineside speed boards — same story.
+			...(this.manager.systemManager.getSystem(TrackSignRenderingSystem)?.signMeshes ?? []),
 		].filter(Boolean);
 
 		for (const m of allMeshes) {

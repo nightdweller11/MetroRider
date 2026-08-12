@@ -22,6 +22,7 @@ import GameUISystem from "~/app/game/GameUISystem";
 import PassengerSystem from '~/app/game/passengers/PassengerSystem';
 import ScoringSystem from '~/app/game/scoring/ScoringSystem';
 import SpeedLimitSystem from '~/app/game/limits/SpeedLimitSystem';
+import TrackSignRenderingSystem from '~/app/game/limits/TrackSignRenderingSystem';
 import PassengerRenderingSystem from '~/app/game/passengers/PassengerRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
@@ -72,6 +73,7 @@ class App {
 				PassengerRenderingSystem,
 				ScoringSystem,
 				SpeedLimitSystem,
+				TrackSignRenderingSystem,
 				AudioSystem,
 				GameCameraSystem,
 				RenderSystem,

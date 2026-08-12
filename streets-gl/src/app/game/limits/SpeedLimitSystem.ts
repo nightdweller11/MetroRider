@@ -2,9 +2,32 @@ import System from '~/app/System';
 import TrainSystem from '../TrainSystem';
 import MathUtils from '~/lib/math/MathUtils';
 import {
+	countryForLocation, signNumber, signStyleFor, SignStyle, TransportMode, unitLabel,
+} from './SignStyle';
+import {
 	buildSpeedProfile, limitAt, nextChange, speedState,
 	SpeedSegment, SpeedState, NextChange, SERIOUS_OVERSPEED, toSignKmh,
 } from './SpeedProfile';
+
+/**
+ * What kind of railway this is, from what the line looks like.
+ *
+ * MetroDreamin does carry a mode per line, but it is not threaded through the
+ * importer yet (that is F6), and the signage has to be right today. Station
+ * spacing is a good proxy in the meantime: metros stop every few hundred
+ * metres, trams more often still, and main lines run kilometres between stops.
+ */
+function inferMode(lineName: string, totalLength: number, stationCount: number): TransportMode {
+	const name = lineName.toLowerCase();
+	if (name.includes('tram')) return 'tram';
+	if (name.includes('metro') || name.includes('subway') || name.includes('underground')) return 'metro';
+	if (name.includes('light rail') || name.includes('lrt')) return 'light-rail';
+
+	const spacing = stationCount > 1 ? totalLength / (stationCount - 1) : totalLength;
+	if (spacing < 600) return 'tram';
+	if (spacing < 1800) return 'metro';
+	return 'rail';
+}
 
 /**
  * Speed limits, in force.
@@ -18,6 +41,10 @@ export default class SpeedLimitSystem extends System {
 	private lineKey = '';
 
 	public limit = 0;
+	/** Signage of the railway this map belongs to. */
+	public sign: SignStyle = signStyleFor('rail', 'XX');
+	public countryCode = 'XX';
+	public mode: TransportMode = 'rail';
 	public state: SpeedState = 'ok';
 	public change: NextChange | null = null;
 	/** Seconds spent above the limit this run — the score reads this. */
@@ -53,6 +80,16 @@ export default class SpeedLimitSystem extends System {
 			);
 			this.overspeedSeconds = 0;
 			this.seriousOverspeedSeconds = 0;
+
+			// Signage belongs to the railway, so it is resolved from where the
+			// line actually is and what kind of service it runs.
+			const stations = ls.parsed.stations;
+			const mid = stations[Math.floor(stations.length / 2)] ?? stations[0];
+			if (mid) {
+				this.countryCode = countryForLocation(mid.lat, mid.lng);
+			}
+			this.mode = inferMode(ls.parsed.name, ls.track.totalLength, stations.length);
+			this.sign = signStyleFor(this.mode, this.countryCode);
 		}
 
 		if (!trainSystem.gameActive) return;
@@ -81,9 +118,22 @@ export default class SpeedLimitSystem extends System {
 		// whole enforcement, and it is the player's call.
 	}
 
-	/** The number a sign or the HUD shows, km/h. */
+	/** The number a sign or the HUD shows, km/h — the plain figure. */
 	public limitKmh(): number {
 		return toSignKmh(this.limit);
+	}
+
+	/** The number printed on THIS railway's sign face (tens, mph, or km/h). */
+	public signFace(): number {
+		return signNumber(this.limit, this.sign);
+	}
+
+	public signFaceFor(limitMs: number): number {
+		return signNumber(limitMs, this.sign);
+	}
+
+	public unit(): string {
+		return unitLabel(this.sign);
 	}
 
 	public getSegments(): SpeedSegment[] {

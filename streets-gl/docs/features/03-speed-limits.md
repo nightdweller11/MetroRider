@@ -146,3 +146,35 @@ Three, all correct, all shipped in v1.1.13:
 Scoring now separates the two cases: a little over is 2 points a second, more
 than 25% over is 5 — the difference between running late and taking a curve too
 fast.
+
+
+---
+
+## 6. Signage (v1.1.14)
+
+A red-ringed disc is a ROAD sign. Most railways do not use it, and the ones
+that do use it differently — so the sign is now resolved from the country the
+map is in and the mode being driven (`SignStyle.ts`, 15 unit tests):
+
+| Where / what | Sign |
+|---|---|
+| Germany, Austria, NL, BE, DK, CZ, PL… | white square, black numeral, **tens of km/h** (Lf 7: 120 km/h reads "12"), yellow triangle for the advance warning (Lf 6) |
+| France | white **disc**, black numeral, tens of km/h (TIV fixe), yellow triangle for the advance (TIV à distance) |
+| Britain, Ireland | white **plate**, black numerals, **mph** |
+| USA, Canada | white speed board, **mph** |
+| Israel, Spain, Italy, most km/h railways | white square, the **full** number in km/h |
+| **Tram** (any country) | road-style disc with the red ring — trams share the street, so they are signed like it |
+| **Metro / light rail** | plain staff board, no road iconography |
+
+Country comes from the map's own coordinates (a bounding-box table, checked
+smallest-box-first so Amsterdam resolves to NL and not DE — no geocoder, no
+key, no data file). Mode is inferred from station spacing until F6 threads
+MetroDreamin's own `mode` through the importer: under 600 m between stops is a
+tram, under 1.8 km a metro, above that heavy rail.
+
+**Lineside boards** (`SignGeometry.ts` + `TrackSignRenderingSystem`) stand at
+the start of each limit, on the driver's side, turned to face an approaching
+train. Numerals are seven-segment quads rather than a texture, because the
+train material carries vertex colours only — which keeps the boards in the same
+draw path as everything else. Geometry is baked at the origin and positioned by
+the mesh transform, like the stations, so they do not wobble.

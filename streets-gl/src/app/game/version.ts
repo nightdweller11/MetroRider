@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.14',
+		codename: 'Lineside',
+		date: '2026-08-13',
+		emblem: '🪧🛤️',
+		summary: 'Real speed boards, standing beside the track, in the right country’s style.',
+		changes: [
+			'Speed limits now have physical boards along the line — at the point each limit starts, on the driver’s side, facing you as you approach.',
+			'The signs match the railway you are driving on: a German main line shows a square board in tens of km/h, France a round TIV, Britain a plate in mph, Israel and most others the full number in km/h.',
+			'Trams are signed like the street they run in (a road disc with a red ring); metros get a plain staff board. A railway is not a road, and the game no longer pretends it is.',
+			'The HUD sign changes shape and units to match, and says what kind of sign it is if you hover it.',
+		],
+	},
+	{
 		version: '1.1.13',
 		codename: 'The Driver Decides',
 		date: '2026-08-13',

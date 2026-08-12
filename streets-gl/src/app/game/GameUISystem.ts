@@ -318,11 +318,13 @@ export default class GameUISystem extends System {
 		const sign = document.createElement('div');
 		sign.id = 'hud-limit-sign';
 		const size = this.mobile ? 34 : 42;
+		// The shape, colours and number format are set per frame from the
+		// railway's own signage — a German main line, a French TIV, a British
+		// mph plate and a tram's road disc are all different objects.
 		sign.style.cssText = `
-			width: ${size}px; height: ${size}px; border-radius: 50%;
-			background: #fff; border: ${this.mobile ? 4 : 5}px solid #d32f2f;
+			width: ${size}px; height: ${size}px;
 			display: flex; align-items: center; justify-content: center;
-			color: #111; font-weight: 800; font-size: ${this.mobile ? 13 : 15}px;
+			font-weight: 800; font-size: ${this.mobile ? 14 : 16}px;
 			box-shadow: 0 1px 4px rgba(0,0,0,0.5); flex: none; line-height: 1;
 		`;
 		sign.textContent = '—';
@@ -1646,17 +1648,26 @@ export default class GameUISystem extends System {
 		if (this.limitEl) {
 			const limits = this.systemManager.getSystem(SpeedLimitSystem);
 			if (limits && limits.limit > 0) {
-				this.limitEl.textContent = String(limits.limitKmh());
-				// The sign itself flashes when the driver is over it — the only
+				const style = limits.sign;
+				this.limitEl.textContent = String(limits.signFace());
+				this.limitEl.title = `${style.name} — ${limits.countryCode} ${limits.mode}`;
+
+				// Shape follows the country: square board, disc, or plate.
+				this.limitEl.style.borderRadius = style.shape === 'disc' ? '50%'
+					: style.shape === 'square' ? '4px' : '2px';
+				this.limitEl.style.borderStyle = 'solid';
+				this.limitEl.style.borderWidth = `${style.borderWidth}px`;
+				this.limitEl.style.color = style.text;
+				// The sign reacts when the driver is over it — the only
 				// enforcement there is, since the train is never braked for them.
 				this.limitEl.style.borderColor = limits.state === 'over' ? '#ff1744'
-					: limits.state === 'approaching' ? '#f0b429' : '#d32f2f';
-				this.limitEl.style.background = limits.state === 'over' ? '#ffe5e5' : '#fff';
+					: limits.state === 'approaching' ? '#f0b429' : style.border;
+				this.limitEl.style.background = limits.state === 'over' ? '#ffe5e5' : style.background;
 
 				if (this.limitAheadEl) {
 					const change = limits.change;
 					if (change && change.distance < 1200) {
-						const next = Math.round(change.limit * 3.6 / 5) * 5;
+						const next = limits.signFaceFor(change.limit);
 						const how = change.distance < 100
 							? `${Math.round(change.distance)} m`
 							: `${(change.distance / 1000).toFixed(1)} km`;
