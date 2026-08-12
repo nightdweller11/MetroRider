@@ -4,23 +4,37 @@ import TrainSystem from '~/app/game/TrainSystem';
 import {debugLog} from '~/app/game/debug';
 
 /**
- * Auto quality governor.
+ * Quality tiers + the auto governor.
  *
- * Measures real frame times while the game is being played and walks a quality
- * ladder in BOTH directions:
+ * ONE knob (the `performanceMode` setting) selects the graphics profile:
  *
- *   - Strives for 60 FPS. If frames run long, it steps quality down one rung
- *     at a time (render scale, shadows, SSAO, bloom).
- *   - If even the lowest rung cannot hold ~45 FPS, it re-targets 30 FPS and
- *     climbs back up to the best quality that holds 30.
- *   - If the TOP rung holds 60 comfortably, it uncaps the frame rate
- *     ("unlimited" mode, max settings) — a high-end machine ends up maxed out
- *     regardless of what device class it booted as.
+ *   low / medium / high — fixed presets, applied (and saved) the moment the
+ *   tier is picked. After that the game never touches your settings; tweak
+ *   anything freely (the tier label flips to "custom").
  *
- * The governor's changes are TRANSIENT (never written to localStorage), so the
- * user's saved preferences survive. Manually changing any governed setting
- * turns the governor off — manual control always wins. The chosen rung/mode is
- * remembered per device so the next session starts where this one settled.
+ *   auto — the governor owns the graphics settings: it measures the real
+ *   frame rate while you play and finds the best quality that holds the
+ *   target. It NEVER acts in any other tier, and manually changing any
+ *   governed setting while in auto flips the tier to "custom" and stops it.
+ *
+ * Governor rules (designed against the v1.1.3 failure mode, where a capped
+ * 60 could only ever average ≤60 and vsync-quantized frames tripped the
+ * "too slow" check on machines that were actually fine):
+ *
+ *   - The metric is the MEDIAN of per-second frame counts over the last 8s —
+ *     single hitches and tile-streaming bursts cannot trip it.
+ *   - Quality steps DOWN only when the median stays below 90% of the target
+ *     for two consecutive evaluations — meeting the target never reduces
+ *     quality.
+ *   - After every change (and on engage) there is a warm-up blackout so
+ *     resize/streaming hitches caused by the change itself are not counted.
+ *   - It strives for 60; only if the LOWEST rung cannot hold 60 does it
+ *     re-target a steady 30 (and periodically retries 60). If the HIGHEST
+ *     rung holds 60, it uncaps the frame rate — a fast machine ends up at
+ *     max settings, uncapped.
+ *
+ * Governor changes are transient (never written to saved settings); the
+ * converged rung is remembered per device for instant starts.
  */
 
 interface QualityRung {
@@ -42,99 +56,153 @@ const RUNGS: QualityRung[] = [
 	/* 7 — floor  */ {renderScale: 0.5, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off'},
 ];
 
+/** Fixed presets for the manual tiers (applied once, persisted). */
+const TIER_PRESETS: Record<string, QualityRung & {fpsLimit: string}> = {
+	low: {...RUNGS[7], renderScale: 0.75, fpsLimit: '30'},
+	medium: {...RUNGS[1], fpsLimit: '60'},
+	high: {...RUNGS[0], fpsLimit: 'off'},
+};
+
 const GOVERNED_KEYS = ['renderScale', 'shadows', 'shadowResolution', 'ssao', 'bloom', 'fpsLimit'];
 
 type GovernorMode = 'strive60' | 'fallback30' | 'unlimited';
 
-const BUDGET_60 = 1000 / 60;
-const BUDGET_30 = 1000 / 30;
 const STORAGE_KEY = 'metrorider-autoquality';
 
-const EVAL_INTERVAL = 1.0;        // seconds between evaluations
-const WINDOW_SIZE = 240;          // ~4s of frames at 60fps
-const MIN_SAMPLES = 45;
-const DOWN_FACTOR = 1.18;         // p75 above budget×this → step down
-const UP_FACTOR = 1.04;           // p75 within budget×this → eligible to step up
-const DOWN_COOLDOWN = 4;          // s between down-steps
-const UP_HOLD = 12;               // s of holding target before stepping up
-const RETRY_60_HOLD = 45;         // s holding 30 at rung 0 before retrying 60
-const FALLBACK_HOLD = 20;         // s of failing at the floor before 30-fps fallback
-const OSCILLATION_LOCK = 90;      // s to forbid re-climbing a rung we just fell from
+const WINDOW_BUCKETS = 8;         // seconds of history for the median
+// Generous by design: under a cap the average can only sit AT or BELOW the
+// target, and vsync quantization pushes it further down even when the game
+// feels perfect — 85% is "genuinely struggling", not "slightly imperfect".
+const DOWN_RATIO = 0.85;
+const UP_RATIO = 0.97;            // median at/above target×this → holding
+const DOWN_CONFIRM = 2;           // consecutive trouble evaluations before stepping down
+const WARMUP = 8;                 // s ignored after any change (resize/streaming hitches)
+const UP_HOLD = 12;               // s of holding before stepping up
+const UNCAP_HOLD = 25;            // s of holding at rung 0 before uncapping
+const RETRY_60_HOLD = 45;         // s of holding 30 at rung 0 before retrying 60
+const FALLBACK_CONFIRM = 20;      // s failing at the floor before the 30-fps fallback
+const OSCILLATION_LOCK = 120;     // s to forbid re-climbing a rung we just fell from
+// A down-step must IMPROVE the median by at least this factor, or it gets
+// reverted and down-stepping locks — if lowering quality doesn't raise fps,
+// quality is not the bottleneck (streaming/CPU jitter) and degrading the
+// visuals is pure loss. This is what prevents death spirals to the floor.
+const STEP_EFFECT_MIN = 1.05;
+const DOWN_LOCK_AFTER_INEFFECTIVE = 180; // s
 
 export default class AutoQualitySystem extends System {
-	private enabled: boolean = false;
+	private engaged: boolean = false;
 	private rung: number = 1;
 	private mode: GovernorMode = 'strive60';
 
-	private deltas: number[] = [];
-	private evalTimer: number = 0;
+	private buckets: number[] = [];
+	private bucketDeltas: number[] = [];
+	private bucketTime: number = 0;
+	private now: number = 0;
+	private warmupUntil: number = 0;
+	private troubleCount: number = 0;
 	private holdTimer: number = 0;
 	private failTimer: number = 0;
-	private now: number = 0;
-	private cooldownUntil: number = 0;
 	private lockedRungAbove: number = -1;
 	private lockedUntil: number = 0;
 	private applying: boolean = false;
 	private announcedDownStep: boolean = false;
+	private preStepMedian: number = 0;
+	private checkingStepEffect: boolean = false;
+	private downLockedUntil: number = 0;
 
 	public postInit(): void {
 		const settings = this.systemManager.getSystem(SettingsSystem).settings;
 
 		this.restoreState();
 
-		settings.onChange('autoQuality', ({statusValue}) => {
-			const on = statusValue === 'on';
-			if (on && !this.enabled) {
-				this.engage();
-			} else if (!on) {
-				this.enabled = false;
-			}
+		settings.onChange('performanceMode', ({statusValue}) => {
+			if (this.applying) return;
+			this.onTierSelected(statusValue);
 		}, true);
 
-		// Manual change to any governed setting → the user wants control.
+		// Manually changing any governed setting while in auto → the user wants
+		// control: stop the governor and mark the tier as custom.
 		for (const key of GOVERNED_KEYS) {
 			settings.onChange(key, () => {
-				if (this.enabled && !this.applying) {
-					this.disengage('Auto quality off — you’re in manual control');
+				if (this.engaged && !this.applying) {
+					this.becomeCustom('Auto tuning off — you’re in manual control (tier: Custom)');
 				}
 			}, false);
 		}
+	}
 
-		// Device-tier changes reseed the ladder but keep the governor engaged.
-		settings.onChange('performanceMode', ({statusValue}) => {
-			if (!this.enabled) return;
-			this.rung = statusValue === 'low' ? 5 : statusValue === 'high' ? 0 : 1;
-			this.mode = statusValue === 'high' ? 'unlimited' : 'strive60';
-			this.resetMeasurement();
-			this.applyRung('device tier changed');
-		}, false);
+	private onTierSelected(tier: string): void {
+		const settings = this.systemManager.getSystem(SettingsSystem).settings;
+
+		if (tier === 'auto') {
+			this.engage();
+			return;
+		}
+
+		this.engaged = false;
+
+		const preset = TIER_PRESETS[tier];
+		if (preset) {
+			// A tier pick is an explicit user choice — apply and SAVE the preset.
+			this.applying = true;
+			settings.update('renderScale', {numberValue: preset.renderScale});
+			settings.update('shadows', {statusValue: preset.shadows});
+			settings.update('shadowResolution', {statusValue: preset.shadowResolution});
+			settings.update('ssao', {statusValue: preset.ssao});
+			settings.update('bloom', {statusValue: preset.bloom});
+			settings.update('fpsLimit', {statusValue: preset.fpsLimit});
+			this.applying = false;
+			this.toast(`Graphics preset applied: ${tier === 'low' ? 'Low-end' : tier === 'medium' ? 'Medium' : 'High-end'}`);
+			debugLog(`[AutoQuality] Applied ${tier} preset`);
+		}
+		// tier === 'custom': nothing to do — pure manual.
+	}
+
+	private becomeCustom(message: string): void {
+		const settings = this.systemManager.getSystem(SettingsSystem).settings;
+		this.engaged = false;
+		this.applying = true;
+		settings.update('performanceMode', {statusValue: 'custom'});
+		this.applying = false;
+		this.toast(message);
+		debugLog('[AutoQuality] Disengaged → custom (manual override)');
 	}
 
 	public isEngaged(): boolean {
-		return this.enabled;
+		return this.engaged;
 	}
 
 	public getStatusLabel(): string {
-		if (!this.enabled) return 'off';
+		if (!this.engaged) return 'off';
 		const fps = this.mode === 'fallback30' ? '30' : this.mode === 'unlimited' ? 'uncapped' : '60';
 		return `rung ${this.rung} → ${fps} fps`;
 	}
 
+	private lastMedian: number = 0;
+	private lastP75Delta: number = 0;
+	private recentDeltasSample: number[] = [];
+
+	/** Debug/testing introspection. */
+	public getDebugSnapshot(): Record<string, unknown> {
+		return {
+			engaged: this.engaged,
+			rung: this.rung,
+			mode: this.mode,
+			buckets: [...this.buckets].map(b => Math.round(b * 10) / 10),
+			lastMedian: Math.round(this.lastMedian * 10) / 10,
+			lastP75Delta: Math.round(this.lastP75Delta * 100) / 100,
+			recentDeltasMs: this.recentDeltasSample.map(d => Math.round(d * 100) / 100),
+			now: Math.round(this.now * 10) / 10,
+			warmupUntil: Math.round(this.warmupUntil * 10) / 10,
+			troubleCount: this.troubleCount,
+		};
+	}
+
 	private engage(): void {
-		this.enabled = true;
+		this.engaged = true;
 		this.resetMeasurement();
 		this.applyRung('engaged');
 		debugLog(`[AutoQuality] Engaged at rung ${this.rung}, mode ${this.mode}`);
-	}
-
-	private disengage(message: string): void {
-		this.enabled = false;
-		const settings = this.systemManager.getSystem(SettingsSystem).settings;
-		this.applying = true;
-		settings.update('autoQuality', {statusValue: 'off'});
-		this.applying = false;
-		this.toast(message);
-		debugLog('[AutoQuality] Disengaged (manual override)');
 	}
 
 	private restoreState(): void {
@@ -149,10 +217,7 @@ export default class AutoQualitySystem extends System {
 		} catch {
 			// fall through to defaults
 		}
-		// First run: seed from the device tier.
-		const settings = this.systemManager.getSystem(SettingsSystem).settings;
-		const tier = settings.get('performanceMode')?.statusValue;
-		this.rung = tier === 'low' ? 5 : tier === 'high' ? 0 : 1;
+		this.rung = 1;
 	}
 
 	private persistState(): void {
@@ -164,10 +229,13 @@ export default class AutoQualitySystem extends System {
 	}
 
 	private resetMeasurement(): void {
-		this.deltas.length = 0;
+		this.buckets.length = 0;
+		this.bucketDeltas.length = 0;
+		this.bucketTime = 0;
+		this.troubleCount = 0;
 		this.holdTimer = 0;
 		this.failTimer = 0;
-		this.evalTimer = 0;
+		this.warmupUntil = this.now + WARMUP;
 	}
 
 	private applyRung(reason: string): void {
@@ -182,15 +250,15 @@ export default class AutoQualitySystem extends System {
 		settings.update('fpsLimit', {statusValue: this.mode === 'unlimited' ? 'off' : this.mode === 'fallback30' ? '30' : '60'}, false);
 		this.applying = false;
 		this.persistState();
-		debugLog(`[AutoQuality] rung ${this.rung} (${JSON.stringify(r)}), mode ${this.mode} — ${reason}`);
+		debugLog(`[AutoQuality] rung ${this.rung}, mode ${this.mode} — ${reason}`);
 	}
 
-	private budget(): number {
-		return this.mode === 'fallback30' ? BUDGET_30 : BUDGET_60;
+	private target(): number {
+		return this.mode === 'fallback30' ? 30 : 60;
 	}
 
 	public update(deltaTime: number): void {
-		if (!this.enabled) return;
+		if (!this.engaged) return;
 
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 		if (!trainSystem?.gameActive) {
@@ -204,46 +272,82 @@ export default class AutoQualitySystem extends System {
 
 		this.now += deltaTime;
 
-		const ms = deltaTime * 1000;
-		if (ms < 500) { // ignore tab-switch hiccups
-			this.deltas.push(ms);
-			if (this.deltas.length > WINDOW_SIZE) this.deltas.shift();
+		// Per-second buckets rated by their TRUE average fps (frames/time), then
+		// the median across the window — stall-seconds can't dominate. Tab
+		// hiccups (>0.5 s frames) reset the bucket.
+		if (deltaTime > 0.5) {
+			this.bucketDeltas.length = 0;
+			this.bucketTime = 0;
+			return;
+		}
+		this.bucketDeltas.push(deltaTime * 1000);
+		this.bucketTime += deltaTime;
+		if (this.bucketTime < 1) return;
+
+		this.recentDeltasSample = this.bucketDeltas.slice(0, 30);
+		const bucketFps = this.bucketDeltas.length / this.bucketTime;
+		this.lastP75Delta = this.bucketTime * 1000 / this.bucketDeltas.length;
+		this.bucketDeltas.length = 0;
+		this.bucketTime = 0;
+
+		if (this.now < this.warmupUntil) return;
+
+		this.buckets.push(bucketFps);
+		if (this.buckets.length > WINDOW_BUCKETS) this.buckets.shift();
+		if (this.buckets.length < 4) return;
+
+		const sorted = [...this.buckets].sort((a, b) => a - b);
+		const median = sorted[Math.floor(sorted.length / 2)];
+		this.lastMedian = median;
+		const target = this.target();
+
+		// Effectiveness audit for the last down-step: if lowering quality did
+		// not raise the frame rate, quality is not the bottleneck — undo the
+		// step and stop degrading for a while.
+		if (this.checkingStepEffect) {
+			this.checkingStepEffect = false;
+			if (median < this.preStepMedian * STEP_EFFECT_MIN && this.rung > 0) {
+				this.rung--;
+				this.downLockedUntil = this.now + DOWN_LOCK_AFTER_INEFFECTIVE;
+				this.lockedRungAbove = -1; // the revert is intentional — allow future climbs
+				this.applyRung(`step-down ineffective (median ${this.preStepMedian.toFixed(0)}→${median.toFixed(0)}) — reverting`);
+				this.resetMeasurement();
+				return;
+			}
 		}
 
-		this.evalTimer += deltaTime;
-		if (this.evalTimer < EVAL_INTERVAL || this.deltas.length < MIN_SAMPLES) return;
-		this.evalTimer = 0;
-
-		const sorted = [...this.deltas].sort((a, b) => a - b);
-		const p75 = sorted[Math.floor(sorted.length * 0.75)];
-		const budget = this.budget();
-
-		if (p75 > budget * DOWN_FACTOR) {
+		if (median < target * DOWN_RATIO) {
 			this.holdTimer = 0;
-			if (this.rung < RUNGS.length - 1 && this.now >= this.cooldownUntil) {
-				if (this.mode === 'unlimited') {
-					// First response to trouble in unlimited: re-cap to 60.
-					this.mode = 'strive60';
-					this.applyRung('re-capping to 60');
-				} else {
-					this.lockedRungAbove = this.rung;
-					this.lockedUntil = this.now + OSCILLATION_LOCK;
-					this.rung++;
-					this.applyRung('frame times over budget');
-					if (!this.announcedDownStep) {
-						this.announcedDownStep = true;
-						this.toast('Auto quality: adjusted for smoother performance');
-					}
-				}
-				this.cooldownUntil = this.now + DOWN_COOLDOWN;
+			this.troubleCount++;
+			if (this.troubleCount < DOWN_CONFIRM) return;
+			this.troubleCount = 0;
+
+			if (this.mode === 'unlimited') {
+				// First response to trouble at max: re-cap to 60 before degrading.
+				this.mode = 'strive60';
+				this.applyRung('re-capping to 60');
 				this.resetMeasurement();
-			} else if (this.rung >= RUNGS.length - 1 && this.mode === 'strive60') {
-				// At the floor and still failing 60 — count toward the 30-fps fallback.
-				this.failTimer += EVAL_INTERVAL;
-				if (this.failTimer >= FALLBACK_HOLD) {
+			} else if (this.rung < RUNGS.length - 1 && this.now >= this.downLockedUntil) {
+				this.lockedRungAbove = this.rung;
+				this.lockedUntil = this.now + OSCILLATION_LOCK;
+				this.preStepMedian = median;
+				this.checkingStepEffect = true;
+				this.rung++;
+				this.applyRung(`median ${median.toFixed(0)} < ${Math.round(target * DOWN_RATIO)}`);
+				if (!this.announcedDownStep) {
+					this.announcedDownStep = true;
+					this.toast('Auto quality: adjusted for smoother performance');
+				}
+				this.resetMeasurement();
+			} else if (this.mode === 'strive60') {
+				// Can't (or shouldn't) degrade further — at the floor, or quality
+				// reduction was proven ineffective. If 60 still isn't happening,
+				// the honest move is a lower TARGET, not lower quality.
+				this.failTimer += 1;
+				if (this.failTimer >= FALLBACK_CONFIRM) {
 					this.mode = 'fallback30';
-					// 30 fps affords better quality: climb happens organically from here.
-					this.applyRung('targeting 30 fps');
+					this.downLockedUntil = 0; // new target — re-evaluate step effectiveness fresh
+					this.applyRung('cannot hold 60 — targeting a steady 30');
 					this.toast('Auto quality: targeting a steady 30 FPS on this device');
 					this.resetMeasurement();
 				}
@@ -251,10 +355,13 @@ export default class AutoQualitySystem extends System {
 			return;
 		}
 
+		this.troubleCount = 0;
 		this.failTimer = 0;
 
-		if (p75 <= budget * UP_FACTOR) {
-			this.holdTimer += EVAL_INTERVAL;
+		// Meeting the target NEVER reduces quality. Holding it comfortably
+		// earns a step up (or an uncap at the top).
+		if (median >= target * UP_RATIO) {
+			this.holdTimer += 1;
 
 			const wantRung = this.rung - 1;
 			const rungLocked = wantRung >= 0 && wantRung <= this.lockedRungAbove && this.now < this.lockedUntil;
@@ -263,16 +370,18 @@ export default class AutoQualitySystem extends System {
 				this.rung--;
 				this.applyRung('headroom available');
 				this.resetMeasurement();
-			} else if (this.rung === 0 && this.mode === 'strive60' && this.holdTimer >= UP_HOLD * 2) {
+			} else if (this.rung === 0 && this.mode === 'strive60' && this.holdTimer >= UNCAP_HOLD) {
 				this.mode = 'unlimited';
 				this.applyRung('max settings hold 60 — uncapping');
 				this.resetMeasurement();
 			} else if (this.rung === 0 && this.mode === 'fallback30' && this.holdTimer >= RETRY_60_HOLD) {
 				this.mode = 'strive60';
+				this.downLockedUntil = 0;
 				this.applyRung('retrying 60 fps');
 				this.resetMeasurement();
 			}
 		} else {
+			// Between 90% and 97% of target: acceptable — hold position.
 			this.holdTimer = 0;
 		}
 	}

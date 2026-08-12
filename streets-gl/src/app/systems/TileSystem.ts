@@ -57,8 +57,10 @@ export default class TileSystem extends System {
 		}, true);
 
 		settings.onChange('performanceMode', ({statusValue}) => {
-			// 3-state device tier: only 'low' tightens tile/memory limits.
-			Config.applyPerformanceMode(statusValue === 'low');
+			// Tile/memory limits tighten on the low tier, or in auto mode on a
+			// device that detected as low-memory (phones/tablets).
+			const low = statusValue === 'low' || (statusValue === 'auto' && Config.LowMemoryMode);
+			Config.applyPerformanceMode(low);
 			this.cameraFrustum = null;
 		}, true);
 

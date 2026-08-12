@@ -29,7 +29,6 @@ class App {
 	private time = 0;
 	private systemManager: SystemManager;
 	private _fpsLimitInterval: number = 0;
-	private _lastRenderedTime: number = 0;
 
 	public constructor() {
 		this.init();
@@ -94,24 +93,33 @@ class App {
 		}, true);
 	}
 
+	private _lastTickTime: number = 0;
+	private _frameBudgetAcc: number = 0;
+
 	private update(rafTime = 0): void {
 		requestAnimationFrame(this.loop);
 
-		// FPS limiter with carried timestamps. The old `last = rafTime` version
-		// quantized to vsync boundaries: a "60" limit on a 120 Hz display
-		// skipped every frame arriving at 16.6 ms (< 16.67) and effectively ran
-		// at 40 fps, and "30" on a 60 Hz display ran at 20 fps. Carrying the
-		// interval (with a half-tick tolerance) delivers the actual target rate.
+		// FPS limiter, accumulator style. Two designs failed here before:
+		// `last = rafTime` quantized to vsync boundaries ("30" ran at ~20 fps),
+		// and carried timestamps ran AHEAD of real time after any missed vsync
+		// tick, locking a 48 fps beat pattern on 120 Hz displays ("60" under 60).
+		// The accumulator banks real elapsed time per tick and spends one
+		// interval per rendered frame; the remainder carries over (capped at one
+		// interval), so the delivered rate averages exactly the target.
+		const tickDelta = rafTime - this._lastTickTime;
+		this._lastTickTime = rafTime;
+
 		if (this._fpsLimitInterval > 0) {
-			if (rafTime - this._lastRenderedTime < this._fpsLimitInterval - 2) {
+			this._frameBudgetAcc += tickDelta;
+			if (this._frameBudgetAcc < this._fpsLimitInterval - 1) {
 				return;
 			}
-			this._lastRenderedTime = Math.max(
-				this._lastRenderedTime + this._fpsLimitInterval,
-				rafTime - this._fpsLimitInterval,
+			this._frameBudgetAcc = Math.min(
+				this._frameBudgetAcc - this._fpsLimitInterval,
+				this._fpsLimitInterval,
 			);
 		} else {
-			this._lastRenderedTime = rafTime;
+			this._frameBudgetAcc = 0;
 		}
 
 		const frameStart = performance.now();

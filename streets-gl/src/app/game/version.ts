@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.4',
+		codename: 'The Gearbox Update',
+		date: '2026-08-12',
+		emblem: '⚙️🚄',
+		summary: 'Auto quality, rebuilt: one tier control, and tuning that actually finds your machine’s best.',
+		changes: [
+			'One Graphics tier control: Low / Medium / High / Auto / Custom. Picking a tier applies its settings immediately — High-end means max settings and uncapped FPS.',
+			'Auto mode rebuilt: it never lowers quality while the frame-rate target is met, and if a reduction doesn’t actually improve performance it puts the quality back. No more creeping downgrades on fast machines.',
+			'Auto touches nothing unless it’s the selected tier; changing any graphics setting yourself switches the tier to Custom and leaves you in full control.',
+			'Frame-rate limiter rebuilt (again, properly): "60" no longer runs at ~48 on 120 Hz displays, and "30" is a true 30.',
+		],
+	},
+	{
 		version: '1.1.3',
 		codename: 'The Express Update',
 		date: '2026-08-12',

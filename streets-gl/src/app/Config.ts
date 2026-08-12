@@ -92,18 +92,11 @@ const Config = {
 	SlippyMapFetchBatchSize: 4,
 	SettingsSchema: {
 		performanceMode: {
-			label: 'Device tier',
-			status: ['low', 'standard', 'high'],
-			statusLabels: ['Low-end', 'Standard', 'High-end'],
-			statusDefault: _lowMemory ? 'low' : 'standard',
+			label: 'Graphics tier',
+			status: ['low', 'medium', 'high', 'auto', 'custom'],
+			statusLabels: ['Low-end', 'Medium', 'High-end', 'Auto (finds the best)', 'Custom'],
+			statusDefault: 'auto',
 			category: 'general'
-		},
-		autoQuality: {
-			label: 'Auto quality tuning',
-			status: ['off', 'on'],
-			statusLabels: ['Manual', 'Automatic (targets 60 FPS)'],
-			statusDefault: 'on',
-			category: 'graphics'
 		},
 		fov: {
 			label: 'Vertical field of view',
