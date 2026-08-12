@@ -7,3 +7,8 @@ coverage
 server/dist
 .env
 /data/
+# The player database is runtime state, never seed content: it is created in
+# DATA_DIR on first boot and lives on the Railway volume. A committed copy
+# would ship one machine test profiles to every deploy (it did once).
+data-seed/metrorider.db*
+data/metrorider.db*

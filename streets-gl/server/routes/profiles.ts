@@ -1,5 +1,6 @@
 import {Router, Request, Response, NextFunction} from 'express';
 import {ProfileStore, Profile} from '../store/ProfileStore';
+import {adminAuth} from '../middleware/adminAuth';
 
 /**
  * Profile + score endpoints.
@@ -139,6 +140,26 @@ export function createProfilesRouter(store: ProfileStore): Router {
 			res.json(result);
 		} catch (err) {
 			fail(res, err);
+		}
+	});
+
+	/**
+	 * Remove a profile and everything attached to it. Admin-gated: this is the
+	 * family-cleanup path (a duplicate driver, a test account), and it is the
+	 * only way to delete rows once they live on the volume.
+	 */
+	router.delete('/:id', adminAuth, (req: Request, res: Response) => {
+		const id = Number(req.params.id);
+		if (!Number.isInteger(id) || id <= 0) {
+			res.status(400).json({error: 'A numeric profile id is required'});
+			return;
+		}
+		try {
+			store.deleteProfile(id);
+			console.log(`[Profiles] Admin deleted profile ${id}`);
+			res.json({ok: true});
+		} catch (err) {
+			fail(res, err, 500);
 		}
 	});
 
