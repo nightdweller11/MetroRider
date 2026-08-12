@@ -17,6 +17,21 @@ export default class TrainMeshObject extends RenderableObject3D {
 	private needsRebuild: boolean = false;
 	private dynamic: boolean = false;
 
+	/**
+	 * World matrix as it was on the previously RENDERED frame — needed for
+	 * correct TAA motion vectors. Train cars move in world space; deriving the
+	 * "previous" model-view from the CURRENT world matrix (as static tiles do)
+	 * hides that motion from the velocity buffer and TAA ghosts/blurs the
+	 * moving train while the static world stays sharp.
+	 */
+	public readonly matrixWorldPrevFrame: Float64Array = new Float64Array(16);
+	public hasPrevFrame: boolean = false;
+
+	public storePrevFrameMatrix(): void {
+		this.matrixWorldPrevFrame.set(this.matrixWorld.values);
+		this.hasPrevFrame = true;
+	}
+
 	public constructor(buffers: TrainMeshBuffers, dynamic: boolean = false) {
 		super();
 		this.buffers = buffers;

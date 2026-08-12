@@ -34,6 +34,12 @@ export default class TrainMaterialContainer extends MaterialContainer {
 					type: RendererTypes.UniformType.Matrix4,
 					value: new Float32Array(16)
 				},
+				{
+					name: 'objectMotion',
+					block: 'MainBlock',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array(1)
+				},
 			],
 			primitive: {
 				frontFace: RendererTypes.FrontFace.CCW,

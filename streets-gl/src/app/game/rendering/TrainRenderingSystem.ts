@@ -125,6 +125,7 @@ export default class TrainRenderingSystem extends System {
 		this.carOffsets = [];
 		this.carFlipped = [];
 		this.carAnimStates = [];
+		this.carPoseSmooth = [];
 		this.lastDoorsOpen = false;
 	}
 
@@ -1315,15 +1316,38 @@ export default class TrainRenderingSystem extends System {
 
 		const cosLat = Math.cos(trainSystem.trainPosition.lat * Math.PI / 180);
 
+		// Heading/height smoothing: the track spline is a segmented polyline, so
+		// raw per-frame heading (bearing over a 5 m lookahead) steps slightly at
+		// every vertex crossing, and terrain height sampling has grid seams. At
+		// speed those micro-steps make the train visibly vibrate against the
+		// (smoothed) follow camera, which reads as shimmer. A fast low-pass
+		// (~40 ms time constant) removes the steps with imperceptible lag.
+		const dtClamped = Math.min(deltaTime, 0.1);
+		const headingAlpha = 1 - Math.exp(-25 * dtClamped);
+		const heightAlpha = 1 - Math.exp(-12 * dtClamped);
+
 		for (let i = 0; i < this.carMeshes.length; i++) {
 			const carPos = trainSystem.getCarPosition(this.carOffsets[i] * cosLat);
 			if (!carPos) continue;
 			const flipOffset = this.carFlipped[i] ? Math.PI : 0;
-			this.carMeshes[i].position.set(carPos.x, carPos.height, carPos.y);
-			this.carMeshes[i].rotation.set(0, carPos.heading + flipOffset, 0);
+
+			let sm = this.carPoseSmooth[i];
+			if (!sm) {
+				sm = this.carPoseSmooth[i] = {heading: carPos.heading, height: carPos.height};
+			}
+			let headingDiff = carPos.heading - sm.heading;
+			while (headingDiff > Math.PI) headingDiff -= 2 * Math.PI;
+			while (headingDiff < -Math.PI) headingDiff += 2 * Math.PI;
+			sm.heading += headingDiff * headingAlpha;
+			sm.height += (carPos.height - sm.height) * heightAlpha;
+
+			this.carMeshes[i].position.set(carPos.x, sm.height, carPos.y);
+			this.carMeshes[i].rotation.set(0, sm.heading + flipOffset, 0);
 			this.carMeshes[i].updateMatrix();
 		}
 	}
+
+	private carPoseSmooth: ({heading: number; height: number} | null)[] = [];
 
 	private startDoorAnimation(open: boolean): void {
 		for (let ci = 0; ci < this.carAnimStates.length; ci++) {

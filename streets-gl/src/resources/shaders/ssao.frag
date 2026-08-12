@@ -73,8 +73,11 @@ void main() {
         float rangeCheck = smoothstep(0., 1., scaledRadius / abs(depth - sampleDepth));
         occlusion += (sampleDepth >= smple.z + bias ? 1. : 0.) * rangeCheck;
 
-        vec3 motionSample = texture(tMotion, offset.xy).xyz;
-        movingSamples += step(VELOCITY_THRESHOLD, length(motionSample));
+        vec4 motionSample = texture(tMotion, offset.xy);
+        // .a carries real-world object motion (the driving train): its
+        // screen-space velocity is ~0 under the follow camera, but it IS a
+        // moving occluder. Zero when parked.
+        movingSamples += max(step(VELOCITY_THRESHOLD, length(motionSample.xyz)), step(0.5, motionSample.a));
     }
 
     occlusion = 1. - occlusion / AO_SAMPLES;

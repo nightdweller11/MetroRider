@@ -205,10 +205,19 @@ export default class GameCameraSystem extends System {
 		const pos = trainSystem.trainPosition;
 		const dt = Math.min(deltaTime, 0.1);
 
+		// Track the train's position EXACTLY — never lag-filter it. A first-order
+		// exponential follower has a frame-time-dependent equilibrium: with mixed
+		// 8/16/25/33 ms frames its lag distance shifts every frame, which made the
+		// camera oscillate 2-5 cm against the train (1-5 px of lateral shake on
+		// screen — the "shimmer" no anti-aliasing could hide; measured with the
+		// scripts/perf wobble tracer). Smoothing stays where it belongs: heading
+		// (rotation feel) and height (terrain-sampling seams).
+		this.smoothX = pos.x;
+		this.smoothZ = pos.y;
+
 		const alpha = 1.0 - Math.exp(-SMOOTH_FACTOR * dt);
-		this.smoothX += (pos.x - this.smoothX) * alpha;
-		this.smoothY += (pos.height - this.smoothY) * alpha;
-		this.smoothZ += (pos.y - this.smoothZ) * alpha;
+		const heightAlpha = 1.0 - Math.exp(-12 * dt);
+		this.smoothY += (pos.height - this.smoothY) * heightAlpha;
 
 		let headingDiff = pos.heading - this.smoothHeading;
 		while (headingDiff > Math.PI) headingDiff -= 2 * Math.PI;

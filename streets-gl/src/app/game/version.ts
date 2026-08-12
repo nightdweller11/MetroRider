@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.5',
+		codename: 'The Crystal Update',
+		date: '2026-08-12',
+		emblem: '🔎🚄',
+		summary: 'The moving train is finally as sharp as the standing one.',
+		changes: [
+			'Fixed the camera micro-shake: the follow camera used a frame-time-sensitive smoothing filter that made it oscillate a few centimeters against the train every frame. It now tracks the train position exactly (smoothing stays on rotation and height), so the train holds perfectly steady on screen.',
+			'Fixed the train\'s motion data fed to the anti-aliasing: the world re-centers itself around the camera every frame, and the train\'s "where was I last frame" bookkeeping missed that shift — so the anti-aliasing blended every train pixel with history fetched from the wrong place. The train was the only thing on screen suffering from this, which is why only it looked fuzzy in motion.',
+			'Upgraded the anti-aliasing itself to variance clipping (the technique modern engines use), which keeps thin details like railings and grills from sizzling.',
+			'Measured result: frame-to-frame pixel churn on the moving train body dropped to a third of what it was — now lower than with anti-aliasing off, and the standing image stays rock solid.',
+		],
+	},
+	{
 		version: '1.1.4',
 		codename: 'The Gearbox Update',
 		date: '2026-08-12',

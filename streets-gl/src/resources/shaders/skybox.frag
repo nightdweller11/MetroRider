@@ -28,6 +28,6 @@ void main() {
     outGlow = vec3(0);
     outNormal = packNormal(vNormal);
     outRoughnessMetalnessF0 = vec3(0);
-    outMotion = vec3(0);
+    outMotion = vec4(0);
     outObjectId = 0u;
 }

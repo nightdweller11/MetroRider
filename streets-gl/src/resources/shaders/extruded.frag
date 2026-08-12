@@ -104,6 +104,6 @@ void main() {
     outGlow = getGlowColorUV(vTextureId, uv) * WINDOW_GLOW_COLOR * glowFactor;
     outNormal = packNormal(getNormalValueUV(vTextureId, uv, tbn));
     outRoughnessMetalnessF0 = vec3(mask.r, mask.g, 0.03);
-    outMotion = getMotionVector(vClipPos, vClipPosPrev);
+    outMotion = vec4(getMotionVector(vClipPos, vClipPosPrev), 0.0);
     outObjectId = vObjectId;
 }

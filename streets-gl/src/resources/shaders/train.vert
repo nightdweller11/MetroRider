@@ -15,6 +15,7 @@ uniform MainBlock {
 	mat4 modelMatrix;
 	mat4 viewMatrix;
 	mat4 modelViewMatrixPrev;
+	float objectMotion;
 };
 
 void main() {

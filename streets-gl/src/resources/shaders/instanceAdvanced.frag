@@ -49,6 +49,6 @@ void main() {
     outGlow = vec3(0);
     outNormal = packNormal(getNormal());
     outRoughnessMetalnessF0 = vec3(0.8, 0, 0.03);
-    outMotion = getMotionVector(vClipPos, vClipPosPrev);
+    outMotion = vec4(getMotionVector(vClipPos, vClipPosPrev), 0.0);
     outObjectId = 0u;
 }

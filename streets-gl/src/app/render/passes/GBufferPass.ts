@@ -41,6 +41,7 @@ import {AircraftPartTextures} from "~/app/render/textures/createAircraftTexture"
 import PerspectiveCamera from "~/lib/core/PerspectiveCamera";
 import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContainer";
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
+import TrainSystem from "~/app/game/TrainSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 export default class GBufferPass extends Pass<{
@@ -99,6 +100,7 @@ export default class GBufferPass extends Pass<{
 	}));
 	private readonly _batchTileData: {modelViewMatrix: Float32Array; modelViewMatrixPrev: Float32Array; tileId: number}[] = [];
 	private readonly _batchSlots: any[] = [];
+	private readonly _scratchPrevWorld: Mat4 = new Mat4();
 	private fullScreenTriangle: FullScreenTriangle;
 
 	private readonly _tmpMat4A: Float32Array = new Float32Array(16);
@@ -619,19 +621,57 @@ export default class GBufferPass extends Pass<{
 
 		this.renderer.useMaterial(this.trainMaterial);
 
+		// Real-world motion factor for the motion buffer's alpha flag:
+		// 0 parked → full temporal accumulation (rock-solid still image),
+		// 1 moving → SSAO refreshes occlusion under the train every frame.
+		const trainSystem = this.manager.systemManager.getSystem(TrainSystem);
+		const speed = trainSystem?.physicsState?.trainSpeed ?? 0;
+		const motionFactor = Math.min(1, Math.max(0, speed / 3));
+
 		for (const meshObj of meshes) {
+			const isCar = trainRenderingSystem.carMeshes.includes(meshObj as any);
 			this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
 			this._tmpMat4B.set(meshObj.matrixWorld.values);
 			this._tmpMat4C.set(camera.matrixWorldInverse.values);
-			Mat4.multiplyInto(this._tmpMat4D, this.cameraMatrixWorldInversePrev, meshObj.matrixWorld);
+
+			// TAA motion vectors need the mesh's PREVIOUS world matrix, not the
+			// current one — train cars move in world space every frame. Using
+			// the current matrix here made the velocity buffer claim the train
+			// was static, so TAA reprojected stale history onto it: the moving
+			// train rendered fuzzy/ghosted while the (truly static) world was fine.
+			if (meshObj.hasPrevFrame) {
+				this._scratchPrevWorld.values.set(meshObj.matrixWorldPrevFrame);
+				// The stored matrix is in LAST frame's wrapper (floating-origin)
+				// coordinates — SceneSystem recenters the wrapper on the camera
+				// every frame, so all world coords shift by -pivotDelta between
+				// frames. cameraMatrixWorldInversePrev was pivot-compensated at
+				// the top of render() to consume CURRENT-frame coords (that is
+				// what makes static geometry work), so re-express the stored
+				// matrix in this frame's coords before pairing them. Without
+				// this the train's prev clip position is wrong by exactly the
+				// camera's per-frame travel (~1 m ≈ 30-50 px at speed): TAA
+				// resolved every train pixel against history fetched from the
+				// wrong place, which is what kept the moving train fuzzy even
+				// after the camera was locked to it.
+				const pivotDelta = this.manager.sceneSystem.pivotDelta;
+				this._scratchPrevWorld.values[12] -= pivotDelta.x;
+				this._scratchPrevWorld.values[14] -= pivotDelta.y;
+				Mat4.multiplyInto(this._tmpMat4D, this.cameraMatrixWorldInversePrev, this._scratchPrevWorld);
+			} else {
+				Mat4.multiplyInto(this._tmpMat4D, this.cameraMatrixWorldInversePrev, meshObj.matrixWorld);
+			}
 
 			this.trainMaterial.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
 			this.trainMaterial.getUniform('modelMatrix', 'MainBlock').value = this._tmpMat4B;
 			this.trainMaterial.getUniform('viewMatrix', 'MainBlock').value = this._tmpMat4C;
 			this.trainMaterial.getUniform('modelViewMatrixPrev', 'MainBlock').value = this._tmpMat4D;
+			// Only the cars move; track and station meshes are static world geometry.
+			(this.trainMaterial.getUniform('objectMotion', 'MainBlock').value as Float32Array)[0] = isCar ? motionFactor : 0;
 			this.trainMaterial.updateUniformBlock('MainBlock');
 
 			meshObj.draw();
+
+			meshObj.storePrevFrameMatrix();
 		}
 	}
 

@@ -30,7 +30,8 @@ float linearize_depth(float d,float zNear,float zFar) {
 }
 
 void main() {
-	vec3 velocity = texture(tMotion, vUv).xyz;
+	vec4 velocity4 = texture(tMotion, vUv);
+	vec3 velocity = velocity4.xyz;
     vec2 oldUV = vUv - velocity.xy;
 
     vec4 newSample = texture(tNew, vUv);
@@ -64,6 +65,12 @@ void main() {
 	if(a || b) {
 		similarity = 0.;
 	}
+
+	// Moving objects (velocity.a = real-world motion, e.g. the train while
+	// driving): reduce AO history proportionally so occlusion refreshes under
+	// them instead of trailing as a dark ghost. Zero at standstill — parked
+	// trains keep full accumulation (no noise shimmer).
+	similarity = min(similarity, 1.0 - velocity4.a);
 
 	//FragColor = mix(accumSample, newSample, mix(1., mixFactor, similarity));
 	FragColor = mix(newSample, accumSample, similarity);

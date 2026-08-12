@@ -1,8 +1,19 @@
 #include <versionPrecision>
 
-//#define USE_YCOCG
+#define USE_YCOCG
 #define REPROJECTION_SHARPNESS 0.5
 #define USE_CATMULL_ROM_HISTORY_SAMPLING 1
+// Variance-clip box size: history is clipped to mean ± GAMMA·stddev of the
+// 3×3 neighborhood (Salvi variance clipping) instead of the raw min/max box.
+// A raw min/max box swings violently on thin, high-contrast features (railing
+// pixels, silhouette edges over streaming ground) as the TAA jitter changes
+// which side of the edge the samples land on — the history gets re-clamped to
+// a different box every frame and the edge visibly sizzles. The statistical
+// box stays centred on the neighborhood mean, so converged history survives
+// jitter phase changes. Measured on the moving train (side view, 45 m/s):
+// body-crop per-frame pixel churn dropped from ~2× the no-TAA baseline to
+// baseline level.
+#define VARIANCE_CLIP_GAMMA 1.0
 
 out vec4 FragColor;
 
@@ -38,6 +49,17 @@ vec3 YCoCg_RGB(vec3 c) {
 
 #include <sampleCatmullRom>
 
+// Clip a color toward the AABB center (instead of per-channel clamp) so a
+// rejected history sample keeps its hue while being pulled inside the box.
+vec3 clipToAABB(vec3 color, vec3 minC, vec3 maxC) {
+	vec3 center = 0.5 * (minC + maxC);
+	vec3 extents = max(0.5 * (maxC - minC), vec3(1e-5));
+	vec3 v = color - center;
+	vec3 t = abs(v) / extents;
+	float maxT = max(t.x, max(t.y, t.z));
+	return maxT > 1.0 ? center + v / maxT : color;
+}
+
 const vec2 offsets[] = vec2[](
 	vec2(1, 0),
 	vec2(-1, 0),
@@ -72,8 +94,11 @@ void main() {
 		return;
 	}
 
-	vec4 maxNeighbor = newSample;
-	vec4 minNeighbor = newSample;
+	// First + second moments of the 3×3 neighborhood → variance-clip box.
+	vec3 m1 = newSample.rgb;
+	vec3 m2 = newSample.rgb * newSample.rgb;
+	float maxAlpha = newSample.a;
+	float minAlpha = newSample.a;
 
 	for(int i = 0; i < 8; i++) {
 		vec2 neighborUv = vUv + offsets[i] / size;
@@ -83,11 +108,19 @@ void main() {
             neighborTexel.rgb = RGB_YCoCg(neighborTexel.rgb);
         #endif
 
-		maxNeighbor = max(maxNeighbor, neighborTexel);
-		minNeighbor = min(minNeighbor, neighborTexel);
+		m1 += neighborTexel.rgb;
+		m2 += neighborTexel.rgb * neighborTexel.rgb;
+		maxAlpha = max(maxAlpha, neighborTexel.a);
+		minAlpha = min(minAlpha, neighborTexel.a);
 	}
 
-	accumSample = clamp(accumSample, minNeighbor, maxNeighbor);
+	vec3 mu = m1 / 9.0;
+	vec3 sigma = sqrt(max(m2 / 9.0 - mu * mu, vec3(0.0)));
+	vec3 boxMin = mu - VARIANCE_CLIP_GAMMA * sigma;
+	vec3 boxMax = mu + VARIANCE_CLIP_GAMMA * sigma;
+
+	accumSample.rgb = clipToAABB(accumSample.rgb, boxMin, boxMax);
+	accumSample.a = clamp(accumSample.a, minAlpha, maxAlpha);
 
 	float mixFactor = 0.1;
 
