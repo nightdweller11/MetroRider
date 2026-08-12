@@ -34,13 +34,19 @@ const CROWD_RADIUS = 700;
 /** Never build more than this many platforms' worth of figures. */
 const MAX_CROWD_STATIONS = 6;
 /** Seconds between rebuild sweeps — crowds change slowly, buffers are not free. */
-const REBUILD_INTERVAL = 0.4;
+const REBUILD_INTERVAL = 0.2;
+/** How many of the nearest platforms get animated (re-baked) figures. */
+const ANIMATED_STATIONS = 2;
+/** Seconds between animation re-bakes of those platforms. */
+const ANIM_REBAKE_SECONDS = 0.2;
 
 interface StationCrowd {
 	stationIdx: number;
 	mesh: TrainMeshObject;
 	drawn: number;
 	variantKey: string;
+	/** Animation phase this mesh was baked at. */
+	animTime: number;
 }
 
 /**
@@ -67,6 +73,7 @@ export default class PassengerRenderingSystem extends System {
 	private variantKey = '';
 	private loadingVariants = false;
 	private rebuildTimer = 0;
+	private animClock = 0;
 	private lastLineKey = '';
 
 	public postInit(): void {
@@ -100,6 +107,7 @@ export default class PassengerRenderingSystem extends System {
 			return;
 		}
 
+		this.animClock += deltaTime;
 		this.rebuildTimer += deltaTime;
 		if (this.rebuildTimer < REBUILD_INTERVAL) return;
 		this.rebuildTimer = 0;
@@ -243,10 +251,18 @@ export default class PassengerRenderingSystem extends System {
 			}
 		}
 
+		// The two nearest platforms are re-baked on the animation clock so the
+		// people visibly move; the rest only change when their count does.
+		const animated = new Set(ranked.slice(0, ANIMATED_STATIONS).map(r => r.idx));
+
 		for (const idx of keep) {
 			const want = visibleCount(passengerSystem.waitingAt(idx), cap);
 			const existing = this.crowds.get(idx);
-			if (existing && existing.drawn === want && existing.variantKey === this.variantKey) continue;
+			const stale = existing !== undefined
+				&& animated.has(idx)
+				&& this.animClock - existing.animTime >= ANIM_REBAKE_SECONDS;
+
+			if (existing && existing.drawn === want && existing.variantKey === this.variantKey && !stale) continue;
 
 			if (existing) {
 				this.removeCrowd(existing);
@@ -254,7 +270,7 @@ export default class PassengerRenderingSystem extends System {
 			}
 			if (want <= 0) continue;
 
-			const crowd = this.buildCrowd(ls, idx, want);
+			const crowd = this.buildCrowd(ls, idx, want, this.animClock);
 			if (crowd) this.crowds.set(idx, crowd);
 		}
 
@@ -284,6 +300,7 @@ export default class PassengerRenderingSystem extends System {
 		ls: {parsed: {stations: {id: string}[]}; track: any; realStationDists: number[]},
 		stationIdx: number,
 		count: number,
+		animTime: number,
 	): StationCrowd | null {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem || this.variants.length === 0) return null;
@@ -319,11 +336,18 @@ export default class PassengerRenderingSystem extends System {
 			const v = this.variants[slot.variant % this.variants.length];
 			const vCount = v.position.length / 3;
 
+			// Idle life: everyone shifts weight and turns a little, out of phase
+			// with their neighbours. A platform of statues reads as scenery; the
+			// same platform with a small amount of motion reads as people.
+			const phase = animTime * 1.7 + slot.x * 0.7 + slot.z * 1.3;
+			const bob = Math.sin(phase) * 0.04;
+			const sway = Math.sin(phase * 0.5) * 0.25;
+
 			// Figure-local yaw. The model faces +z; the track is at -z in
 			// platform-local space, so people turn to watch for the train with
 			// only a little scatter — a platform of people facing random
 			// directions reads as a bus queue that lost its bus.
-			const fy = Math.PI + slot.yaw;
+			const fy = Math.PI + slot.yaw + sway;
 			const cosY = Math.cos(fy), sinY = Math.sin(fy);
 
 			for (let k = 0; k < vCount; k++) {
@@ -338,13 +362,12 @@ export default class PassengerRenderingSystem extends System {
 				const lx = yx + slot.x;
 				const lz = yz + slot.z;
 
-				const wx = place.x + lx * sinH + lz * cosH;
-				const wz = place.z + lx * cosH - lz * sinH;
-
+				// Local to the platform centre — the mesh transform carries the
+				// world position (same float32 reason as the stations).
 				const o = (vOff + k) * 3;
-				position[o] = wx;
-				position[o + 1] = baseHeight + py;
-				position[o + 2] = wz;
+				position[o] = lx * sinH + lz * cosH;
+				position[o + 1] = py + bob;
+				position[o + 2] = lx * cosH - lz * sinH;
 
 				const nx = v.normal[k * 3] ?? 0;
 				const ny = v.normal[k * 3 + 1] ?? 1;
@@ -369,9 +392,11 @@ export default class PassengerRenderingSystem extends System {
 		}
 
 		const mesh = new TrainMeshObject({position, normal, color, indices});
+		mesh.position.set(place.x, baseHeight, place.z);
+		mesh.updateMatrix();
 		sceneSystem.objects.wrapper.add(mesh);
 
-		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey};
+		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey, animTime};
 	}
 
 	private getSlots(stationId: string, atLeast: number): CrowdSlot[] {
@@ -417,11 +442,17 @@ export default class PassengerRenderingSystem extends System {
 		for (const mesh of meshes) {
 			const pos = mesh?.buffers?.position;
 			if (!pos) continue;
+			// Station geometry is baked at the origin and placed by the mesh
+			// transform (float32 cannot hold Mercator metres without wobbling),
+			// so vertices are LOCAL and the mesh position supplies the offset.
+			const ox = mesh.position.x;
+			const oy = mesh.position.y;
+			const oz = mesh.position.z;
 			for (let i = 0; i < pos.length; i += 3) {
-				const y = pos[i + 1];
+				const y = pos[i + 1] + oy;
 				if (y <= deck || y > ceiling) continue;
-				const dx = pos[i] - x;
-				const dz = pos[i + 2] - z;
+				const dx = pos[i] + ox - x;
+				const dz = pos[i + 2] + oz - z;
 				if (dx * dx + dz * dz > radiusSq) continue;
 				deck = y;
 			}

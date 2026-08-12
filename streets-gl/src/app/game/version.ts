@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.9',
+		codename: 'The Steady Platform',
+		date: '2026-08-13',
+		emblem: '🏗️🧍',
+		summary: 'Stations stop wobbling, and the people on them look like people.',
+		changes: [
+			'Fixed stations drifting and shaking as you drive past — their shape was stored in world coordinates too large for the graphics precision, so every station shimmered against the moving world. They are rock solid now.',
+			'Passengers redrawn with human proportions — head, hair, shoulders, arms and legs instead of a stack of boxes.',
+			'The people on the platform now move: they shift their weight and turn to look for the train.',
+			'The waiting count is on screen where you need it: the station banner reads "Hod Hasharon · 28 waiting" as you approach.',
+		],
+	},
+	{
 		version: '1.1.8',
 		codename: 'The Stopwatch Update',
 		date: '2026-08-13',

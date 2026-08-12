@@ -1623,10 +1623,17 @@ export default class GameUISystem extends System {
 
 		if (this.stationEl && trainSystem.stationState) {
 			const ss = trainSystem.stationState;
+			// How many people are standing on THAT platform — the number the
+			// driver acts on, next to the name of the station it belongs to.
+			const passengers = this.systemManager.getSystem(PassengerSystem);
+			const targetIdx = ss.arriving ? ss.nearestStationIdx : ss.nextStationIdx;
+			const waiting = passengers && targetIdx >= 0 ? passengers.waitingAt(targetIdx) : 0;
+			const waitingSuffix = waiting > 0 ? `  ·  ${waiting} waiting` : '';
+
 			if (ss.arriving) {
-				this.stationEl.textContent = ss.stationName;
+				this.stationEl.textContent = `${ss.stationName}${waitingSuffix}`;
 			} else if (ss.nextStationIdx >= 0) {
-				this.stationEl.textContent = `Next: ${ss.stationName}`;
+				this.stationEl.textContent = `Next: ${ss.stationName}${waitingSuffix}`;
 			} else {
 				this.stationEl.textContent = ss.stationName;
 			}

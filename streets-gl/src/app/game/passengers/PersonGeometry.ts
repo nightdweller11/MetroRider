@@ -94,28 +94,39 @@ export function buildPersonGeometry(tint: number): PersonBuffers {
 	const legs = LEG_COLORS[(t >> 3) % LEG_COLORS.length];
 	const skin = SKIN_COLORS[(t >> 1) % SKIN_COLORS.length];
 
-	// Two separated legs rather than one block: the gap is what makes a
-	// standing figure read as a PERSON at platform distance — a single leg
-	// block reads as a bollard, which is exactly how the first version looked.
-	pushBox(positions, normals, colors, indices, -0.10, 0.39, 0, 0.15, 0.78, 0.18, legs);
-	pushBox(positions, normals, colors, indices, 0.10, 0.39, 0, 0.15, 0.78, 0.18, legs);
-	// shoes
-	pushBox(positions, normals, colors, indices, -0.10, 0.03, 0.02, 0.16, 0.07, 0.26, [0.10, 0.09, 0.09]);
-	pushBox(positions, normals, colors, indices, 0.10, 0.03, 0.02, 0.16, 0.07, 0.26, [0.10, 0.09, 0.09]);
-	// torso, slightly tapered by stacking a narrower shoulder block
-	pushBox(positions, normals, colors, indices, 0, 1.02, 0, 0.40, 0.50, 0.24, coat);
-	pushBox(positions, normals, colors, indices, 0, 1.28, 0, 0.46, 0.10, 0.26, coat);
-	// arms clear of the body so the silhouette has gaps
-	pushBox(positions, normals, colors, indices, -0.29, 1.01, 0, 0.12, 0.52, 0.15, coat);
-	pushBox(positions, normals, colors, indices, 0.29, 1.01, 0, 0.12, 0.52, 0.15, coat);
-	// hands
-	pushBox(positions, normals, colors, indices, -0.29, 0.71, 0, 0.11, 0.12, 0.14, skin);
-	pushBox(positions, normals, colors, indices, 0.29, 0.71, 0, 0.11, 0.12, 0.14, skin);
-	// neck + head
-	pushBox(positions, normals, colors, indices, 0, 1.39, 0, 0.13, 0.10, 0.13, skin);
-	pushBox(positions, normals, colors, indices, 0, 1.57, 0, 0.22, 0.26, 0.21, skin);
-	// hair — a slab on top, so heads are not all identical skin blocks
-	pushBox(positions, normals, colors, indices, 0, 1.71, -0.01, 0.23, 0.07, 0.22, HAIR_COLORS[t % HAIR_COLORS.length]);
+	// Human proportions matter more than polygon count at this distance: a
+	// head is about 1/7.5 of a person, shoulders about 1.6 head-widths, and the
+	// legs are half the total height. The first version had a huge square head
+	// on a wide slab and read as a Lego brick.
+	const hair = HAIR_COLORS[t % HAIR_COLORS.length];
+	const shoe: [number, number, number] = [0.10, 0.09, 0.09];
+
+	// legs: thighs + calves, tapering, with a real gap between them
+	pushBox(positions, normals, colors, indices, -0.085, 0.62, 0, 0.135, 0.42, 0.165, legs);
+	pushBox(positions, normals, colors, indices, 0.085, 0.62, 0, 0.135, 0.42, 0.165, legs);
+	pushBox(positions, normals, colors, indices, -0.085, 0.23, 0, 0.115, 0.40, 0.14, legs);
+	pushBox(positions, normals, colors, indices, 0.085, 0.23, 0, 0.115, 0.40, 0.14, legs);
+	pushBox(positions, normals, colors, indices, -0.085, 0.035, 0.025, 0.13, 0.07, 0.235, shoe);
+	pushBox(positions, normals, colors, indices, 0.085, 0.035, 0.025, 0.13, 0.07, 0.235, shoe);
+
+	// hips → chest → shoulders: three stacked blocks so the torso has a waist
+	pushBox(positions, normals, colors, indices, 0, 0.90, 0, 0.30, 0.16, 0.185, coat);
+	pushBox(positions, normals, colors, indices, 0, 1.09, 0, 0.325, 0.26, 0.195, coat);
+	pushBox(positions, normals, colors, indices, 0, 1.26, 0, 0.375, 0.12, 0.205, coat);
+
+	// arms hang beside the body with a narrower forearm
+	pushBox(positions, normals, colors, indices, -0.235, 1.14, 0, 0.095, 0.28, 0.135, coat);
+	pushBox(positions, normals, colors, indices, 0.235, 1.14, 0, 0.095, 0.28, 0.135, coat);
+	pushBox(positions, normals, colors, indices, -0.235, 0.90, 0, 0.08, 0.24, 0.115, coat);
+	pushBox(positions, normals, colors, indices, 0.235, 0.90, 0, 0.08, 0.24, 0.115, coat);
+	pushBox(positions, normals, colors, indices, -0.235, 0.74, 0, 0.085, 0.11, 0.115, skin);
+	pushBox(positions, normals, colors, indices, 0.235, 0.74, 0, 0.085, 0.11, 0.115, skin);
+
+	// neck, head (~23 cm — a head, not a crate), hair cap and a hint of a face
+	pushBox(positions, normals, colors, indices, 0, 1.36, 0, 0.10, 0.075, 0.10, skin);
+	pushBox(positions, normals, colors, indices, 0, 1.51, 0, 0.175, 0.22, 0.175, skin);
+	pushBox(positions, normals, colors, indices, 0, 1.625, 0, 0.185, 0.055, 0.185, hair);
+	pushBox(positions, normals, colors, indices, 0, 1.565, -0.088, 0.155, 0.075, 0.02, hair);
 
 	return {
 		position: new Float32Array(positions),

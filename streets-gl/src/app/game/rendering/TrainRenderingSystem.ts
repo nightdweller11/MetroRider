@@ -1104,13 +1104,22 @@ export default class TrainRenderingSystem extends System {
 
 			const h = this.getTerrainHeight(offsetX, offsetZ);
 
+			// Geometry is baked at the ORIGIN and positioned by the mesh
+			// transform — never with world coordinates inside the vertex
+			// buffer. Mercator metres run to ~3.9e6 here, where a float32 step
+			// is about half a metre: absolute vertices cancel catastrophically
+			// against the floating-origin translation and the whole station
+			// visibly wobbles as the camera moves. Train cars were always local
+			// + positioned, which is why only the stations shook.
 			const stationBuf = buildStationGeometry(
-				offsetX, h + TRACK_HEIGHT_OFFSET, offsetZ,
+				0, 0, 0,
 				stationHeading,
 				ls.parsed.color,
 			);
 
 			const meshObj = new TrainMeshObject(stationBuf);
+			meshObj.position.set(offsetX, h + TRACK_HEIGHT_OFFSET, offsetZ);
+			meshObj.updateMatrix();
 			sceneSystem.objects.wrapper.add(meshObj);
 			this.stationMeshes.push(meshObj);
 		}
@@ -1228,7 +1237,8 @@ export default class TrainRenderingSystem extends System {
 				const rx = lx * cosH + lz * sinH;
 				const rz = -lx * sinH + lz * cosH;
 
-				positions.push(worldX + rx, h + ly, worldZ + rz);
+				// Local, not world — see the note in placeProceduralStations.
+				positions.push(rx, ly, rz);
 
 				let nx = glbBuffers.normal[i * 3];
 				const ny = glbBuffers.normal[i * 3 + 1];
@@ -1259,6 +1269,8 @@ export default class TrainRenderingSystem extends System {
 				color: new Float32Array(colors),
 				indices: new Uint32Array(indices),
 			});
+			meshObj.position.set(worldX, h, worldZ);
+			meshObj.updateMatrix();
 			sceneSystem.objects.wrapper.add(meshObj);
 			this.stationMeshes.push(meshObj);
 		}
