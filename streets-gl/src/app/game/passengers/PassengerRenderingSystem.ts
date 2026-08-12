@@ -155,8 +155,10 @@ export default class PassengerRenderingSystem extends System {
 			const entry = catalog.models.people?.find(e => e.id === id);
 			if (!entry?.path || !trainRendering) return;
 
+			if (!assetConfig) return;
+
 			try {
-				const url = assetConfig!.getAssetUrl(entry.path);
+				const url = assetConfig.getAssetUrl(entry.path);
 				const response = await fetch(url);
 				if (!response.ok) throw new Error(`HTTP ${response.status}`);
 				const buffer = await response.arrayBuffer();

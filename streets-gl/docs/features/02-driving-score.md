@@ -1,6 +1,8 @@
 # F2 — Driving Score: Stop Rating, Run Summary, Badges, Stop Replay
 
-> STATUS: PLANNED · Depends on: F1 (persistence; playable without it as
+> STATUS: BUILT — core scoring + cards + board (v1.1.8). Stop card confirmed
+> only through unit tests and the run card; a human drive is still wanted to
+> sign it off in-game (see §4). Depends on: F1 (persistence; playable without it as
 > session-only). The core game loop: drive precisely → get scored.
 > Scope guard: badges are cosmetic records — nothing is gated or unlocked.
 
@@ -88,3 +90,42 @@ Scorer+UI: 3–4 days. Badges: 1 day. Replay/ghost: 2–3 days (phase 2).
   `GET /api/scores`; personal best updates only on improvement.
 - **Production validation**: one full scored run on the live site via
   Playwright + screenshots of stop card and run card; board shows the entry.
+
+
+---
+
+## 4. What actually shipped (2026-08-12)
+
+- `StopScorer` — per-approach state machine (precision / smoothness / doors →
+  points), direction-aware error sign, one result per approach, and an
+  `abandon()` path so leaving mid-approach never silently drops a stop.
+- `RunScorer` — totals, plain-language summary, loop-aware completion (a lap =
+  every station served), and cosmetic badges.
+- `ScoringSystem` — decides when an approach starts/ends, posts `run-score` to
+  the profile API (queued locally when signed out), and rolls straight into
+  the next run so a loop line keeps scoring lap after lap.
+- `ScoreUI` — stop card (verdict, metres off, braking, doors, points) and run
+  card (total, personal best, per-stop list, badges, **board of best runs on
+  this line**).
+- **29 unit tests**; 474 pass across 35 suites.
+
+### What the live drive-through changed
+
+Stopping 84 m short of the marker produced *nothing* — no card, no points, no
+explanation — because the stop zone is 40 m. The scorer now also scores a stop
+made SHORT of the zone the moment the driver opens the doors: opening up is the
+driver declaring "this is my stop", and silence is the worst possible feedback.
+
+### Validated
+
+Run card end-to-end in the browser: total, "⭐ Personal best!", per-stop list,
+badge chips, and the board fetched from the server showing the signed-in
+driver. Screenshot: `docs/_artifacts/scoring-2026-08-12/run-card.png`.
+
+### Not yet confirmed
+
+The **stop card in a real drive**. The scripted test driver could not land
+inside the 40 m zone (it brakes early and MetroRider's coasting drag stops it
+short), so the card was only exercised through unit tests and the run-card
+path. A human drive — brake into a station, open the doors — is the check that
+remains. The `finishRun()` path and everything downstream of it are confirmed.

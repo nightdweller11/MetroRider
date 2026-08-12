@@ -20,6 +20,7 @@ import TrainSystem from "~/app/game/TrainSystem";
 import GameCameraSystem from "~/app/game/GameCameraSystem";
 import GameUISystem from "~/app/game/GameUISystem";
 import PassengerSystem from '~/app/game/passengers/PassengerSystem';
+import ScoringSystem from '~/app/game/scoring/ScoringSystem';
 import PassengerRenderingSystem from '~/app/game/passengers/PassengerRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
@@ -68,6 +69,7 @@ class App {
 				TrainRenderingSystem,
 				PassengerSystem,
 				PassengerRenderingSystem,
+				ScoringSystem,
 				AudioSystem,
 				GameCameraSystem,
 				RenderSystem,

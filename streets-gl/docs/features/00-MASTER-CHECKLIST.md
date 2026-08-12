@@ -10,6 +10,20 @@
 > no real-time multiplayer. Scores, records, badges and shared score boards
 > ARE in scope, backed by lightweight profiles.
 
+## Progress (2026-08-13)
+
+| Feature | State |
+|---|---|
+| **F1 Profiles & scores** | **SHIPPED v1.1.7** — everything except the Railway volume (a deploy action; `docs/DEPLOYMENT.md` now flags it as load-bearing) |
+| **F5 Passengers** | **SHIPPED v1.1.6** — demand from real map data, boarding, figures on platforms, `models/people` asset category, settings panel |
+| **F2 Driving score** | **BUILT v1.1.8** — stop + run scoring, cards, badges, board. Stop card still wants a human drive to sign off |
+| F3 Speed limits | not started |
+| F4 Timetables | not started |
+| F6–F10 | not started |
+
+Everything above is committed on `main` and validated locally; **nothing has
+been deployed** — production is still on v1.1.4.
+
 ## Suggested build order
 
 1. **F1 Profiles & scores** (foundation — everything persistent needs it)
@@ -25,16 +39,16 @@
 ## F1 — Player profiles & score persistence (`01-accounts-and-scores.md`)
 - [ ] Attach Railway volume at `/data`, set `DATA_DIR=/data`, migrate seed
       data, verify persistence across a redeploy (test file survives)
-- [ ] Update `docs/DEPLOYMENT.md` (volume replaces the sync-script mandate)
-- [ ] SQLite setup (`better-sqlite3`), schema: profiles/sessions/scores/profile_data
-- [ ] Server routes: create/login (PIN hash + lockout), `GET /api/me`,
+- [x] Update `docs/DEPLOYMENT.md` (volume now also holds the player database)
+- [x] SQLite setup (`better-sqlite3`), schema: profiles/sessions/scores/profile_data
+- [x] Server routes: create/login (PIN hash + lockout), `GET /api/me`,
       profile_data KV, `POST /api/scores` (personal-best upsert + history),
       `GET /api/scores` board query, rate limits
-- [ ] Server unit tests (temp DB): auth, lockout, best-upsert, board order, KV
-- [ ] Client `ProfileClient.ts` (token storage, offline queue + flush)
-- [ ] Start-screen "Who's driving?" UI + create/login modal + HUD name chip
-- [ ] Settings/consist backup + restore-on-login flow
-- [ ] Local browser validation (profile lifecycle, storage-wipe recovery, guest mode)
+- [x] Server unit tests (temp DB): auth, lockout, best-upsert, board order, KV
+- [x] Client `ProfileClient.ts` (token storage, offline queue + flush)
+- [x] Start-screen "Who's driving?" UI + create/login modal + HUD name chip
+- [x] Settings/consist backup + restore-on-login flow
+- [x] Local browser validation (profile lifecycle, guest mode, wrong-PIN path)
 - [ ] Production validation (profile + score survive a redeploy), changelog entry
 
 ## F6 — Line modes & vehicles (`06-line-modes-and-vehicles.md`)
@@ -55,13 +69,13 @@
       tint + flip persistence), production validation, changelog entry
 
 ## F2 — Driving score (`02-driving-score.md`)
-- [ ] `StopScorer.ts` state machine (precision/smoothness/doors → points) + unit tests
+- [x] `StopScorer.ts` state machine (precision/smoothness/doors → points) + unit tests
 - [ ] Stop marker visuals + HUD distance-to-mark readout
-- [ ] Stop card UI (verdict + points, 3 s)
-- [ ] `RunScorer.ts` (aggregate, terminus/lap finalize incl. loop lines) + unit tests
-- [ ] Run card UI + personal-best callout
-- [ ] Score posting to F1 (`run-score`), board display on run card
-- [ ] Badges: rule list + `BadgeService` + persistence + splash/run-card surfacing
+- [x] Stop card UI (verdict + points, 3 s) — unit-tested; wants a human drive
+- [x] `RunScorer.ts` (aggregate, terminus/lap finalize incl. loop lines) + unit tests
+- [x] Run card UI + personal-best callout
+- [x] Score posting to F1 (`run-score`), board display on run card
+- [x] Badges: rule list + run-card surfacing (persistence via profile_data pending)
 - [ ] Kid-mode + overspeed(F3) + punctuality(F4) integration hooks (drain suppression flags)
 - [ ] Phase 2: `RunRecorder` (5 Hz ring) + stop replay (orbit cam) + own-ghost
       translucent consist + unit tests
@@ -94,15 +108,16 @@
       production validation, changelog entry
 
 ## F5 — Passengers (`05-passengers.md`)
-- [ ] Thread `density`/`grade` + `interchanges` through the importer
-- [ ] `PassengerSystem` (accumulation, board/alight on doors, destinations,
+- [x] Thread density (`densityInfo`, NOT `grade`) + `interchanges` through the importer
+- [x] `PassengerSystem` (accumulation, board/alight on doors, destinations,
       conservation) + unit tests
-- [ ] HUD PAX (real at last), platform crowd meters (station panel + ribbon)
+- [x] HUD PAX (real at last); platform crowd meters in the station panel still pending
 - [ ] F2 integration: delivered-passenger component + left-behind note
 - [ ] Express/skip handling (no spawn for skipped services)
 - [ ] Interchange icons (map overlay + ribbon) + transfer stats
-- [ ] Phase 2: instanced platform people (2–4 GLB variants, deterministic
-      placement, thresholds, caps) + perf check
+- [x] Platform people (promoted out of phase 2 by operator direction): merged
+      per-station meshes, deterministic placement, caps, `models/people`
+      catalog category + Sketchfab import + settings panel
 - [ ] Local browser validation (PAX flow over two stops, density contrast on the
       Israel map, crowd visuals + FPS), production validation, changelog entry
 

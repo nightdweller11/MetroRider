@@ -1,6 +1,8 @@
 import System from '../System';
 import PassengerSystem from '~/app/game/passengers/PassengerSystem';
 import ProfileUI from '~/app/game/profiles/ProfileUI';
+import ScoringSystem from '~/app/game/scoring/ScoringSystem';
+import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem from './GameCameraSystem';
 import AudioSystem from './audio/AudioSystem';
@@ -45,6 +47,7 @@ export default class GameUISystem extends System {
 	private timeEl: HTMLElement | null = null;
 	private paxEl: HTMLElement | null = null;
 	private readonly profileUI: ProfileUI = new ProfileUI();
+	private scoreUI: ScoreUI | null = null;
 	private etaEl: HTMLElement | null = null;
 	private lastMinute: number = -1;
 
@@ -86,6 +89,7 @@ export default class GameUISystem extends System {
 		}
 		this.createStartButton(trainSystem);
 		this.container.appendChild(this.profileUI.createHudChip());
+		this.bindScoring();
 		this.createDebugOverlay();
 
 		// Announce a new release once per version (tracked in localStorage).
@@ -810,6 +814,23 @@ export default class GameUISystem extends System {
 		} catch (e) {
 			console.error('[GameUI] Failed to remove map entry:', e);
 		}
+	}
+
+	/**
+	 * Scoring emits results; the UI renders them. The system deliberately knows
+	 * nothing about the DOM, so the two are joined here.
+	 */
+	private bindScoring(): void {
+		const scoring = this.systemManager.getSystem(ScoringSystem);
+		if (!scoring) return;
+
+		this.scoreUI = new ScoreUI(this.container);
+		scoring.onStopScored = (result, stationName): void => {
+			this.scoreUI?.showStopCard(result, stationName);
+		};
+		scoring.onRunFinished = (run, badges, isPersonalBest, best): void => {
+			void this.scoreUI?.showRunCard(run, badges, isPersonalBest, best);
+		};
 	}
 
 	private createStartButton(trainSystem: TrainSystem): void {

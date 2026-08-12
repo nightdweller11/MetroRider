@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.8',
+		codename: 'The Stopwatch Update',
+		date: '2026-08-13',
+		emblem: '🎯🚉',
+		summary: 'Driving well is now the point: every stop is scored.',
+		changes: [
+			'Every station stop is rated: how close you stopped to the mark, how smoothly you braked, and whether the doors were handled properly. A card pops up with the verdict and the points.',
+			'A run summary at the end of the line: total points, every stop listed, and "Personal best!" when you beat your own record.',
+			'Best runs on each line are listed on the run card, so the family can see who is the better driver.',
+			'Badges for records worth remembering — perfect stops, a full line driven, nobody left behind, the night service. Nothing is ever locked behind them.',
+			'Missing a station is never punished with a failure screen: it simply scores nothing and the run carries on.',
+		],
+	},
+	{
 		version: '1.1.7',
 		codename: 'The Roster Update',
 		date: '2026-08-12',
