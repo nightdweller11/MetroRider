@@ -146,11 +146,16 @@ export default class ProfileUI {
 		title.style.cssText = 'font-size: 18px; font-weight: 700; margin-bottom: 4px;';
 
 		const sub = document.createElement('div');
-		sub.textContent = 'A name and a 4-digit PIN. No email, nothing else.';
+		sub.textContent = 'Sign in with your email, or make a quick profile with just a name and a 4-digit PIN.';
 		sub.style.cssText = 'font-size: 12px; color: #999; margin-bottom: 14px;';
 
 		const existing = document.createElement('div');
 		existing.style.cssText = 'display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px;';
+
+		const emailInput = document.createElement('input');
+		emailInput.type = 'email';
+		emailInput.placeholder = 'Email (optional for a kid profile)';
+		emailInput.autocomplete = 'email';
 
 		const nameInput = document.createElement('input');
 		nameInput.type = 'text';
@@ -162,11 +167,13 @@ export default class ProfileUI {
 			background: rgba(255,255,255,0.06); color: #fff; font-size: 14px;
 		`;
 
+		emailInput.style.cssText = nameInput.style.cssText;
+
 		const pinInput = document.createElement('input');
 		pinInput.type = 'password';
-		pinInput.inputMode = 'numeric';
-		pinInput.placeholder = '4-digit PIN';
-		pinInput.maxLength = 4;
+		pinInput.placeholder = 'Password (or 4-digit PIN)';
+		pinInput.autocomplete = 'current-password';
+		pinInput.maxLength = 64;
 		pinInput.style.cssText = nameInput.style.cssText;
 
 		const status = document.createElement('div');
@@ -186,17 +193,28 @@ export default class ProfileUI {
 
 		const run = async (action: 'login' | 'create'): Promise<void> => {
 			const name = nameInput.value.trim();
-			const pin = pinInput.value.trim();
-			if (!name || !pin) {
-				status.textContent = 'Enter a name and a 4-digit PIN.';
+			const email = emailInput.value.trim();
+			const secret = pinInput.value.trim();
+
+			// Signing IN works from either identifier; signing UP needs a name
+			// to show on the board, and an email only if they want one.
+			const identifier = email || name;
+			if (!identifier || !secret) {
+				status.textContent = action === 'login'
+					? 'Enter your email (or name) and your password.'
+					: 'Enter a name, and a password or 4-digit PIN.';
+				return;
+			}
+			if (action === 'create' && !name) {
+				status.textContent = 'Choose a driver name — it is what shows on the score board.';
 				return;
 			}
 			status.style.color = '#9ad';
 			status.textContent = action === 'login' ? 'Signing in…' : 'Creating…';
 			try {
 				const profile = action === 'login'
-					? await this.client.login(name, pin)
-					: await this.client.createProfile(name, pin);
+					? await this.client.login(identifier, secret)
+					: await this.client.createProfile(name, secret, email || undefined);
 				status.style.color = '#5ad07a';
 				status.textContent = `Hello, ${profile.name}!`;
 				const flushed = await this.client.flushQueue();
@@ -235,6 +253,7 @@ export default class ProfileUI {
 		card.appendChild(title);
 		card.appendChild(sub);
 		card.appendChild(existing);
+		card.appendChild(emailInput);
 		card.appendChild(nameInput);
 		card.appendChild(pinInput);
 		card.appendChild(status);
@@ -246,7 +265,7 @@ export default class ProfileUI {
 
 		document.body.appendChild(overlay);
 		this.modalEl = overlay;
-		nameInput.focus();
+		emailInput.focus();
 
 		// One tap per driver already on this server — kids should not have to
 		// type their own name correctly to get their scores back.

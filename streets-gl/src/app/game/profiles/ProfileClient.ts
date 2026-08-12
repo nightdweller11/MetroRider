@@ -10,6 +10,7 @@
 export interface PlayerProfile {
 	id: number;
 	name: string;
+	email?: string | null;
 	createdAt?: number;
 }
 
@@ -128,10 +129,11 @@ export default class ProfileClient {
 		}
 	}
 
-	public async createProfile(name: string, pin: string): Promise<PlayerProfile> {
+	/** `secret` is a password when an email is given, else a 4-digit PIN. */
+	public async createProfile(name: string, secret: string, email?: string): Promise<PlayerProfile> {
 		const res = await this.request<{token: string; profile: PlayerProfile}>('', {
 			method: 'POST',
-			body: JSON.stringify({name, pin}),
+			body: JSON.stringify(email ? {name, email, password: secret} : {name, pin: secret}),
 		});
 		this.setToken(res.token);
 		this.profile = res.profile;
@@ -140,10 +142,11 @@ export default class ProfileClient {
 		return res.profile;
 	}
 
-	public async login(name: string, pin: string): Promise<PlayerProfile> {
+	/** `identifier` is an email address or a display name. */
+	public async login(identifier: string, secret: string): Promise<PlayerProfile> {
 		const res = await this.request<{token: string; profile: PlayerProfile}>('/login', {
 			method: 'POST',
-			body: JSON.stringify({name, pin}),
+			body: JSON.stringify({name: identifier, email: identifier.includes('@') ? identifier : undefined, password: secret, pin: secret}),
 		});
 		this.setToken(res.token);
 		this.profile = res.profile;

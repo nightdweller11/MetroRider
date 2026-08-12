@@ -6,20 +6,46 @@ import fs from 'fs';
 /**
  * Player profiles + score persistence.
  *
- * Deliberately NOT accounts: a display name and a 4-digit PIN, no email, no
- * password rules, no verification, no PII of any kind. A family shares a
- * device and wants their own best runs; that is the whole requirement.
+ * Two ways in, because a family device and a personal one want different
+ * things:
+ *   - EMAIL + PASSWORD, the way every other site works, for a player who wants
+ *     their runs on their phone and on their laptop;
+ *   - display name + 4-digit PIN, so a kid on the family iPad does not need an
+ *     email address to have their own best runs.
  *
- * PINs are 4 digits — 10,000 possibilities — so the hash choice does not
- * matter nearly as much as the lockout does. scrypt (node built-in, no native
- * dependency) plus a 5-attempt / 5-minute lock per profile is the actual
- * defence. Never log a PIN, a hash or a token.
+ * Both are stored the same way: scrypt (node built-in, no native dependency)
+ * over a per-profile salt. A 4-digit PIN is only 10,000 possibilities, so the
+ * lockout — 5 attempts, then 5 minutes — is the real defence on that path, and
+ * it guards passwords too. Never log a secret, a hash or a token.
+ *
+ * The email address is the only personal data stored, and only when the player
+ * chooses that path.
  */
 
 export interface Profile {
 	id: number;
 	name: string;
+	/** Present only for profiles created with the email + password path. */
+	email?: string | null;
 	createdAt: number;
+}
+
+/** Minimum password length. Short enough for a child, long enough to matter. */
+export const MIN_PASSWORD_LENGTH = 8;
+
+/**
+ * Deliberately permissive: the goal is to catch a typo, not to police what a
+ * valid address looks like. Anything with one @ and a dot after it passes.
+ */
+export function isPlausibleEmail(value: string): boolean {
+	const trimmed = value.trim();
+	if (trimmed.length < 5 || trimmed.length > 254) return false;
+	if (trimmed.includes(' ')) return false;
+	const at = trimmed.indexOf('@');
+	if (at <= 0 || at !== trimmed.lastIndexOf('@')) return false;
+	const domain = trimmed.slice(at + 1);
+	const dot = domain.indexOf('.');
+	return dot > 0 && dot < domain.length - 1;
 }
 
 export interface ScoreRow {
@@ -40,6 +66,12 @@ const MAX_HISTORY_PER_KEY = 20;
 const LOCKOUT_ATTEMPTS = 5;
 const LOCKOUT_MS = 5 * 60 * 1000;
 const SESSION_IDLE_MS = 180 * 24 * 60 * 60 * 1000; // 6 months — kids' device
+
+/**
+ * ONE message for "no such profile" and for "wrong secret". Two different
+ * messages would let anyone check which emails have an account here.
+ */
+const WRONG_CREDENTIALS = 'Wrong details — check the name or email and the password';
 
 export function isHigherBetter(kind: string): boolean {
 	return !LOWER_IS_BETTER.has(kind);
@@ -103,18 +135,46 @@ export class ProfileStore {
 				PRIMARY KEY (profile_id, key)
 			);
 		`);
+
+		// Added after the first release: profiles created before this have no
+		// email and keep signing in with their name + PIN.
+		const columns = this.db.prepare('PRAGMA table_info(profiles)').all() as {name: string}[];
+		if (!columns.some(c => c.name === 'email')) {
+			this.db.exec('ALTER TABLE profiles ADD COLUMN email TEXT');
+		}
+		this.db.exec(
+			'CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_email ON profiles (email COLLATE NOCASE) WHERE email IS NOT NULL'
+		);
 	}
 
 	// ---- profiles ----
 
-	public createProfile(name: string, pin: string): {token: string; profile: Profile} {
+	/**
+	 * Create a profile. `secret` is either a 4-digit PIN (no email) or a
+	 * password of at least MIN_PASSWORD_LENGTH characters (with an email).
+	 */
+	public createProfile(name: string, secret: string, email?: string | null): {token: string; profile: Profile} {
 		const clean = name.trim();
 		if (clean.length < 2 || clean.length > 24) {
 			throw new Error('Name must be 2-24 characters');
 		}
-		if (!/^\d{4}$/.test(pin)) {
+
+		const cleanEmail = email?.trim() ? email.trim() : null;
+		if (cleanEmail) {
+			if (!isPlausibleEmail(cleanEmail)) {
+				throw new Error('That email address does not look right');
+			}
+			if (secret.length < MIN_PASSWORD_LENGTH) {
+				throw new Error(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+			}
+			const takenEmail = this.db.prepare('SELECT id FROM profiles WHERE email = ? COLLATE NOCASE').get(cleanEmail);
+			if (takenEmail) {
+				throw new Error('There is already an account with that email');
+			}
+		} else if (!/^\d{4}$/.test(secret)) {
 			throw new Error('PIN must be 4 digits');
 		}
+
 		const existing = this.db.prepare('SELECT id FROM profiles WHERE name = ? COLLATE NOCASE').get(clean);
 		if (existing) {
 			throw new Error('That name is taken on this server');
@@ -123,25 +183,28 @@ export class ProfileStore {
 		const salt = crypto.randomBytes(16).toString('hex');
 		const now = Date.now();
 		const info = this.db.prepare(
-			'INSERT INTO profiles (name, pin_salt, pin_hash, created_at) VALUES (?, ?, ?, ?)'
-		).run(clean, salt, hashPin(pin, salt), now);
+			'INSERT INTO profiles (name, email, pin_salt, pin_hash, created_at) VALUES (?, ?, ?, ?, ?)'
+		).run(clean, cleanEmail, salt, hashPin(secret, salt), now);
 
-		const profile: Profile = {id: Number(info.lastInsertRowid), name: clean, createdAt: now};
+		const profile: Profile = {id: Number(info.lastInsertRowid), name: clean, email: cleanEmail, createdAt: now};
 		return {token: this.createSession(profile.id), profile};
 	}
 
-	public login(name: string, pin: string): {token: string; profile: Profile} {
-		const row = this.db.prepare(
-			'SELECT id, name, pin_salt, pin_hash, created_at, failed_attempts, locked_until FROM profiles WHERE name = ? COLLATE NOCASE'
-		).get(name.trim()) as {
-			id: number; name: string; pin_salt: string; pin_hash: string;
+	/** Sign in with either the email address or the display name. */
+	public login(identifier: string, secret: string): {token: string; profile: Profile} {
+		const id = identifier.trim();
+		const query = id.includes('@')
+			? 'SELECT id, name, email, pin_salt, pin_hash, created_at, failed_attempts, locked_until FROM profiles WHERE email = ? COLLATE NOCASE'
+			: 'SELECT id, name, email, pin_salt, pin_hash, created_at, failed_attempts, locked_until FROM profiles WHERE name = ? COLLATE NOCASE';
+		const row = this.db.prepare(query).get(id) as {
+			id: number; name: string; email: string | null; pin_salt: string; pin_hash: string;
 			created_at: number; failed_attempts: number; locked_until: number;
 		} | undefined;
 
-		// Same message whether the profile is missing or the PIN is wrong —
-		// otherwise the endpoint enumerates who plays on this server.
+		// Same message whether the profile is missing or the secret is wrong —
+		// otherwise the endpoint tells anyone which emails have an account.
 		if (!row) {
-			throw new Error('Wrong name or PIN');
+			throw new Error(WRONG_CREDENTIALS);
 		}
 
 		const now = Date.now();
@@ -150,7 +213,7 @@ export class ProfileStore {
 			throw new Error(`Too many tries — locked for ${mins} more minute${mins === 1 ? '' : 's'}`);
 		}
 
-		const candidate = hashPin(pin, row.pin_salt);
+		const candidate = hashPin(secret, row.pin_salt);
 		const ok = crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(row.pin_hash, 'hex'));
 
 		if (!ok) {
@@ -158,13 +221,13 @@ export class ProfileStore {
 			const lockedUntil = attempts >= LOCKOUT_ATTEMPTS ? now + LOCKOUT_MS : 0;
 			this.db.prepare('UPDATE profiles SET failed_attempts = ?, locked_until = ? WHERE id = ?')
 				.run(attempts >= LOCKOUT_ATTEMPTS ? 0 : attempts, lockedUntil, row.id);
-			throw new Error(lockedUntil ? 'Too many tries — locked for 5 minutes' : 'Wrong name or PIN');
+			throw new Error(lockedUntil ? 'Too many tries — locked for 5 minutes' : WRONG_CREDENTIALS);
 		}
 
 		this.db.prepare('UPDATE profiles SET failed_attempts = 0, locked_until = 0 WHERE id = ?').run(row.id);
 		return {
 			token: this.createSession(row.id),
-			profile: {id: row.id, name: row.name, createdAt: row.created_at},
+			profile: {id: row.id, name: row.name, email: row.email, createdAt: row.created_at},
 		};
 	}
 
@@ -194,10 +257,10 @@ export class ProfileStore {
 	public resolveSession(token: string | undefined): Profile | null {
 		if (!token) return null;
 		const row = this.db.prepare(`
-			SELECT p.id, p.name, p.created_at, s.last_seen_at
+			SELECT p.id, p.name, p.email, p.created_at, s.last_seen_at
 			FROM sessions s JOIN profiles p ON p.id = s.profile_id
 			WHERE s.token = ?
-		`).get(token) as {id: number; name: string; created_at: number; last_seen_at: number} | undefined;
+		`).get(token) as {id: number; name: string; email: string | null; created_at: number; last_seen_at: number} | undefined;
 
 		if (!row) return null;
 
@@ -208,7 +271,7 @@ export class ProfileStore {
 		}
 
 		this.db.prepare('UPDATE sessions SET last_seen_at = ? WHERE token = ?').run(now, token);
-		return {id: row.id, name: row.name, createdAt: row.created_at};
+		return {id: row.id, name: row.name, email: row.email, createdAt: row.created_at};
 	}
 
 	public logout(token: string): void {

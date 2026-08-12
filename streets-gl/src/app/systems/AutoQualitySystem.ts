@@ -1,5 +1,6 @@
 import System from '../System';
 import SettingsSystem from '~/app/systems/SettingsSystem';
+import AssetConfigSystem, {CrowdLevel} from '~/app/game/assets/AssetConfigSystem';
 import TrainSystem from '~/app/game/TrainSystem';
 import {debugLog} from '~/app/game/debug';
 
@@ -43,17 +44,25 @@ interface QualityRung {
 	shadowResolution: '512' | '1024' | '2048';
 	ssao: 'on' | 'off';
 	bloom: 'on' | 'off';
+	/**
+	 * Platform crowds — the governor's newest lever. A rigged character is
+	 * ~5,000 vertices and a busy platform draws up to 40 of them, so thinning
+	 * the crowd buys frames the way dropping shadows does. It is pulled EARLY
+	 * (rung 2, before render scale drops far) because fewer people on a
+	 * platform costs the player far less than a blurrier picture.
+	 */
+	crowdLevel: 'off' | 'few' | 'normal' | 'busy';
 }
 
 const RUNGS: QualityRung[] = [
-	/* 0 — max     */ {renderScale: 1.0, shadows: 'high', shadowResolution: '2048', ssao: 'on', bloom: 'on'},
-	/* 1 — default */ {renderScale: 1.0, shadows: 'medium', shadowResolution: '2048', ssao: 'on', bloom: 'on'},
-	/* 2 */ {renderScale: 0.85, shadows: 'medium', shadowResolution: '1024', ssao: 'on', bloom: 'on'},
-	/* 3 */ {renderScale: 0.85, shadows: 'low', shadowResolution: '1024', ssao: 'on', bloom: 'on'},
-	/* 4 */ {renderScale: 0.75, shadows: 'low', shadowResolution: '512', ssao: 'off', bloom: 'on'},
-	/* 5 */ {renderScale: 0.75, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off'},
-	/* 6 */ {renderScale: 0.65, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off'},
-	/* 7 — floor  */ {renderScale: 0.5, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off'},
+	/* 0 — max     */ {renderScale: 1.0, shadows: 'high', shadowResolution: '2048', ssao: 'on', bloom: 'on', crowdLevel: 'busy'},
+	/* 1 — default */ {renderScale: 1.0, shadows: 'medium', shadowResolution: '2048', ssao: 'on', bloom: 'on', crowdLevel: 'normal'},
+	/* 2 */ {renderScale: 0.85, shadows: 'medium', shadowResolution: '1024', ssao: 'on', bloom: 'on', crowdLevel: 'normal'},
+	/* 3 */ {renderScale: 0.85, shadows: 'low', shadowResolution: '1024', ssao: 'on', bloom: 'on', crowdLevel: 'few'},
+	/* 4 */ {renderScale: 0.75, shadows: 'low', shadowResolution: '512', ssao: 'off', bloom: 'on', crowdLevel: 'few'},
+	/* 5 */ {renderScale: 0.75, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off', crowdLevel: 'few'},
+	/* 6 */ {renderScale: 0.65, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off', crowdLevel: 'off'},
+	/* 7 — floor  */ {renderScale: 0.5, shadows: 'off', shadowResolution: '512', ssao: 'off', bloom: 'off', crowdLevel: 'off'},
 ];
 
 /** Fixed presets for the manual tiers (applied once, persisted). */
@@ -151,6 +160,10 @@ export default class AutoQualitySystem extends System {
 			settings.update('ssao', {statusValue: preset.ssao});
 			settings.update('bloom', {statusValue: preset.bloom});
 			settings.update('fpsLimit', {statusValue: preset.fpsLimit});
+			// Picking a tier is an explicit choice, so crowds follow it exactly
+			// (up or down) and become the new baseline auto may thin from.
+			this.playerCrowdLevel = preset.crowdLevel;
+			this.systemManager.getSystem(AssetConfigSystem)?.setUserConfig({crowdLevel: preset.crowdLevel});
 			this.applying = false;
 			this.toast(`Graphics preset applied: ${tier === 'low' ? 'Low-end' : tier === 'medium' ? 'Medium' : 'High-end'}`);
 			debugLog(`[AutoQuality] Applied ${tier} preset`);
@@ -249,9 +262,33 @@ export default class AutoQualitySystem extends System {
 		settings.update('bloom', {statusValue: r.bloom}, false);
 		settings.update('fpsLimit', {statusValue: this.mode === 'unlimited' ? 'off' : this.mode === 'fallback30' ? '30' : '60'}, false);
 		this.applying = false;
+		// Crowds live in the asset config, not the graphics settings, so they
+		// are set through their own system — and only DOWNWARD from what the
+		// player chose, so auto never makes a platform busier than they asked.
+		this.applyCrowdLevel(r.crowdLevel);
 		this.persistState();
 		debugLog(`[AutoQuality] rung ${this.rung}, mode ${this.mode} — ${reason}`);
 	}
+
+	/** Never raise the player's crowd setting; only thin it out. */
+	private applyCrowdLevel(level: 'off' | 'few' | 'normal' | 'busy'): void {
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		if (!assetConfig) return;
+
+		const order: CrowdLevel[] = ['off', 'few', 'normal', 'busy'];
+		const current = assetConfig.getConfig().crowdLevel;
+		const chosen = this.playerCrowdLevel ?? current;
+		const wanted = order.indexOf(level) <= order.indexOf(chosen) ? level : chosen;
+
+		if (wanted !== current) {
+			// Remember what the player actually asked for, so a later UP-rung
+			// restores it instead of leaving them stuck on the thinned value.
+			if (this.playerCrowdLevel === null) this.playerCrowdLevel = current;
+			assetConfig.setUserConfig({crowdLevel: wanted});
+		}
+	}
+
+	private playerCrowdLevel: CrowdLevel | null = null;
 
 	private target(): number {
 		return this.mode === 'fallback30' ? 30 : 60;

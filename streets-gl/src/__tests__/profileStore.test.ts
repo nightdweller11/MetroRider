@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import {ProfileStore, isHigherBetter} from '../../server/store/ProfileStore';
+import {ProfileStore, isHigherBetter, isPlausibleEmail, MIN_PASSWORD_LENGTH} from '../../server/store/ProfileStore';
 
 /** Each test gets its own temp DB — no shared state, no cleanup surprises. */
 function freshStore(): {store: ProfileStore; dir: string} {
@@ -49,7 +49,7 @@ describe('ProfileStore — profiles', () => {
 		store.createProfile('Maya', '4321');
 
 		expect(store.login('maya', '4321').profile.name).toBe('Maya');
-		expect(() => store.login('Maya', '0000')).toThrow(/Wrong name or PIN/);
+		expect(() => store.login('Maya', '0000')).toThrow(/Wrong details/);
 	});
 
 	it('gives the same message for an unknown name as for a wrong PIN', () => {
@@ -67,7 +67,7 @@ describe('ProfileStore — profiles', () => {
 		store.createProfile('Locked', '1234');
 
 		for (let i = 0; i < 4; i++) {
-			expect(() => store.login('Locked', '0000')).toThrow(/Wrong name or PIN/);
+			expect(() => store.login('Locked', '0000')).toThrow(/Wrong details/);
 		}
 		expect(() => store.login('Locked', '0000')).toThrow(/locked for 5 minutes/i);
 		// Even the CORRECT pin is refused while locked.
@@ -83,7 +83,7 @@ describe('ProfileStore — profiles', () => {
 
 		// A fresh run of failures is needed to lock again.
 		for (let i = 0; i < 4; i++) {
-			expect(() => store.login('Resilient', '0000')).toThrow(/Wrong name or PIN/);
+			expect(() => store.login('Resilient', '0000')).toThrow(/Wrong details/);
 		}
 	});
 
@@ -103,6 +103,84 @@ describe('ProfileStore — profiles', () => {
 	it('treats a bogus token as signed out', () => {
 		expect(store.resolveSession('not-a-token')).toBeNull();
 		expect(store.resolveSession(undefined)).toBeNull();
+	});
+});
+
+describe('ProfileStore — email and password', () => {
+	let store: ProfileStore;
+	let dir: string;
+
+	beforeEach(() => { ({store, dir} = freshStore()); });
+	afterEach(() => { store.close(); fs.rmSync(dir, {recursive: true, force: true}); });
+
+	it('creates an account with an email and a password', () => {
+		const {profile} = store.createProfile('Yossi', 'trainsAreGreat', 'yossi@example.com');
+
+		expect(profile.email).toBe('yossi@example.com');
+		expect(store.login('yossi@example.com', 'trainsAreGreat').profile.id).toBe(profile.id);
+	});
+
+	it('signs in by display name too', () => {
+		store.createProfile('Yossi', 'trainsAreGreat', 'yossi@example.com');
+
+		expect(store.login('Yossi', 'trainsAreGreat').profile.name).toBe('Yossi');
+	});
+
+	it('is case-insensitive about the email', () => {
+		store.createProfile('Case', 'longenoughpw', 'Mixed.Case@Example.COM');
+
+		expect(store.login('mixed.case@example.com', 'longenoughpw').profile.name).toBe('Case');
+	});
+
+	it('refuses a second account on the same email', () => {
+		store.createProfile('First', 'longenoughpw', 'shared@example.com');
+
+		expect(() => store.createProfile('Second', 'longenoughpw', 'SHARED@example.com'))
+			.toThrow(/already an account/i);
+	});
+
+	it('refuses a password shorter than the minimum', () => {
+		expect(() => store.createProfile('Short', 'abc', 'short@example.com'))
+			.toThrow(new RegExp(`at least ${MIN_PASSWORD_LENGTH}`));
+	});
+
+	it('refuses an address that is obviously not an email', () => {
+		for (const bad of ['nope', 'no@dot', '@example.com', 'two@@example.com', 'has space@example.com']) {
+			expect(() => store.createProfile('X' + bad.length, 'longenoughpw', bad)).toThrow(/does not look right/i);
+		}
+		expect(isPlausibleEmail('fine@example.co.uk')).toBe(true);
+	});
+
+	it('still accepts the name + PIN path with no email', () => {
+		const {profile} = store.createProfile('KidOnIpad', '4321');
+
+		expect(profile.email).toBeNull();
+		expect(store.login('KidOnIpad', '4321').profile.id).toBe(profile.id);
+	});
+
+	it('gives the same answer for an unknown email as for a wrong password', () => {
+		store.createProfile('Known', 'longenoughpw', 'known@example.com');
+
+		let unknown = '', wrong = '';
+		try { store.login('nobody@example.com', 'longenoughpw'); } catch (e) { unknown = (e as Error).message; }
+		try { store.login('known@example.com', 'wrongpassword'); } catch (e) { wrong = (e as Error).message; }
+
+		expect(unknown).toBe(wrong);
+	});
+
+	it('locks the account after five wrong passwords', () => {
+		store.createProfile('Locked', 'longenoughpw', 'locked@example.com');
+		for (let i = 0; i < 4; i++) {
+			expect(() => store.login('locked@example.com', 'nope-nope')).toThrow(/Wrong details/);
+		}
+		expect(() => store.login('locked@example.com', 'nope-nope')).toThrow(/locked for 5 minutes/i);
+		expect(() => store.login('locked@example.com', 'longenoughpw')).toThrow(/locked/i);
+	});
+
+	it('keeps the email on the session profile', () => {
+		const {token} = store.createProfile('Sessioned', 'longenoughpw', 'sess@example.com');
+
+		expect(store.resolveSession(token)?.email).toBe('sess@example.com');
 	});
 });
 

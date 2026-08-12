@@ -42,6 +42,13 @@ const MAX_CROWD_STATIONS = 6;
 const REBUILD_INTERVAL = 0.2;
 /** How many of the nearest platforms get animated (re-baked) figures. */
 const ANIMATED_STATIONS = 2;
+/**
+ * Beyond this, a platform's crowd is drawn with the cheap built-in figure
+ * instead of the character model. A rigged character is ~5,000 vertices; the
+ * built-in one is ~340. At 200 m a person is a few pixels tall, so the detail
+ * buys nothing and the vertex budget buys everything.
+ */
+const DETAIL_RADIUS = 200;
 /** Seconds between animation re-bakes of those platforms. */
 const ANIM_REBAKE_SECONDS = 0.2;
 
@@ -52,6 +59,8 @@ interface StationCrowd {
 	variantKey: string;
 	/** Animation phase this mesh was baked at. */
 	animTime: number;
+	/** Whether this crowd was built with the detailed character model. */
+	detailed: boolean;
 }
 
 /**
@@ -77,6 +86,8 @@ export default class PassengerRenderingSystem extends System {
 	private variantSources: number[] = [];
 	/** Baked animation cycles, by configured-model index. */
 	private poseCycles: Map<number, PersonBuffers[]> = new Map();
+	/** The cheap stand-in used beyond DETAIL_RADIUS. */
+	private lowDetail: PersonBuffers | null = null;
 	private variantKey = '';
 	private loadingVariants = false;
 	private rebuildTimer = 0;
@@ -285,15 +296,21 @@ export default class PassengerRenderingSystem extends System {
 		// The two nearest platforms are re-baked on the animation clock so the
 		// people visibly move; the rest only change when their count does.
 		const animated = new Set(ranked.slice(0, ANIMATED_STATIONS).map(r => r.idx));
+		// LOD: only close platforms get the detailed character.
+		const detailed = new Set(ranked.filter(r => r.dist <= DETAIL_RADIUS).map(r => r.idx));
 
 		for (const idx of keep) {
 			const want = visibleCount(passengerSystem.waitingAt(idx), cap);
 			const existing = this.crowds.get(idx);
+			const wantDetail = detailed.has(idx);
 			const stale = existing !== undefined
 				&& animated.has(idx)
 				&& this.animClock - existing.animTime >= ANIM_REBAKE_SECONDS;
 
-			if (existing && existing.drawn === want && existing.variantKey === this.variantKey && !stale) continue;
+			if (
+				existing && existing.drawn === want && existing.variantKey === this.variantKey
+				&& existing.detailed === wantDetail && !stale
+			) continue;
 
 			if (existing) {
 				this.removeCrowd(existing);
@@ -301,7 +318,7 @@ export default class PassengerRenderingSystem extends System {
 			}
 			if (want <= 0) continue;
 
-			const crowd = this.buildCrowd(ls, idx, want, this.animClock);
+			const crowd = this.buildCrowd(ls, idx, want, this.animClock, wantDetail);
 			if (crowd) this.crowds.set(idx, crowd);
 		}
 
@@ -332,6 +349,7 @@ export default class PassengerRenderingSystem extends System {
 		stationIdx: number,
 		count: number,
 		animTime: number,
+		detailed: boolean,
 	): StationCrowd | null {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem || this.variants.length === 0) return null;
@@ -349,7 +367,7 @@ export default class PassengerRenderingSystem extends System {
 		let totalVerts = 0;
 		let totalIndices = 0;
 		for (let i = 0; i < count; i++) {
-			const v = this.figureFor(slots[i].variant, animTime, slots[i].x + slots[i].z);
+			const v = this.figureFor(slots[i].variant, animTime, slots[i].x + slots[i].z, detailed);
 			totalVerts += v.position.length / 3;
 			totalIndices += v.indices.length;
 		}
@@ -364,7 +382,7 @@ export default class PassengerRenderingSystem extends System {
 
 		for (let i = 0; i < count; i++) {
 			const slot = slots[i];
-			const v = this.figureFor(slot.variant, animTime, slot.x + slot.z);
+			const v = this.figureFor(slot.variant, animTime, slot.x + slot.z, detailed);
 			const vCount = v.position.length / 3;
 
 			// Idle life: everyone shifts weight and turns a little, out of phase
@@ -427,7 +445,7 @@ export default class PassengerRenderingSystem extends System {
 		mesh.updateMatrix();
 		sceneSystem.objects.wrapper.add(mesh);
 
-		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey, animTime};
+		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey, animTime, detailed};
 	}
 
 	/**
@@ -436,8 +454,15 @@ export default class PassengerRenderingSystem extends System {
 	 * offset keeps neighbours out of step — a platform of people moving in
 	 * perfect unison looks worse than a platform of statues.
 	 */
-	private figureFor(variantIndex: number, animTime: number, phaseOffset: number): PersonBuffers {
+	private figureFor(
+		variantIndex: number, animTime: number, phaseOffset: number, detailed: boolean,
+	): PersonBuffers {
 		const index = variantIndex % Math.max(1, this.variants.length);
+		// Far platforms fall back to the built-in figure (LOD).
+		if (!detailed) {
+			if (!this.lowDetail) this.lowDetail = buildPersonGeometry(index * 5 + 1);
+			return this.lowDetail;
+		}
 		const cycle = this.poseCycles.get(this.variantSources[index] ?? -1);
 		if (cycle && cycle.length > 0) {
 			const step = Math.floor((animTime * POSE_FPS + phaseOffset * 3.1)) % cycle.length;

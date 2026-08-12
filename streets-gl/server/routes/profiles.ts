@@ -70,6 +70,8 @@ export function createProfilesRouter(store: ProfileStore): Router {
 	// --- who plays on this server (names only, for the "Who's driving?" row) ---
 	router.get('/', limit, (_req: Request, res: Response) => {
 		try {
+			// Names only — the email addresses on this server are nobody's
+			// business, including the quick-pick row's.
 			res.json({profiles: store.listProfiles().map(p => ({id: p.id, name: p.name}))});
 		} catch (err) {
 			fail(res, err, 500);
@@ -78,8 +80,9 @@ export function createProfilesRouter(store: ProfileStore): Router {
 
 	router.post('/', limit, (req: Request, res: Response) => {
 		try {
-			const {name, pin} = req.body ?? {};
-			const result = store.createProfile(String(name ?? ''), String(pin ?? ''));
+			const {name, pin, password, email} = req.body ?? {};
+			const secret = String(password ?? pin ?? '');
+			const result = store.createProfile(String(name ?? ''), secret, email ? String(email) : null);
 			console.log(`[Profiles] Created profile "${result.profile.name}"`);
 			res.json(result);
 		} catch (err) {
@@ -89,8 +92,11 @@ export function createProfilesRouter(store: ProfileStore): Router {
 
 	router.post('/login', limit, (req: Request, res: Response) => {
 		try {
-			const {name, pin} = req.body ?? {};
-			res.json(store.login(String(name ?? ''), String(pin ?? '')));
+			// Sign in with an email or a display name; password or PIN.
+			const {name, email, pin, password} = req.body ?? {};
+			const identifier = String(email ?? name ?? '');
+			const secret = String(password ?? pin ?? '');
+			res.json(store.login(identifier, secret));
 		} catch (err) {
 			fail(res, err, 401);
 		}

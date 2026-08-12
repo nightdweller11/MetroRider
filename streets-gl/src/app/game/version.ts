@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.11',
+		codename: 'The Season Ticket',
+		date: '2026-08-13',
+		emblem: '📧🎟️',
+		summary: 'Sign in with an email and password — and crowds that pay their way.',
+		changes: [
+			'Sign in the normal way: email and password. Your profile, best runs and train setup follow you to any device.',
+			'Kids keep the simple path: a name and a 4-digit PIN, no email needed. Both work side by side.',
+			'Distant platforms now draw simple figures instead of the detailed character — the crowds you can actually see stay detailed, the ones 200 m away stop costing you frames.',
+			'Auto quality can now thin the crowds as well as adjusting the picture, and it never makes a platform busier than you asked for.',
+		],
+	},
+	{
 		version: '1.1.10',
 		codename: 'The Commuters',
 		date: '2026-08-13',
