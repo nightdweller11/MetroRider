@@ -1,3 +1,4 @@
+import Config from "~/app/Config";
 import Shaders from "../shaders/Shaders";
 import MaterialContainer from "./MaterialContainer";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
@@ -132,7 +133,7 @@ export default class TerrainMaterialContainer extends MaterialContainer {
 							ResourceLoader.get('sandySoilDiffuse'),
 							ResourceLoader.get('sandySoilHeight')
 						],
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
 						magFilter: RendererTypes.MagFilter.Linear,
 						wrap: RendererTypes.TextureWrap.Repeat,
@@ -149,7 +150,7 @@ export default class TerrainMaterialContainer extends MaterialContainer {
 							ResourceLoader.get('genericTerrainColor'),
 							ResourceLoader.get('genericTerrainNormal'),
 						],
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
 						magFilter: RendererTypes.MagFilter.Linear,
 						wrap: RendererTypes.TextureWrap.Repeat,
@@ -161,7 +162,7 @@ export default class TerrainMaterialContainer extends MaterialContainer {
 					block: null,
 					type: RendererTypes.UniformType.Texture2D,
 					value: this.renderer.createTexture2D({
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						data: ResourceLoader.get('noise'),
 						minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
 						magFilter: RendererTypes.MagFilter.Linear,
@@ -174,7 +175,7 @@ export default class TerrainMaterialContainer extends MaterialContainer {
 					block: null,
 					type: RendererTypes.UniformType.Texture2D,
 					value: this.renderer.createTexture2D({
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						data: ResourceLoader.get('waterNormal'),
 						minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
 						magFilter: RendererTypes.MagFilter.Linear,
@@ -187,7 +188,7 @@ export default class TerrainMaterialContainer extends MaterialContainer {
 					block: null,
 					type: RendererTypes.UniformType.Texture2D,
 					value: this.renderer.createTexture2D({
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						data: ResourceLoader.get('biomeMap'),
 						minFilter: RendererTypes.MinFilter.Linear,
 						magFilter: RendererTypes.MagFilter.Linear,

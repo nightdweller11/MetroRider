@@ -14,14 +14,21 @@ export default class SettingsContainer {
 		return this.settingsObject[key];
 	}
 
-	public update(key: string, value: SettingsObjectEntry): void {
+	/**
+	 * @param persist When false, the change is applied and broadcast but NOT
+	 * written to localStorage — used by the auto-quality governor so its
+	 * transient tuning never overwrites the user's saved preferences.
+	 */
+	public update(key: string, value: SettingsObjectEntry, persist: boolean = true): void {
 		if (!value || (value.statusValue === undefined && value.numberValue === undefined)) {
 			console.error(`[Settings] Refusing to save invalid value for key "${key}":`, value);
 			console.trace('[Settings] Caller of invalid update:');
 			return;
 		}
 		this.settingsObject[key] = value;
-		this.saveSettings();
+		if (persist) {
+			this.saveSettings();
+		}
 
 		this.emitter.updateSetting(key, value);
 	}

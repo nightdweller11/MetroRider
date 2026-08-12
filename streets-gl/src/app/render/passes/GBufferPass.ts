@@ -88,6 +88,17 @@ export default class GBufferPass extends Pass<{
 	public objectIdX = 0;
 	public objectIdY = 0;
 	private objectIdReadInFlight = false;
+	/** When false (set during active gameplay), the per-frame object-ID GPU readback is skipped. */
+	public objectIdReadEnabled = true;
+
+	// Pooled batch scratch (see renderExtrudedMeshes) — avoids per-tile allocations.
+	private readonly _tileDataPool = Array.from({length: 32}, () => ({
+		modelViewMatrix: new Float32Array(16),
+		modelViewMatrixPrev: new Float32Array(16),
+		tileId: 0,
+	}));
+	private readonly _batchTileData: {modelViewMatrix: Float32Array; modelViewMatrixPrev: Float32Array; tileId: number}[] = [];
+	private readonly _batchSlots: any[] = [];
 	private fullScreenTriangle: FullScreenTriangle;
 
 	private readonly _tmpMat4A: Float32Array = new Float32Array(16);
@@ -223,7 +234,7 @@ export default class GBufferPass extends Pass<{
 
 		this._tmpMat4A.set(this.manager.mapTimeSystem.skyDirectionMatrix.values);
 		this._tmpMat4B.set(camera.projectionMatrix.values);
-		this._tmpMat4C.set(Mat4.multiply(camera.matrixWorldInverse, skybox.matrixWorld).values);
+		Mat4.multiplyInto(this._tmpMat4C, camera.matrixWorldInverse, skybox.matrixWorld);
 		this._tmpMat4D.set(camera.matrixWorld.values);
 
 		this.skyboxMaterial.getUniform('projectionMatrix', 'Uniforms').value = this._tmpMat4B;
@@ -265,18 +276,26 @@ export default class GBufferPass extends Pass<{
 				megaBuffers.extruded.sharedMesh.bind();
 
 				for (let batchStart = 0; batchStart < tilesWithSlots.length; batchStart += 32) {
-					const batchSlice = tilesWithSlots.slice(batchStart, batchStart + 32);
+					const count = Math.min(32, tilesWithSlots.length - batchStart);
 
-					const tileData = batchSlice.map(tile => ({
-						modelViewMatrix: new Float32Array(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values),
-						modelViewMatrixPrev: new Float32Array(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values),
-						tileId: tile.localId,
-					}));
+					// Pooled scratch — this loop used to allocate two Float32Arrays
+					// and an object per tile per frame.
+					this._batchTileData.length = count;
+					this._batchSlots.length = count;
+					for (let k = 0; k < count; k++) {
+						const tile = tilesWithSlots[batchStart + k];
+						const slot = this._tileDataPool[k];
+						Mat4.multiplyInto(slot.modelViewMatrix, camera.matrixWorldInverse, tile.matrixWorld);
+						Mat4.multiplyInto(slot.modelViewMatrixPrev, this.cameraMatrixWorldInversePrev, tile.matrixWorld);
+						slot.tileId = tile.localId;
+						this._batchTileData[k] = slot;
+						this._batchSlots[k] = tile.extrudedSlot;
+					}
 
-					const {buffer, byteLength} = megaBuffers.packExtrudedUBO(tileData);
+					const {buffer, byteLength} = megaBuffers.packExtrudedUBO(this._batchTileData);
 					this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
 
-					const batchParams = megaBuffers.buildBatchParams(batchSlice.map(t => t.extrudedSlot));
+					const batchParams = megaBuffers.buildBatchParams(this._batchSlots);
 					this.renderer.batchDrawArrays(batchParams);
 				}
 
@@ -285,8 +304,8 @@ export default class GBufferPass extends Pass<{
 		}
 
 		for (const tile of visibleTiles) {
-			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
-			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, camera.matrixWorldInverse, tile.matrixWorld);
+			Mat4.multiplyInto(this._tmpMat4C, this.cameraMatrixWorldInversePrev, tile.matrixWorld);
 
 			this.extrudedMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.extrudedMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
@@ -334,8 +353,8 @@ export default class GBufferPass extends Pass<{
 			const detailOffsetX = ring.position.x % offsetSize - ring.size / 2;
 			const detailOffsetY = ring.position.z % offsetSize - ring.size / 2;
 
-			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, ring.matrixWorld).values);
-			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, ring.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, camera.matrixWorldInverse, ring.matrixWorld);
+			Mat4.multiplyInto(this._tmpMat4C, this.cameraMatrixWorldInversePrev, ring.matrixWorld);
 
 			this.terrainMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.terrainMaterial.getUniform<UniformMatrix4>('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
@@ -399,8 +418,8 @@ export default class GBufferPass extends Pass<{
 			const normalTextureTransforms = this.getTileNormalTexturesTransforms(tile);
 			const detailTextureOffset = this.getTileDetailTextureOffset(tile);
 
-			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
-			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, camera.matrixWorldInverse, tile.matrixWorld);
+			Mat4.multiplyInto(this._tmpMat4C, this.cameraMatrixWorldInversePrev, tile.matrixWorld);
 			const relativeCameraPosition = this.getCameraPositionRelativeToTile(camera, tile);
 
 			this.projectedMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
@@ -459,8 +478,8 @@ export default class GBufferPass extends Pass<{
 			const normalTextureTransforms = this.getTileNormalTexturesTransforms(tile);
 			const relativeCameraPosition = this.getCameraPositionRelativeToTile(camera, tile);
 
-			this._tmpMat4B.set(Mat4.multiply(camera.matrixWorldInverse, tile.matrixWorld).values);
-			this._tmpMat4C.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, tile.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, camera.matrixWorldInverse, tile.matrixWorld);
+			Mat4.multiplyInto(this._tmpMat4C, this.cameraMatrixWorldInversePrev, tile.matrixWorld);
 
 			this.huggingMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.huggingMeshMaterial.getUniform('modelViewMatrixPrev', 'PerMesh').value = this._tmpMat4C;
@@ -604,7 +623,7 @@ export default class GBufferPass extends Pass<{
 			this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
 			this._tmpMat4B.set(meshObj.matrixWorld.values);
 			this._tmpMat4C.set(camera.matrixWorldInverse.values);
-			this._tmpMat4D.set(Mat4.multiply(this.cameraMatrixWorldInversePrev, meshObj.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4D, this.cameraMatrixWorldInversePrev, meshObj.matrixWorld);
 
 			this.trainMaterial.getUniform('projectionMatrix', 'MainBlock').value = this._tmpMat4A;
 			this.trainMaterial.getUniform('modelMatrix', 'MainBlock').value = this._tmpMat4B;
@@ -617,7 +636,7 @@ export default class GBufferPass extends Pass<{
 	}
 
 	private writeToObjectIdBuffer(): void {
-		if (this.objectIdReadInFlight) {
+		if (!this.objectIdReadEnabled || this.objectIdReadInFlight) {
 			return;
 		}
 

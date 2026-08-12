@@ -89,6 +89,11 @@ export default class GameUISystem extends System {
 			this.showReleaseSplash();
 		}
 
+		// System-wide toasts (e.g. auto-quality governor announcements).
+		window.addEventListener('mr-toast', ((e: CustomEvent) => {
+			this.showToast(String(e.detail), 2600);
+		}) as EventListener);
+
 		this.initialized = true;
 	}
 
@@ -727,7 +732,7 @@ export default class GameUISystem extends System {
 	private cameraToastEl: HTMLElement | null = null;
 	private cameraToastTimer: number = 0;
 
-	private showCameraModeToast(label: string): void {
+	private showToast(text: string, durationMs: number = 1400): void {
 		if (!this.container) return;
 		if (!this.cameraToastEl) {
 			this.cameraToastEl = document.createElement('div');
@@ -738,15 +743,20 @@ export default class GameUISystem extends System {
 				border-radius: 8px; font-size: 14px; font-weight: 600;
 				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.15);
 				pointer-events: none; transition: opacity 0.3s; z-index: 10;
+				max-width: 80vw; text-align: center;
 			`;
 			this.container.appendChild(this.cameraToastEl);
 		}
-		this.cameraToastEl.textContent = `Camera: ${label}`;
+		this.cameraToastEl.textContent = text;
 		this.cameraToastEl.style.opacity = '1';
 		window.clearTimeout(this.cameraToastTimer);
 		this.cameraToastTimer = window.setTimeout(() => {
 			if (this.cameraToastEl) this.cameraToastEl.style.opacity = '0';
-		}, 1400);
+		}, durationMs);
+	}
+
+	private showCameraModeToast(label: string): void {
+		this.showToast(`Camera: ${label}`);
 	}
 
 	private hideStationPanel(): void {

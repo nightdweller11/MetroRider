@@ -42,6 +42,9 @@ const Config = {
 	MaxConcurrentTiles: _lowMemory ? 40 : 150,
 	TileFrustumFar: _lowMemory ? 2000 : 8000,
 	AggressiveEviction: _lowMemory,
+	// Anisotropic filtering level for world textures. 16 is free on desktop
+	// GPUs but measurably slows bandwidth-starved mobile GPUs.
+	TextureAnisotropy: _lowMemory ? 4 : 16,
 	MaxTilesPerWorker: 1,
 	WorkersCount: _lowMemory
 		? Math.min(2, navigator.hardwareConcurrency)
@@ -89,11 +92,18 @@ const Config = {
 	SlippyMapFetchBatchSize: 4,
 	SettingsSchema: {
 		performanceMode: {
-			label: 'Performance mode',
-			status: ['off', 'on'],
-			statusLabels: ['Standard', 'Low memory (mobile/tablet)'],
-			statusDefault: _lowMemory ? 'on' : 'off',
+			label: 'Device tier',
+			status: ['low', 'standard', 'high'],
+			statusLabels: ['Low-end', 'Standard', 'High-end'],
+			statusDefault: _lowMemory ? 'low' : 'standard',
 			category: 'general'
+		},
+		autoQuality: {
+			label: 'Auto quality tuning',
+			status: ['off', 'on'],
+			statusLabels: ['Manual', 'Automatic (targets 60 FPS)'],
+			statusDefault: 'on',
+			category: 'graphics'
 		},
 		fov: {
 			label: 'Vertical field of view',

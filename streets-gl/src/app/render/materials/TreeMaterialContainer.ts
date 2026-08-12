@@ -1,3 +1,4 @@
+import Config from "~/app/Config";
 import Shaders from "../shaders/Shaders";
 import MaterialContainer from "./MaterialContainer";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
@@ -43,7 +44,7 @@ export default class TreeMaterialContainer extends MaterialContainer {
 					value: this.renderer.createTexture2D({
 						width: 256,
 						height: 256,
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						data: ResourceLoader.get('treeVolumeNormal'),
 						minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
 						magFilter: RendererTypes.MagFilter.Linear,

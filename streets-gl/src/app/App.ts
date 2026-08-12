@@ -22,6 +22,7 @@ import GameUISystem from "~/app/game/GameUISystem";
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
+import AutoQualitySystem from "~/app/systems/AutoQualitySystem";
 
 class App {
 	private loop = (deltaTime: number): void => this.update(deltaTime);
@@ -69,6 +70,7 @@ class App {
 				RenderSystem,
 				TileLoadingSystem,
 				GameUISystem,
+				AutoQualitySystem,
 			);
 
 			this.initFpsLimitListener();
@@ -95,10 +97,22 @@ class App {
 	private update(rafTime = 0): void {
 		requestAnimationFrame(this.loop);
 
-		if (this._fpsLimitInterval > 0 && (rafTime - this._lastRenderedTime) < this._fpsLimitInterval) {
-			return;
+		// FPS limiter with carried timestamps. The old `last = rafTime` version
+		// quantized to vsync boundaries: a "60" limit on a 120 Hz display
+		// skipped every frame arriving at 16.6 ms (< 16.67) and effectively ran
+		// at 40 fps, and "30" on a 60 Hz display ran at 20 fps. Carrying the
+		// interval (with a half-tick tolerance) delivers the actual target rate.
+		if (this._fpsLimitInterval > 0) {
+			if (rafTime - this._lastRenderedTime < this._fpsLimitInterval - 2) {
+				return;
+			}
+			this._lastRenderedTime = Math.max(
+				this._lastRenderedTime + this._fpsLimitInterval,
+				rafTime - this._fpsLimitInterval,
+			);
+		} else {
+			this._lastRenderedTime = rafTime;
 		}
-		this._lastRenderedTime = rafTime;
 
 		const frameStart = performance.now();
 		const deltaTime = (rafTime - this.time) / 1e3;

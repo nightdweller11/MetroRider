@@ -1,3 +1,4 @@
+import Config from "~/app/Config";
 import Shaders from "../shaders/Shaders";
 import MaterialContainer from "./MaterialContainer";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
@@ -38,7 +39,7 @@ export default class SkyboxMaterialContainer extends MaterialContainer {
 					value: this.renderer.createTextureCube({
 						width: 1024,
 						height: 1024,
-						anisotropy: 16,
+						anisotropy: Config.TextureAnisotropy,
 						data: [
 							ResourceLoader.get('starmap0'),
 							ResourceLoader.get('starmap1'),

@@ -30,6 +30,7 @@ import ResourceLoader from "~/app/world/ResourceLoader";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
 import ControlsSystem from "~/app/systems/ControlsSystem";
 import CursorStyleSystem from "~/app/systems/CursorStyleSystem";
+import TrainSystem from "~/app/game/TrainSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 export default class RenderSystem extends System {
@@ -251,12 +252,27 @@ export default class RenderSystem extends System {
 		});
 	}
 
+	// Escape hatch for A/B profiling: ?keepPicking=1 restores the old
+	// always-on object-ID readback.
+	private static readonly KEEP_PICKING =
+		typeof window !== 'undefined' && window.location.search.includes('keepPicking=1');
+
 	private pickObjectId(): void {
 		const pickingSystem = this.systemManager.getSystem(PickingSystem);
 		const controlsSystem = this.systemManager.getSystem(ControlsSystem);
 		const pass = <GBufferPass>this.passManager.getPass('GBufferPass');
 
 		if (!pass || !controlsSystem.isTilesVisible) {
+			pickingSystem.clearHoveredObjectId();
+			return;
+		}
+
+		// While driving, nobody hover-picks buildings — skip the per-frame
+		// object-ID GPU readback (a readPixels + fence sync every frame).
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const driving = !!trainSystem?.gameActive && !RenderSystem.KEEP_PICKING;
+		pass.objectIdReadEnabled = !driving;
+		if (driving) {
 			pickingSystem.clearHoveredObjectId();
 			return;
 		}

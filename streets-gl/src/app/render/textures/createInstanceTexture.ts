@@ -1,3 +1,4 @@
+import Config from "~/app/Config";
 import AbstractRenderer from "~/lib/renderer/abstract-renderer/AbstractRenderer";
 import AbstractTexture2DArray from "~/lib/renderer/abstract-renderer/AbstractTexture2DArray";
 import ResourceLoader from "~/app/world/ResourceLoader";
@@ -32,7 +33,7 @@ export default function createInstanceTexture(renderer: AbstractRenderer): Abstr
 		width: 512,
 		height: 512,
 		depth: 15 * 3,
-		anisotropy: 16,
+		anisotropy: Config.TextureAnisotropy,
 		data: [
 			ResourceLoader.get('adColumnDiffuse'),
 			ResourceLoader.get('adColumnNormal'),

@@ -1,8 +1,48 @@
 # Performance Optimizations
 
-> STATUS: PROPOSAL — reviewed against the code on 2026-08-12 (post-v1.1.0).
+> STATUS: Phase 1 SHIPPED in v1.1.3 (2026-08-12) — measured results below.
 > Target: consistent 30 FPS on old/low-end machines (integrated GPUs, old iPads,
 > mid-range phones), preferably 60. Desktop already runs 60+ uncapped.
+
+## Phase 1 — measured results (v1.1.3, 2026-08-12)
+
+Method: scripted 60–90 s full-throttle drive on the Israel-railways map,
+production build, frame deltas via rAF, heap sampled at 2 Hz (GC = drops
+>5 MB), CDP CPU throttling to simulate slow machines. Baseline = v1.1.2.
+Harness: `scripts/perf/` scenario (Playwright).
+
+**Shipped:** allocation pooling (`Mat4.multiplyInto` + pooled batch scratch in
+GBuffer/Shadow passes), object-ID readback skipped while driving
+(`?keepPicking=1` restores), frustum→tile updates throttled to 4 Hz
+(`?noTileThrottle=1` restores), `Config.TextureAnisotropy` (4 on low-memory
+devices), fixed FPS limiter (carried timestamps), 3-tier Device tier setting,
+and the **auto-quality governor** (below).
+
+### Slow-PC simulation (4× CPU throttle), fixed default settings
+| Build | avg FPS | p75 ms | p95 ms | alloc MB/s | GC/min | GC freed |
+|---|---|---|---|---|---|---|
+| v1.1.2 baseline | 49.4 | 24.9 | 25.7 | 12.5 | 73 | 685 MB |
+| + pooling only | 58.5 | 17.2 | 25.1 | 10.6 | 58 | 533 MB |
+| + picking-skip + tile-throttle | **64.1 (+30%)** | **17.0** | **17.7 (−31%)** | **8.3 (−34%)** | **29 (−60%)** | 310 MB |
+
+### Auto-quality governor
+- **Very slow machine (8× throttle):** unmanaged = 30 FPS avg with spikes to
+  51 ms (p99). Governor converged to `rung 7 → 30 fps` (renderScale 0.5,
+  shadows off, 30-cap) delivering a *steady* 30: p95 = 34.2 ms, within 3% of
+  the 33.3 ms target.
+- **Fast machine (unthrottled):** climbed to `rung 0 → uncapped` — shadows
+  HIGH (above the old defaults), renderScale 1.0 — at **88.9 FPS** vs the old
+  build's 78 FPS at *medium* shadows. Faster AND prettier, because the other
+  Phase-1 wins paid for the quality.
+- Manual override verified: changing any governed setting disengages the
+  governor (toast shown); re-enabling the setting re-engages it. Governor
+  changes are transient (never persisted over the user's saved preferences);
+  the converged rung/mode is remembered per device for instant starts.
+
+### FPS limiter accuracy (bug fix)
+The rAF-skip limiter quantized to vsync boundaries: "30" ran at ~20 FPS and
+"60" under 60 (exactly as users reported). With carried timestamps: limit 30 →
+measured 29–31 (median 30); limit 60 → 61.
 
 Every item names the file(s) involved, the expected gain, and the effort.
 "Gain" is for the frame budget on a low-end GPU unless stated otherwise.

@@ -118,6 +118,22 @@ export default class Mat4 {
 		return matrix;
 	}
 
+	/**
+	 * Multiply mat1 × mat2 writing the result into `dst` (a 16-element array).
+	 * Allocation-free variant of `multiply` for per-frame hot paths.
+	 */
+	public static multiplyInto(dst: Float32Array | Float64Array, mat1: Mat4, mat2: Mat4): void {
+		const a = mat1.values;
+		const b = mat2.values;
+		for (let i = 0; i < 4; i++) {
+			const b0 = b[i * 4], b1 = b[i * 4 + 1], b2 = b[i * 4 + 2], b3 = b[i * 4 + 3];
+			dst[i * 4] = b0 * a[0] + b1 * a[4] + b2 * a[8] + b3 * a[12];
+			dst[i * 4 + 1] = b0 * a[1] + b1 * a[5] + b2 * a[9] + b3 * a[13];
+			dst[i * 4 + 2] = b0 * a[2] + b1 * a[6] + b2 * a[10] + b3 * a[14];
+			dst[i * 4 + 3] = b0 * a[3] + b1 * a[7] + b2 * a[11] + b3 * a[15];
+		}
+	}
+
 	public static multiply(mat1: Mat4, mat2: Mat4): Mat4 {
 		const matrix = new Mat4();
 		const dst = matrix.values;

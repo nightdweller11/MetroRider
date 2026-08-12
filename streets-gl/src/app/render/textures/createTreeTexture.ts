@@ -1,3 +1,4 @@
+import Config from "~/app/Config";
 import AbstractRenderer from "~/lib/renderer/abstract-renderer/AbstractRenderer";
 import AbstractTexture2DArray from "~/lib/renderer/abstract-renderer/AbstractTexture2DArray";
 import ResourceLoader from "~/app/world/ResourceLoader";
@@ -8,7 +9,7 @@ export default function createTreeTexture(renderer: AbstractRenderer): AbstractT
 		width: 512,
 		height: 512,
 		depth: 7 * 2,
-		anisotropy: 16,
+		anisotropy: Config.TextureAnisotropy,
 		data: [
 			ResourceLoader.get('treeBeechDiffuse'),
 			ResourceLoader.get('treeBeechNormal'),

@@ -54,6 +54,10 @@ export default class ShadowMappingPass extends Pass<{
 
 	private readonly _tmpMat4A: Float32Array = new Float32Array(16);
 	private readonly _tmpMat4B: Float32Array = new Float32Array(16);
+	// Pooled batch scratch — avoids a Float32Array per tile per cascade per frame.
+	private readonly _matrixPool = Array.from({length: 32}, () => new Float32Array(16));
+	private readonly _batchMatrices: Float32Array[] = [];
+	private readonly _batchSlots: any[] = [];
 	private readonly _tmpVec4A: Float32Array = new Float32Array(4);
 	private readonly _tmpFloat1: Float32Array = new Float32Array(1);
 
@@ -186,16 +190,23 @@ export default class ShadowMappingPass extends Pass<{
 				megaBuffers.extruded.sharedMesh.bind();
 
 				for (let batchStart = 0; batchStart < tilesWithSlots.length; batchStart += 32) {
-					const batchSlice = tilesWithSlots.slice(batchStart, batchStart + 32);
+					const count = Math.min(32, tilesWithSlots.length - batchStart);
 
-					const matrices = batchSlice.map(tile =>
-						new Float32Array(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values)
-					);
+					// Pooled scratch — this loop used to allocate a Float32Array
+					// per tile per cascade per frame.
+					this._batchMatrices.length = count;
+					this._batchSlots.length = count;
+					for (let k = 0; k < count; k++) {
+						const tile = tilesWithSlots[batchStart + k];
+						Mat4.multiplyInto(this._matrixPool[k], shadowCamera.matrixWorldInverse, tile.matrixWorld);
+						this._batchMatrices[k] = this._matrixPool[k];
+						this._batchSlots[k] = tile.extrudedSlot;
+					}
 
-					const {buffer, byteLength} = megaBuffers.packDepthUBO(matrices);
+					const {buffer, byteLength} = megaBuffers.packDepthUBO(this._batchMatrices);
 					this.extrudedMeshMaterial.updateUniformBlockRaw('PerMeshArray', buffer, byteLength);
 
-					const batchParams = megaBuffers.buildBatchParams(batchSlice.map(t => t.extrudedSlot));
+					const batchParams = megaBuffers.buildBatchParams(this._batchSlots);
 					this.renderer.batchDrawArrays(batchParams);
 				}
 
@@ -204,7 +215,7 @@ export default class ShadowMappingPass extends Pass<{
 		}
 
 		for (const tile of visibleTiles) {
-			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, shadowCamera.matrixWorldInverse, tile.matrixWorld);
 			this.extrudedMeshMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.extrudedMeshMaterial.updateUniformBlock('PerMesh');
 
@@ -242,7 +253,7 @@ export default class ShadowMappingPass extends Pass<{
 
 			const {ring0, levelId, ring0Offset, ring1Offset} = tileParams;
 
-			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, tile.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, shadowCamera.matrixWorldInverse, tile.matrixWorld);
 			this.huggingMeshMaterial.getUniform('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.huggingMeshMaterial.getUniform<UniformFloat1>('terrainRingSize', 'PerMesh').value[0] = ring0.size;
 			this._tmpVec4A[0] = ring0Offset.x;
@@ -360,7 +371,7 @@ export default class ShadowMappingPass extends Pass<{
 		this.trainDepthMaterial.updateUniformBlock('PerMaterial');
 
 		for (const meshObj of meshes) {
-			this._tmpMat4B.set(Mat4.multiply(shadowCamera.matrixWorldInverse, meshObj.matrixWorld).values);
+			Mat4.multiplyInto(this._tmpMat4B, shadowCamera.matrixWorldInverse, meshObj.matrixWorld);
 			this.trainDepthMaterial.getUniform<UniformMatrix4>('modelViewMatrix', 'PerMesh').value = this._tmpMat4B;
 			this.trainDepthMaterial.updateUniformBlock('PerMesh');
 

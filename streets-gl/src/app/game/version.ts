@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.3',
+		codename: 'The Express Update',
+		date: '2026-08-12',
+		emblem: '⚡🚄',
+		summary: 'Faster everywhere: the game now tunes its own graphics to your machine.',
+		changes: [
+			'Auto quality tuning: the game measures its own frame rate and adjusts graphics live — striving for 60 FPS, falling back to a steady 30 on slow machines, and going all the way to max settings + uncapped FPS on fast ones.',
+			'Change any graphics setting yourself and auto-tuning steps aside (switch it back on any time).',
+			'New Device tier setting (Low-end / Standard / High-end) as the tuning starting point.',
+			'Frame-rate limits are accurate now — "30 FPS" used to run at ~20 and "60" under 60.',
+			'Big under-the-hood speedup: about 30% more FPS on slower machines and 60% fewer memory-cleanup stutters while driving.',
+		],
+	},
+	{
 		version: '1.1.2',
 		codename: 'The Navigator Update',
 		date: '2026-08-12',

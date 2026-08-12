@@ -57,8 +57,8 @@ export default class TileSystem extends System {
 		}, true);
 
 		settings.onChange('performanceMode', ({statusValue}) => {
-			const isLow = statusValue === 'on';
-			Config.applyPerformanceMode(isLow);
+			// 3-state device tier: only 'low' tightens tile/memory limits.
+			Config.applyPerformanceMode(statusValue === 'low');
 			this.cameraFrustum = null;
 		}, true);
 
@@ -183,14 +183,27 @@ export default class TileSystem extends System {
 		return Promise.all(heightPromises);
 	}
 
+	// Frustum→tile-set recomputation allocates convex-hull scratch every call;
+	// 4 Hz is indistinguishable from per-frame (tiles take seconds to load)
+	// and removes a steady per-frame garbage source. ?noTileThrottle=1 restores
+	// per-frame updates for A/B profiling.
+	private static readonly TILE_UPDATE_INTERVAL = 0.25;
+	private static readonly NO_TILE_THROTTLE =
+		typeof window !== 'undefined' && window.location.search.includes('noTileThrottle=1');
+	private tileUpdateTimer: number = Infinity; // run immediately on first frame
+
 	public update(deltaTime: number): void {
 		const slippyMode = this.systemManager.getSystem(ControlsSystem).mode === NavigationMode.Slippy;
 
-		if (!slippyMode) {
-			this.updateTiles();
-		}
+		this.tileUpdateTimer += deltaTime;
+		const shouldUpdate = TileSystem.NO_TILE_THROTTLE ||
+			this.tileUpdateTimer >= TileSystem.TILE_UPDATE_INTERVAL;
 
-		this.removeCulledTiles();
+		if (!slippyMode && shouldUpdate) {
+			this.tileUpdateTimer = 0;
+			this.updateTiles();
+			this.removeCulledTiles();
+		}
 	}
 
 	private updateTiles(): void {
