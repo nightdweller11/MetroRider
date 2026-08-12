@@ -2,6 +2,7 @@ import System from '../System';
 import PassengerSystem from '~/app/game/passengers/PassengerSystem';
 import ProfileUI from '~/app/game/profiles/ProfileUI';
 import ScoringSystem from '~/app/game/scoring/ScoringSystem';
+import SpeedLimitSystem from '~/app/game/limits/SpeedLimitSystem';
 import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem from './GameCameraSystem';
@@ -46,6 +47,7 @@ export default class GameUISystem extends System {
 	private infoPanelEl: HTMLElement | null = null;
 	private timeEl: HTMLElement | null = null;
 	private paxEl: HTMLElement | null = null;
+	private limitEl: HTMLElement | null = null;
 	private readonly profileUI: ProfileUI = new ProfileUI();
 	private scoreUI: ScoreUI | null = null;
 	private etaEl: HTMLElement | null = null;
@@ -288,6 +290,7 @@ export default class GameUISystem extends System {
 		sep.style.cssText = 'height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0;';
 		this.infoPanelEl.appendChild(sep);
 
+		this.infoPanelEl.appendChild(row('LIMIT', 'hud-limit-val', false));
 		this.infoPanelEl.appendChild(row('PAX', 'hud-pax-val', false));
 		this.infoPanelEl.appendChild(row('NEXT', 'hud-eta-val', false));
 
@@ -297,6 +300,7 @@ export default class GameUISystem extends System {
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
 		this.timeEl = document.getElementById('hud-time-val') ?? this.infoPanelEl;
 		this.paxEl = document.getElementById('hud-pax-val') ?? this.infoPanelEl;
+		this.limitEl = document.getElementById('hud-limit-val');
 		this.etaEl = document.getElementById('hud-eta-val') ?? this.infoPanelEl;
 	}
 
@@ -1605,6 +1609,24 @@ export default class GameUISystem extends System {
 			const hh = String(now.getHours()).padStart(2, '0');
 			const mm = String(now.getMinutes()).padStart(2, '0');
 			this.timeEl.textContent = `${hh}:${mm}`;
+		}
+
+		if (this.limitEl) {
+			const limits = this.systemManager.getSystem(SpeedLimitSystem);
+			if (limits && limits.limit > 0) {
+				const kmh = limits.limitKmh();
+				// The countdown is the useful half: knowing a slower limit is
+				// 400 m away is what lets a driver brake in time.
+				const change = limits.change;
+				const ahead = change && change.distance < 900
+					? `  ↓${Math.round(change.limit * 3.6 / 5) * 5} in ${change.distance < 100 ? Math.round(change.distance) + ' m' : (change.distance / 1000).toFixed(1) + ' km'}`
+					: '';
+				this.limitEl.textContent = `${kmh}${ahead}`;
+				this.limitEl.style.color = limits.state === 'over' ? '#ff6b6b'
+					: limits.state === 'approaching' ? '#f0b429' : '#fff';
+			} else {
+				this.limitEl.textContent = '—';
+			}
 		}
 
 		if (this.paxEl) {

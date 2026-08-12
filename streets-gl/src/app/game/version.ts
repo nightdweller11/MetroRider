@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.12',
+		codename: 'The Line Speed',
+		date: '2026-08-13',
+		emblem: '🚦🚄',
+		summary: 'The line has speed limits now — and the curves decide them.',
+		changes: [
+			'Every line has real speed limits, worked out from the track itself: tight city curves are slow, long suburban straights are fast.',
+			'The HUD shows the limit you are under and counts down to the next change, so you know when to start braking.',
+			'Go too far over and the train intervenes: traction is cut and it brakes back to the limit, the way a real overspeed system does.',
+			'Time spent over the limit costs points on the run card — capped, so a messy run is still a run.',
+		],
+	},
+	{
 		version: '1.1.11',
 		codename: 'The Season Ticket',
 		date: '2026-08-13',

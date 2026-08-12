@@ -1,6 +1,7 @@
 # F3 — Speed Limits, Overspeed & the Route Ribbon
 
-> STATUS: PLANNED · Depends on: F6 for mode-based base limits (falls back to a
+> STATUS: BUILT (limits, HUD chip, intervention, score penalty) — track-side
+> boards and the route ribbon are still to come. Originally: PLANNED · Depends on: F6 for mode-based base limits (falls back to a
 > single base limit until F6 lands). Feeds F2 (overspeed affects run score).
 
 ## 1. Product definition
@@ -75,3 +76,43 @@ SpeedProfile + physics + HUD: 2–3 days. Boards: 1 day. Ribbon: 1–2 days.
   chip + a speed board + the ribbon; no console errors; FPS unchanged
   (compare a 30 s profile run before/after — boards and ribbon must be
   free: DOM ribbon throttled, boards are static meshes).
+
+
+---
+
+## 4. What shipped (2026-08-13)
+
+`SpeedProfile.ts` (pure, 24 unit tests) + `SpeedLimitSystem` + HUD chip +
+overspeed intervention + a score penalty.
+
+Limits come from the track's own geometry: curve radius through each spline
+triple, `v = sqrt(a·r)` at 0.9 m/s² lateral comfort, clamped to the line
+maximum and a 25 km/h floor. On the Israel map that yields **181 segments from
+25 to 195 km/h**, which is exactly the shape you would expect — slow through
+city curves, fast on the straight suburban run.
+
+### Three things the tests and the live drive forced
+
+1. **A look-ahead window is the wrong unit.** Braking 50 → 11 m/s at 1 m/s²
+   takes about a kilometre, so "minimum limit over the next N points" cannot
+   put the number in front of the driver in time. The profile is now
+   back-propagated (`v(i) = sqrt(v(i+1)² + 2·a·ds)`), so limits ramp down on
+   the approach and are in force at the curve. A test asserts the invariant
+   directly: wherever the limit drops, the segment before it is long enough to
+   brake in.
+2. **Round DOWN, and inside the walk.** Rounding to 5 km/h steps afterwards
+   re-broke that invariant (flooring the slower value widens the gap). Rounding
+   happens inside the back-propagation now.
+3. **Curvature must be measured in metres.** The spline stores `[lng, lat]`
+   degrees; a 200 m bend spans ~0.002° and reads as a straight line. The first
+   live run posted the line maximum across all 87 km — one flat segment.
+4. **An intervention must cut traction.** Subtracting a braking force lost to
+   the throttle (1.5 m/s² against 5), so the train sat at 198 km/h in an 85
+   zone. It now holds a ceiling the throttle cannot push through: measured, the
+   train pegs at 1.25× the limit and no further with the throttle held down.
+
+### Not yet
+
+Track-side speed boards and the route ribbon (dots, train marker, limit ticks,
+loop ring). The profile already exposes everything they need
+(`getSegments()`), so they are UI work, not model work.

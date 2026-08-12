@@ -2,6 +2,7 @@ import System from '~/app/System';
 import TrainSystem from '../TrainSystem';
 import PassengerSystem from '../passengers/PassengerSystem';
 import ProfileClient from '../profiles/ProfileClient';
+import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 
@@ -115,6 +116,17 @@ export default class ScoringSystem extends System {
 			completedLine,
 		);
 		if (!result) return;
+
+		// Overspeeding costs points — 2 per second over the limit, capped so a
+		// bad run is still a run, never a wipe-out.
+		const limits = this.systemManager.getSystem(SpeedLimitSystem);
+		const overspeedSeconds = Math.round(limits?.overspeedSeconds ?? 0);
+		const penalty = Math.min(Math.round(result.totalPoints * 0.4), overspeedSeconds * 2);
+		if (penalty > 0) {
+			result.totalPoints = Math.max(0, result.totalPoints - penalty);
+			result.summary += ` · ${overspeedSeconds}s over the limit (−${penalty})`;
+		}
+		if (limits) limits.overspeedSeconds = 0;
 
 		const badges = badgesForRun(result, new Date().getHours());
 
