@@ -10,7 +10,9 @@ import {
 	releaseLabel,
 	RELEASE_VERSION,
 	RELEASE_CODENAME,
+	RELEASE_SUMMARY,
 	RELEASE_HIGHLIGHTS,
+	CHANGELOG,
 	isReleaseAnnouncementUnseen,
 	markReleaseAnnouncementSeen,
 } from './version';
@@ -130,19 +132,60 @@ export default class GameUISystem extends System {
 		versionLine.style.cssText = 'font-size: 12px; color: #7fb2ff; font-weight: 600; margin-bottom: 14px; letter-spacing: 0.5px;';
 
 		const blurb = document.createElement('div');
-		blurb.textContent =
-			'This update is all about going in circles — in a good way. ' +
-			'Circular metro lines finally work like real loop services, and your ' +
-			'train got a whole lot more customizable:';
+		blurb.textContent = RELEASE_SUMMARY;
 		blurb.style.cssText = 'font-size: 13px; color: #ccc; line-height: 1.55; margin-bottom: 14px; text-align: left;';
 
 		const list = document.createElement('ul');
-		list.style.cssText = 'text-align: left; margin: 0 0 18px; padding-left: 20px; color: #ddd; font-size: 13px; line-height: 1.7;';
+		list.style.cssText = 'text-align: left; margin: 0 0 14px; padding-left: 20px; color: #ddd; font-size: 13px; line-height: 1.7;';
 		for (const item of RELEASE_HIGHLIGHTS) {
 			const li = document.createElement('li');
 			li.textContent = item;
 			list.appendChild(li);
 		}
+
+		// Full changelog — collapsed by default, one section per release.
+		const changelogToggle = document.createElement('button');
+		changelogToggle.id = 'release-changelog-toggle';
+		changelogToggle.textContent = '📜 Changelog ▸';
+		changelogToggle.style.cssText = `
+			background: none; border: none; color: #7fb2ff; font-size: 12px;
+			font-weight: 600; cursor: pointer; padding: 4px 0; margin-bottom: 10px;
+		`;
+
+		const changelogSection = document.createElement('div');
+		changelogSection.id = 'release-changelog';
+		changelogSection.style.cssText = `
+			display: none; text-align: left; margin-bottom: 16px;
+			border-top: 1px solid rgba(255,255,255,0.12); padding-top: 12px;
+		`;
+
+		for (const entry of CHANGELOG) {
+			const head = document.createElement('div');
+			head.style.cssText = 'font-size: 13px; font-weight: 700; color: #fff; margin-bottom: 2px;';
+			head.textContent = `v${entry.version} — “${entry.codename}”`;
+
+			const date = document.createElement('div');
+			date.style.cssText = 'font-size: 11px; color: #888; margin-bottom: 6px;';
+			date.textContent = entry.date;
+
+			const ul = document.createElement('ul');
+			ul.style.cssText = 'margin: 0 0 14px; padding-left: 18px; color: #bbb; font-size: 12px; line-height: 1.6;';
+			for (const change of entry.changes) {
+				const li = document.createElement('li');
+				li.textContent = change;
+				ul.appendChild(li);
+			}
+
+			changelogSection.appendChild(head);
+			changelogSection.appendChild(date);
+			changelogSection.appendChild(ul);
+		}
+
+		changelogToggle.addEventListener('click', () => {
+			const open = changelogSection.style.display !== 'none';
+			changelogSection.style.display = open ? 'none' : 'block';
+			changelogToggle.textContent = open ? '📜 Changelog ▸' : '📜 Changelog ▾';
+		});
 
 		const dismissBtn = document.createElement('button');
 		dismissBtn.id = 'release-splash-dismiss';
@@ -170,6 +213,8 @@ export default class GameUISystem extends System {
 		card.appendChild(versionLine);
 		card.appendChild(blurb);
 		card.appendChild(list);
+		card.appendChild(changelogToggle);
+		card.appendChild(changelogSection);
 		card.appendChild(dismissBtn);
 		overlay.appendChild(card);
 		document.body.appendChild(overlay);
@@ -1133,8 +1178,8 @@ export default class GameUISystem extends System {
 				pointer-events: auto; transition: background 0.15s;
 			`;
 		}
-		btn.textContent = '\u2699';
-		btn.title = 'Train & Sound Settings';
+		btn.textContent = '\ud83d\ude86';
+		btn.title = 'Customize your train (models & sounds)';
 		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
 		btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.65)'; });
 		btn.addEventListener('click', () => {
