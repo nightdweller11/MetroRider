@@ -116,3 +116,33 @@ city curves, fast on the straight suburban run.
 Track-side speed boards and the route ribbon (dots, train marker, limit ticks,
 loop ring). The profile already exposes everything they need
 (`getSegments()`), so they are UI work, not model work.
+
+
+---
+
+## 5. Operator corrections (2026-08-13, same day)
+
+Three, all correct, all shipped in v1.1.13:
+
+1. **The limit must not drive the train.** v1.1.12 cut traction above 125% of
+   the limit. That takes the decision away from the player, which is the
+   opposite of what a speed limit is for. Nothing touches the train now — the
+   sign informs, the driver chooses, and ignoring it costs points. That IS the
+   enforcement.
+2. **The numbers were too low.** Two causes, both real:
+   - the lateral acceleration was a flat-track comfort figure (0.9 m/s²), but
+     real track is CANTED. With ~150 mm cant plus ~100 mm cant deficiency over
+     1.5 m between rail centres the usable figure is ~1.6 m/s².
+   - curvature was measured between ADJACENT spline points, 20-60 m apart,
+     where position noise fakes tight curves on nearly straight track. It is
+     now fitted over a ~100 m baseline.
+   Together: median limit on the Israel map went 45 → **90 km/h**, segments
+   181 → 100, and a test pins the output against real practice (300 m ≈ 80,
+   600 m ≈ 110, 1000 m ≈ 145 km/h, ±20%).
+3. **A sign reads better than a number.** The HUD shows a white disc with a red
+   ring, the way a lineside sign does; it turns amber near the limit and glows
+   red over it, with the next change beside it (`▼ 70 in 21 m`).
+
+Scoring now separates the two cases: a little over is 2 points a second, more
+than 25% over is 5 — the difference between running late and taking a curve too
+fast.

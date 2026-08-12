@@ -48,6 +48,7 @@ export default class GameUISystem extends System {
 	private timeEl: HTMLElement | null = null;
 	private paxEl: HTMLElement | null = null;
 	private limitEl: HTMLElement | null = null;
+	private limitAheadEl: HTMLElement | null = null;
 	private readonly profileUI: ProfileUI = new ProfileUI();
 	private scoreUI: ScoreUI | null = null;
 	private etaEl: HTMLElement | null = null;
@@ -290,7 +291,7 @@ export default class GameUISystem extends System {
 		sep.style.cssText = 'height: 1px; background: rgba(255,255,255,0.1); margin: 4px 0;';
 		this.infoPanelEl.appendChild(sep);
 
-		this.infoPanelEl.appendChild(row('LIMIT', 'hud-limit-val', false));
+		this.infoPanelEl.appendChild(this.createLimitSignRow());
 		this.infoPanelEl.appendChild(row('PAX', 'hud-pax-val', false));
 		this.infoPanelEl.appendChild(row('NEXT', 'hud-eta-val', false));
 
@@ -300,8 +301,39 @@ export default class GameUISystem extends System {
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
 		this.timeEl = document.getElementById('hud-time-val') ?? this.infoPanelEl;
 		this.paxEl = document.getElementById('hud-pax-val') ?? this.infoPanelEl;
-		this.limitEl = document.getElementById('hud-limit-val');
+		this.limitEl = document.getElementById('hud-limit-sign');
+		this.limitAheadEl = document.getElementById('hud-limit-ahead');
 		this.etaEl = document.getElementById('hud-eta-val') ?? this.infoPanelEl;
+	}
+
+	/**
+	 * The limit as a road-style sign — a white disc with a red ring — rather
+	 * than a number in a list. A sign is read at a glance and says "this is a
+	 * rule of the line", which a text row does not.
+	 */
+	private createLimitSignRow(): HTMLElement {
+		const wrap = document.createElement('div');
+		wrap.style.cssText = 'display: flex; align-items: center; gap: 8px; margin: 6px 0 2px;';
+
+		const sign = document.createElement('div');
+		sign.id = 'hud-limit-sign';
+		const size = this.mobile ? 34 : 42;
+		sign.style.cssText = `
+			width: ${size}px; height: ${size}px; border-radius: 50%;
+			background: #fff; border: ${this.mobile ? 4 : 5}px solid #d32f2f;
+			display: flex; align-items: center; justify-content: center;
+			color: #111; font-weight: 800; font-size: ${this.mobile ? 13 : 15}px;
+			box-shadow: 0 1px 4px rgba(0,0,0,0.5); flex: none; line-height: 1;
+		`;
+		sign.textContent = '—';
+
+		const ahead = document.createElement('div');
+		ahead.id = 'hud-limit-ahead';
+		ahead.style.cssText = 'font-size: 11px; color: #bbb; line-height: 1.3;';
+
+		wrap.appendChild(sign);
+		wrap.appendChild(ahead);
+		return wrap;
 	}
 
 	private createStationInfo(): void {
@@ -1614,16 +1646,28 @@ export default class GameUISystem extends System {
 		if (this.limitEl) {
 			const limits = this.systemManager.getSystem(SpeedLimitSystem);
 			if (limits && limits.limit > 0) {
-				const kmh = limits.limitKmh();
-				// The countdown is the useful half: knowing a slower limit is
-				// 400 m away is what lets a driver brake in time.
-				const change = limits.change;
-				const ahead = change && change.distance < 900
-					? `  ↓${Math.round(change.limit * 3.6 / 5) * 5} in ${change.distance < 100 ? Math.round(change.distance) + ' m' : (change.distance / 1000).toFixed(1) + ' km'}`
-					: '';
-				this.limitEl.textContent = `${kmh}${ahead}`;
-				this.limitEl.style.color = limits.state === 'over' ? '#ff6b6b'
-					: limits.state === 'approaching' ? '#f0b429' : '#fff';
+				this.limitEl.textContent = String(limits.limitKmh());
+				// The sign itself flashes when the driver is over it — the only
+				// enforcement there is, since the train is never braked for them.
+				this.limitEl.style.borderColor = limits.state === 'over' ? '#ff1744'
+					: limits.state === 'approaching' ? '#f0b429' : '#d32f2f';
+				this.limitEl.style.background = limits.state === 'over' ? '#ffe5e5' : '#fff';
+
+				if (this.limitAheadEl) {
+					const change = limits.change;
+					if (change && change.distance < 1200) {
+						const next = Math.round(change.limit * 3.6 / 5) * 5;
+						const how = change.distance < 100
+							? `${Math.round(change.distance)} m`
+							: `${(change.distance / 1000).toFixed(1)} km`;
+						const arrow = change.limit < limits.limit ? '▼' : '▲';
+						this.limitAheadEl.textContent = `${arrow} ${next} in ${how}`;
+						this.limitAheadEl.style.color = change.limit < limits.limit ? '#f0b429' : '#8fd08f';
+					} else {
+						this.limitAheadEl.textContent = limits.state === 'over' ? 'Over the limit' : '';
+						this.limitAheadEl.style.color = '#ff6b6b';
+					}
+				}
 			} else {
 				this.limitEl.textContent = '—';
 			}

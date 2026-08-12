@@ -3,7 +3,7 @@ import TrainSystem from '../TrainSystem';
 import MathUtils from '~/lib/math/MathUtils';
 import {
 	buildSpeedProfile, limitAt, nextChange, speedState,
-	SpeedSegment, SpeedState, NextChange, PENALTY_BRAKE_OVER, toSignKmh,
+	SpeedSegment, SpeedState, NextChange, SERIOUS_OVERSPEED, toSignKmh,
 } from './SpeedProfile';
 
 /**
@@ -22,8 +22,8 @@ export default class SpeedLimitSystem extends System {
 	public change: NextChange | null = null;
 	/** Seconds spent above the limit this run — the score reads this. */
 	public overspeedSeconds = 0;
-	/** True while the overspeed brake is holding the train back. */
-	public intervening = false;
+	/** Of that, seconds spent MORE than 25% over — the expensive kind. */
+	public seriousOverspeedSeconds = 0;
 
 	public postInit(): void {
 		// The profile is built lazily on the first update that has a line.
@@ -52,6 +52,7 @@ export default class SpeedLimitSystem extends System {
 				{lineMax: trainSystem.getMaxSpeedKmH() / 3.6},
 			);
 			this.overspeedSeconds = 0;
+			this.seriousOverspeedSeconds = 0;
 		}
 
 		if (!trainSystem.gameActive) return;
@@ -66,31 +67,18 @@ export default class SpeedLimitSystem extends System {
 			ls.track.totalLength, ls.track.isLoop,
 		);
 
-		if (this.state !== 'over' && speed <= this.limit) this.intervening = false;
-
 		if (this.state === 'over') {
 			this.overspeedSeconds += Math.min(deltaTime, 0.5);
-
-			// Well over the limit the train brakes itself. This is a safety
-			// system, not a punishment: it eases the train back to the limit
-			// and lets go, the way a real overspeed intervention does.
-			//
-			// It also CUTS TRACTION, by holding a ceiling the throttle cannot
-			// push through. Subtracting a braking force alone does not work:
-			// the intervention decelerates at 1.5 m/s² while the throttle
-			// accelerates at 5, so the driver simply wins and sits at 198 km/h
-			// in an 85 zone (measured — it is how the first version behaved).
-			const ceiling = this.limit * (1 + PENALTY_BRAKE_OVER);
-			if (speed > ceiling) {
-				this.intervening = true;
-			}
-			if (this.intervening) {
-				const braking = 2.5 * Math.min(deltaTime, 0.5);
-				const next = Math.max(this.limit, Math.min(speed, ceiling) - braking);
-				trainSystem.physicsState.trainSpeed = next;
-				if (next <= this.limit + 0.05) this.intervening = false;
+			if (speed > this.limit * (1 + SERIOUS_OVERSPEED)) {
+				this.seriousOverspeedSeconds += Math.min(deltaTime, 0.5);
 			}
 		}
+
+		// Nothing here touches the train. A speed limit is information the
+		// DRIVER acts on — a previous version cut traction above the limit,
+		// which took the decision away from the player and made the sign
+		// pointless. Ignoring it costs points on the run card; that is the
+		// whole enforcement, and it is the player's call.
 	}
 
 	/** The number a sign or the HUD shows, km/h. */

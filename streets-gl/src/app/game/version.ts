@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.13',
+		codename: 'The Driver Decides',
+		date: '2026-08-13',
+		emblem: '🚸🚄',
+		summary: 'The limit is a sign, not a leash — and the numbers are realistic now.',
+		changes: [
+			'The train is never braked for you any more. The limit is information: you choose whether to follow it, and ignoring it costs points on the run card.',
+			'Speed limits are realistic. They now account for canted (banked) track and are measured over a proper length of line instead of between neighbouring points — the typical limit on the Israel map went from 45 to 90 km/h, with fast running where the track is straight.',
+			'The limit is shown as a proper lineside sign — a white disc with a red ring — that turns amber as you approach it and red when you are over.',
+			'Taking a curve far too fast now costs more than drifting slightly over on a straight.',
+		],
+	},
+	{
 		version: '1.1.12',
 		codename: 'The Line Speed',
 		date: '2026-08-13',

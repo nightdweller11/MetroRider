@@ -117,16 +117,25 @@ export default class ScoringSystem extends System {
 		);
 		if (!result) return;
 
-		// Overspeeding costs points — 2 per second over the limit, capped so a
-		// bad run is still a run, never a wipe-out.
+		// Ignoring a limit costs points — that IS the enforcement, since nothing
+		// brakes the train for the driver. A little over is 2 points a second;
+		// more than 25% over is 5, because that is the difference between
+		// running late and taking a curve too fast. Capped, so a messy run is
+		// still a run.
 		const limits = this.systemManager.getSystem(SpeedLimitSystem);
-		const overspeedSeconds = Math.round(limits?.overspeedSeconds ?? 0);
-		const penalty = Math.min(Math.round(result.totalPoints * 0.4), overspeedSeconds * 2);
+		const overSeconds = Math.round(limits?.overspeedSeconds ?? 0);
+		const seriousSeconds = Math.round(limits?.seriousOverspeedSeconds ?? 0);
+		const raw = (overSeconds - seriousSeconds) * 2 + seriousSeconds * 5;
+		const penalty = Math.min(Math.round(result.totalPoints * 0.4), raw);
 		if (penalty > 0) {
 			result.totalPoints = Math.max(0, result.totalPoints - penalty);
-			result.summary += ` · ${overspeedSeconds}s over the limit (−${penalty})`;
+			const how = seriousSeconds > 0 ? `${overSeconds}s over the limit (${seriousSeconds}s well over)` : `${overSeconds}s over the limit`;
+			result.summary += ` · ${how} (−${penalty})`;
 		}
-		if (limits) limits.overspeedSeconds = 0;
+		if (limits) {
+			limits.overspeedSeconds = 0;
+			limits.seriousOverspeedSeconds = 0;
+		}
 
 		const badges = badgesForRun(result, new Date().getHours());
 

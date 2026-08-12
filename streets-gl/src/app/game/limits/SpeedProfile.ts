@@ -1,11 +1,19 @@
 /**
  * Speed limits along a line, derived from the track itself.
  *
- * Real limits come from curve radius: a train can hold about
- * `v = sqrt(a · r)` through a curve of radius r before the lateral
- * acceleration is more than passengers accept. With a comfort figure of
- * ~0.9 m/s² (a normal metro value) a 200 m curve is ~48 km/h and a 1 km curve
- * is ~108 km/h, which is why suburban track feels fast and city track does not.
+ * Real limits come from curve radius: `v = sqrt(a · r)`, where `a` is the
+ * lateral acceleration the track can absorb. On real railways that is NOT the
+ * bare comfort figure — the track is canted (banked) and a little cant
+ * deficiency is allowed on top, so with ~150 mm of cant plus ~100 mm deficiency
+ * on 1.5 m between rail centres the usable figure is about
+ * (0.25 / 1.5) · 9.81 ≈ 1.6 m/s². Using a flat-track comfort value instead
+ * posted 45 km/h through curves a real train takes at 90, which is what the
+ * first version did.
+ *
+ * Curvature is measured over a BASELINE of about 100 m rather than between
+ * adjacent spline points. Points are 20-60 m apart and carry position noise;
+ * three noisy neighbours fake a tight curve on track that is nearly straight,
+ * and the profile ends up slower than the railway it describes.
  *
  * The whole thing is pure: it takes the spline points a line was built from and
  * produces segments, so it can be unit-tested without an engine and reused by
@@ -34,15 +42,20 @@ export interface SpeedProfileOptions {
 	floor?: number;
 	/** Comfortable service braking used to back-propagate limits, m/s². */
 	braking?: number;
+	/** Curvature is fitted over this distance, meters. */
+	baseline?: number;
 }
 
 const DEFAULTS = {
-	comfort: 0.9,
+	/** Cant + cant deficiency, not flat-track comfort. See the note above. */
+	comfort: 1.6,
 	lineMax: 55,
 	step: 5 / 3.6,   // 5 km/h
-	minSegment: 120,
-	floor: 25 / 3.6, // 25 km/h
+	minSegment: 150,
+	floor: 40 / 3.6, // 40 km/h — below this a mainline would use a slack track
 	braking: 1.0,
+	/** Curvature is fitted over this distance, meters. */
+	baseline: 100,
 };
 
 export interface Point {
@@ -67,6 +80,31 @@ export function curveRadius(a: Point, b: Point, c: Point): number {
 	if (ab < 1e-6 || bc < 1e-6 || ca < 1e-6) return Infinity;
 
 	return (ab * bc * ca) / (2 * Math.abs(cross));
+}
+
+/**
+ * Index of the point roughly `offset` metres from `from` along the track.
+ * Clamps at the ends of a line and wraps on a loop.
+ */
+function findAtDistance(cumDist: number[], from: number, offset: number, isLoop: boolean): number {
+	const n = cumDist.length;
+	const total = cumDist[n - 1] - cumDist[0];
+	let target = cumDist[from] + offset;
+
+	if (isLoop && total > 0) {
+		target = ((target - cumDist[0]) % total + total) % total + cumDist[0];
+	}
+
+	let best = from;
+	let bestDelta = Infinity;
+	for (let i = 0; i < n; i++) {
+		const delta = Math.abs(cumDist[i] - target);
+		if (delta < bestDelta) {
+			bestDelta = delta;
+			best = i;
+		}
+	}
+	return best;
 }
 
 /** The comfortable speed through a curve of `radius` metres. */
@@ -97,16 +135,20 @@ export function buildSpeedProfile(
 		return [{startDist: 0, endDist: cumDist[n - 1] ?? 0, limit: o.lineMax}];
 	}
 
-	// A per-point limit first: the curve through this point and its neighbours.
+	// A per-point limit first, from the curve through this point and two
+	// neighbours a BASELINE apart. Adjacent points are too close together:
+	// their spacing is comparable to the position noise, so a straight line
+	// full of small wobbles reads as a series of tight curves.
+	const half = Math.max(1, o.baseline / 2);
 	const perPoint: number[] = new Array(n);
 	for (let i = 0; i < n; i++) {
-		const prev = i === 0 ? (isLoop ? n - 2 : 0) : i - 1;
-		const next = i === n - 1 ? (isLoop ? 1 : n - 1) : i + 1;
-		if (prev === i || next === i) {
+		const back = findAtDistance(cumDist, i, -half, isLoop);
+		const fwd = findAtDistance(cumDist, i, half, isLoop);
+		if (back === i || fwd === i || back === fwd) {
 			perPoint[i] = o.lineMax;
 			continue;
 		}
-		perPoint[i] = limitForRadius(curveRadius(points[prev], points[i], points[next]), o);
+		perPoint[i] = limitForRadius(curveRadius(points[back], points[i], points[fwd]), o);
 	}
 
 	// A limit has to appear far enough ahead that the train can actually reach
@@ -247,8 +289,14 @@ export type SpeedState = 'ok' | 'approaching' | 'over';
 export const OVERSPEED_TOLERANCE = 0.05;
 /** Within this fraction of the limit, the HUD warns you are close. */
 export const APPROACHING_FRACTION = 0.9;
-/** Past this, the train applies its own brakes. */
-export const PENALTY_BRAKE_OVER = 0.25;
+/**
+ * How far over the limit the game calls it a real overspeed, for the score.
+ *
+ * Nothing brakes the train: a speed limit is information the DRIVER acts on.
+ * An earlier version cut traction at this threshold, which quietly took the
+ * decision away from the player — the opposite of the point.
+ */
+export const SERIOUS_OVERSPEED = 0.25;
 
 export function speedState(speed: number, limit: number): SpeedState {
 	if (speed > limit * (1 + OVERSPEED_TOLERANCE)) return 'over';

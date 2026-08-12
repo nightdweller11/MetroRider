@@ -49,9 +49,30 @@ describe('limitForRadius', () => {
 		const gentle = limitForRadius(1200);
 
 		expect(tight).toBeLessThan(gentle);
-		expect(tight * 3.6).toBeGreaterThan(30);   // still drivable
-		expect(tight * 3.6).toBeLessThan(60);
-		expect(gentle * 3.6).toBeGreaterThan(95);
+		expect(tight * 3.6).toBeGreaterThan(40);
+		expect(gentle * 3.6).toBeGreaterThan(120);
+	});
+
+	/**
+	 * Sanity against the real world, which is what these numbers exist for.
+	 * Typical mainline practice with cant + a little cant deficiency:
+	 * 300 m ≈ 80 km/h, 600 m ≈ 110 km/h, 1000 m ≈ 145 km/h. A tolerance of
+	 * ±20% keeps the test about the physics, not about one railway's tables.
+	 */
+	it('matches real railway curve speeds within 20%', () => {
+		const cases: [number, number][] = [[300, 80], [600, 110], [1000, 145]];
+
+		for (const [radius, expectedKmh] of cases) {
+			const kmh = limitForRadius(radius, {lineMax: 200 / 3.6}) * 3.6;
+			expect(kmh).toBeGreaterThan(expectedKmh * 0.8);
+			expect(kmh).toBeLessThan(expectedKmh * 1.2);
+		}
+	});
+
+	it('does not post a crawl on gentle track', () => {
+		// A 45 km/h limit on 500 m radius track (what the first version did)
+		// is wrong by a factor of two.
+		expect(limitForRadius(500, {lineMax: 200 / 3.6}) * 3.6).toBeGreaterThan(85);
 	});
 
 	it('never exceeds the line maximum', () => {
