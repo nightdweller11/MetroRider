@@ -10,10 +10,36 @@ export interface SoundConfig {
 	stationChime: string;
 }
 
+/** How many figures may stand on one platform. */
+export type CrowdLevel = 'off' | 'few' | 'normal' | 'busy';
+/** How fast passengers pile up while you're away. */
+export type DemandLevel = 'calm' | 'normal' | 'rush';
+
+export const CROWD_CAPS: Record<CrowdLevel, number> = {
+	off: 0,
+	few: 8,
+	normal: 20,
+	busy: 40,
+};
+
+export const DEMAND_SCALES: Record<DemandLevel, number> = {
+	calm: 0.5,
+	normal: 1,
+	rush: 2,
+};
+
 export interface AssetConfig {
 	trainSlots: string[];
 	trackModel: string;
 	stationModel: string;
+	/**
+	 * Figure models used for platform crowds. A LIST, not one id: each waiting
+	 * passenger picks a variant deterministically, so a platform reads as a
+	 * mixed crowd. Empty = the built-in procedural figure.
+	 */
+	peopleModels: string[];
+	crowdLevel: CrowdLevel;
+	demandLevel: DemandLevel;
 	sounds: SoundConfig;
 }
 
@@ -31,6 +57,7 @@ export interface AssetCatalog {
 		trains: AssetEntry[];
 		tracks: AssetEntry[];
 		stations: AssetEntry[];
+		people: AssetEntry[];
 	};
 	sounds: {
 		horn: AssetEntry[];
@@ -46,6 +73,25 @@ export interface AssetCatalog {
 type ConfigChangeListener = (config: AssetConfig) => void;
 
 const LOCAL_STORAGE_KEY = 'metrorider-user-config';
+
+/**
+ * A config written by an older build (or hand-edited) can carry anything;
+ * every consumer of these three fields assumes a valid value, so normalize at
+ * the single point where config is merged rather than defending everywhere.
+ */
+function normalizePeopleModels(raw: unknown): string[] {
+	if (!Array.isArray(raw)) return ['procedural-default'];
+	const cleaned = raw.filter((v): v is string => typeof v === 'string' && v.length > 0);
+	return cleaned.length > 0 ? cleaned : ['procedural-default'];
+}
+
+function normalizeCrowdLevel(raw: unknown): CrowdLevel {
+	return raw === 'off' || raw === 'few' || raw === 'normal' || raw === 'busy' ? raw : 'normal';
+}
+
+function normalizeDemandLevel(raw: unknown): DemandLevel {
+	return raw === 'calm' || raw === 'normal' || raw === 'rush' ? raw : 'normal';
+}
 const DEFAULT_SLOTS: string[] = ['procedural-default', 'procedural-default', 'procedural-default'];
 
 function migrateToSlots(raw: any): string[] | null {
@@ -68,6 +114,9 @@ const DEFAULT_CONFIG: AssetConfig = {
 	trainSlots: [...DEFAULT_SLOTS],
 	trackModel: 'procedural-default',
 	stationModel: 'station-platform-basic',
+	peopleModels: ['procedural-default'],
+	crowdLevel: 'normal',
+	demandLevel: 'normal',
 	sounds: {
 		horn: 'procedural',
 		engine: 'procedural',
@@ -200,6 +249,19 @@ export default class AssetConfigSystem extends System {
 			trainSlots: userSlots || serverSlots,
 			trackModel: (this.userOverrides as any).trackModel || this.serverConfig.trackModel,
 			stationModel: (this.userOverrides as any).stationModel || this.serverConfig.stationModel,
+			peopleModels: normalizePeopleModels(
+				(this.userOverrides as any).peopleModels
+				?? (this.serverConfig as any).peopleModels
+				?? DEFAULT_CONFIG.peopleModels,
+			),
+			crowdLevel: normalizeCrowdLevel(
+				(this.userOverrides as any).crowdLevel
+				?? (this.serverConfig as any).crowdLevel,
+			),
+			demandLevel: normalizeDemandLevel(
+				(this.userOverrides as any).demandLevel
+				?? (this.serverConfig as any).demandLevel,
+			),
 			sounds: {
 				...this.serverConfig.sounds,
 				...((this.userOverrides as any).sounds || {}),
@@ -230,6 +292,15 @@ export default class AssetConfigSystem extends System {
 		}
 		if (partial.stationModel !== undefined) {
 			(this.userOverrides as any).stationModel = partial.stationModel;
+		}
+		if (partial.peopleModels !== undefined) {
+			(this.userOverrides as any).peopleModels = normalizePeopleModels(partial.peopleModels);
+		}
+		if (partial.crowdLevel !== undefined) {
+			(this.userOverrides as any).crowdLevel = normalizeCrowdLevel(partial.crowdLevel);
+		}
+		if (partial.demandLevel !== undefined) {
+			(this.userOverrides as any).demandLevel = normalizeDemandLevel(partial.demandLevel);
 		}
 		if (partial.sounds) {
 			if (!(this.userOverrides as any).sounds) {

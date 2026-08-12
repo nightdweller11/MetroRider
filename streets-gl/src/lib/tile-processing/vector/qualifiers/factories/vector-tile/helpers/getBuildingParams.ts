@@ -53,7 +53,10 @@ export default function getBuildingParams(
 
 	const roofParams = getRoofParams(tags);
 	const roofOrientation = getRoofOrientation(<string>tags['roofOrientation']);
-	const roofLevels = tags.roofLevels <= 0 ? 0.6 : <number>tags.roofLevels ?? (roofParams.type === 'flat' ? 0 : 1);
+	// tags values are string | number | boolean from the vector-tile decoder;
+	// every other numeric tag on this line is cast, this one was not (it only
+	// surfaced once the typecheck started working again).
+	const roofLevels = <number>tags.roofLevels <= 0 ? 0.6 : <number>tags.roofLevels ?? (roofParams.type === 'flat' ? 0 : 1);
 	const roofDirection = <number>tags.roofDirection ?? null;
 	const roofAngle = <number>tags.roofAngle ?? null;
 	let roofHeight = <number>tags.roofHeight ?? (roofLevels * roofLevelHeight);

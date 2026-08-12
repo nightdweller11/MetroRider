@@ -1,0 +1,455 @@
+import System from '~/app/System';
+import SceneSystem from '~/app/systems/SceneSystem';
+import TerrainSystem from '~/app/systems/TerrainSystem';
+import TrainSystem from '../TrainSystem';
+import TrainRenderingSystem from '../rendering/TrainRenderingSystem';
+import TrainMeshObject from '../rendering/TrainMeshObject';
+import AssetConfigSystem, {CROWD_CAPS} from '../assets/AssetConfigSystem';
+import PassengerSystem from './PassengerSystem';
+import {buildCrowdSlots, CrowdSlot, visibleCount} from './CrowdLayout';
+import {buildPersonGeometry, PERSON_HEIGHT, PersonBuffers} from './PersonGeometry';
+import MathUtils from '~/lib/math/MathUtils';
+import {bearing} from '../data/CoordinateSystem';
+import {getPositionAtDistance} from '../data/TrackBuilder';
+import {debugLog} from '../debug';
+
+const TRACK_HEIGHT_OFFSET = 0.05;
+/** Must match TrainRenderingSystem's platform offset so figures stand ON it. */
+const STATION_PLATFORM_OFFSET = 7;
+const PLATFORM_LENGTH = 40;
+const PLATFORM_WIDTH = 5;
+/**
+ * How far above the terrain a platform deck may plausibly sit. Station models
+ * come from the catalog and can be anything (a bus shelter, a covered
+ * terminus, a whole building), so the deck height is MEASURED from the placed
+ * mesh — but capped here, or one model with a roof would put the crowd on
+ * the roof.
+ */
+const MAX_DECK_HEIGHT = 1.6;
+/** How many differently-dressed people the built-in figure expands into. */
+const PROCEDURAL_TINTS = 6;
+
+/** Beyond this the crowd is a few pixels — not worth a buffer upload. */
+const CROWD_RADIUS = 700;
+/** Never build more than this many platforms' worth of figures. */
+const MAX_CROWD_STATIONS = 6;
+/** Seconds between rebuild sweeps — crowds change slowly, buffers are not free. */
+const REBUILD_INTERVAL = 0.4;
+
+interface StationCrowd {
+	stationIdx: number;
+	mesh: TrainMeshObject;
+	drawn: number;
+	variantKey: string;
+}
+
+/**
+ * Draws the waiting passengers as actual figures on the platform.
+ *
+ * One merged mesh per station (all its people baked into a single buffer), so
+ * a platform costs exactly one draw call and one upload when its count
+ * changes. Figures come from the asset catalog's `people` category; the
+ * built-in procedural person is used when nothing is configured, so this
+ * works on a fresh install with no uploaded models.
+ */
+export default class PassengerRenderingSystem extends System {
+	/** Read by GBufferPass — rendered through the same material as the train. */
+	public crowdMeshes: TrainMeshObject[] = [];
+
+	private crowds: Map<number, StationCrowd> = new Map();
+	/** Measured platform-deck height per station index (world Y). */
+	private deckHeights: Map<number, number> = new Map();
+	private slotCache: Map<string, CrowdSlot[]> = new Map();
+	/** Figure variant buffers (a procedural entry expands into several). */
+	private variants: PersonBuffers[] = [];
+	/** For each variant, which configured model id produced it. */
+	private variantSources: number[] = [];
+	private variantKey = '';
+	private loadingVariants = false;
+	private rebuildTimer = 0;
+	private lastLineKey = '';
+
+	public postInit(): void {
+		// Nothing to set up: crowds are built lazily on the first update that
+		// has a line, a passenger model and a camera position to work from.
+	}
+
+	public update(deltaTime: number): void {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const passengerSystem = this.systemManager.getSystem(PassengerSystem);
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		if (!trainSystem || !passengerSystem || !sceneSystem) return;
+
+		const ls = trainSystem.getCurrentLine();
+		if (!ls) return;
+
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const config = assetConfig?.getConfig();
+		const cap = CROWD_CAPS[config?.crowdLevel ?? 'normal'] ?? 20;
+
+		const lineKey = `${trainSystem.mapName}::${ls.parsed.id}`;
+		if (lineKey !== this.lastLineKey) {
+			this.lastLineKey = lineKey;
+			this.clearAll();
+		}
+
+		this.ensureVariants();
+
+		if (cap === 0) {
+			if (this.crowds.size > 0) this.clearAll();
+			return;
+		}
+
+		this.rebuildTimer += deltaTime;
+		if (this.rebuildTimer < REBUILD_INTERVAL) return;
+		this.rebuildTimer = 0;
+
+		this.syncCrowds(trainSystem, passengerSystem, ls, cap);
+	}
+
+	/** Load (or rebuild) the figure variant buffers from the configured models. */
+	private ensureVariants(): void {
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const config = assetConfig?.getConfig();
+		const ids = config?.peopleModels?.length ? config.peopleModels : ['procedural-default'];
+		const key = ids.join('|');
+
+		if (key === this.variantKey || this.loadingVariants) return;
+
+		this.variantKey = key;
+		// Procedural figures are available immediately; a GLB replaces its slot
+		// when it finishes loading, so crowds are never blocked on the network.
+		//
+		// A procedural entry expands into several differently-dressed people:
+		// one buffer would put an identical clone in every slot, which is what
+		// a platform full of one maroon coat looked like.
+		this.variants = [];
+		this.variantSources = [];
+		ids.forEach((id, index) => {
+			if (id === 'procedural-default' || id === 'procedural') {
+				for (let t = 0; t < PROCEDURAL_TINTS; t++) {
+					this.variants.push(buildPersonGeometry(t * 5 + 1));
+					this.variantSources.push(index);
+				}
+			} else {
+				// Placeholder until the GLB arrives — never an empty crowd.
+				this.variants.push(buildPersonGeometry(index * 7 + 3));
+				this.variantSources.push(index);
+			}
+		});
+		this.clearAll();
+
+		const catalog = assetConfig?.getCatalog();
+		if (!catalog) return;
+
+		const glbIds = ids
+			.map((id, index) => ({id, index}))
+			.filter(e => e.id !== 'procedural-default' && e.id !== 'procedural');
+
+		if (glbIds.length === 0) return;
+
+		this.loadingVariants = true;
+		const trainRendering = this.systemManager.getSystem(TrainRenderingSystem);
+
+		void Promise.all(glbIds.map(async ({id, index}) => {
+			const entry = catalog.models.people?.find(e => e.id === id);
+			if (!entry?.path || !trainRendering) return;
+
+			try {
+				const url = assetConfig!.getAssetUrl(entry.path);
+				const response = await fetch(url);
+				if (!response.ok) throw new Error(`HTTP ${response.status}`);
+				const buffer = await response.arrayBuffer();
+				const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+				const parsed = await trainRendering.parseGLBWithTextures(buffer, baseUrl, true);
+				if (!parsed) throw new Error('parse returned null');
+
+				const normalized = this.normalizeFigure(parsed);
+				for (let v = 0; v < this.variants.length; v++) {
+					if (this.variantSources[v] === index) this.variants[v] = normalized;
+				}
+				debugLog(`[Passengers] Figure model "${id}" loaded (${parsed.position.length / 3} verts)`);
+			} catch (err) {
+				console.warn(`[Passengers] Figure model "${id}" unavailable, using the built-in person:`, err);
+			}
+		})).finally(() => {
+			this.loadingVariants = false;
+			this.clearAll(); // force a rebuild with the real figures
+		});
+	}
+
+	/**
+	 * Re-origin and scale an arbitrary GLB so it stands on y=0 at human height,
+	 * whatever units the artist modelled in.
+	 */
+	private normalizeFigure(buffers: {position: Float32Array; normal: Float32Array; color: Float32Array; indices: Uint32Array}): PersonBuffers {
+		const count = buffers.position.length / 3;
+		let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
+		for (let i = 0; i < count; i++) {
+			const x = buffers.position[i * 3], y = buffers.position[i * 3 + 1], z = buffers.position[i * 3 + 2];
+			if (x < minX) minX = x; if (x > maxX) maxX = x;
+			if (y < minY) minY = y; if (y > maxY) maxY = y;
+			if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+		}
+
+		const height = maxY - minY;
+		const scale = height > 0.001 ? PERSON_HEIGHT / height : 1;
+		const cx = (minX + maxX) / 2;
+		const cz = (minZ + maxZ) / 2;
+
+		const position = new Float32Array(buffers.position.length);
+		for (let i = 0; i < count; i++) {
+			position[i * 3] = (buffers.position[i * 3] - cx) * scale;
+			position[i * 3 + 1] = (buffers.position[i * 3 + 1] - minY) * scale;
+			position[i * 3 + 2] = (buffers.position[i * 3 + 2] - cz) * scale;
+		}
+
+		return {
+			position,
+			normal: buffers.normal,
+			color: buffers.color,
+			indices: buffers.indices,
+		};
+	}
+
+	private syncCrowds(
+		trainSystem: TrainSystem,
+		passengerSystem: PassengerSystem,
+		ls: {parsed: {stations: {id: string}[]; color: string}; track: any; realStationDists: number[]},
+		cap: number,
+	): void {
+		const train = trainSystem.trainPosition;
+		if (!train) return;
+
+		const stations = ls.parsed.stations;
+
+		// Rank stations by distance to the train and keep the nearest few.
+		const ranked: {idx: number; dist: number}[] = [];
+		for (let i = 0; i < stations.length; i++) {
+			const pos = this.stationWorldPos(ls, i);
+			if (!pos) continue;
+			const d = Math.hypot(pos.x - train.x, pos.z - train.y);
+			if (d <= CROWD_RADIUS) ranked.push({idx: i, dist: d});
+		}
+		ranked.sort((a, b) => a.dist - b.dist);
+		const keep = new Set(ranked.slice(0, MAX_CROWD_STATIONS).map(r => r.idx));
+
+		for (const [idx, crowd] of this.crowds) {
+			if (!keep.has(idx)) {
+				this.removeCrowd(crowd);
+				this.crowds.delete(idx);
+			}
+		}
+
+		for (const idx of keep) {
+			const want = visibleCount(passengerSystem.waitingAt(idx), cap);
+			const existing = this.crowds.get(idx);
+			if (existing && existing.drawn === want && existing.variantKey === this.variantKey) continue;
+
+			if (existing) {
+				this.removeCrowd(existing);
+				this.crowds.delete(idx);
+			}
+			if (want <= 0) continue;
+
+			const crowd = this.buildCrowd(ls, idx, want);
+			if (crowd) this.crowds.set(idx, crowd);
+		}
+
+		this.crowdMeshes = [...this.crowds.values()].map(c => c.mesh);
+	}
+
+	private stationWorldPos(
+		ls: {track: any; realStationDists: number[]},
+		stationIdx: number,
+	): {x: number; z: number; heading: number} | null {
+		const dist = ls.realStationDists[stationIdx];
+		if (dist === undefined) return null;
+
+		const p = getPositionAtDistance(ls.track.spline.points, ls.track.cumDist, dist);
+		const n = getPositionAtDistance(ls.track.spline.points, ls.track.cumDist, dist + 5);
+		const heading = Math.PI / 2 - MathUtils.toRad(bearing(p.lat, p.lng, n.lat, n.lng));
+
+		const centre = MathUtils.degrees2meters(p.lat, p.lng);
+		return {
+			x: centre.x + Math.cos(heading) * STATION_PLATFORM_OFFSET,
+			z: centre.y - Math.sin(heading) * STATION_PLATFORM_OFFSET,
+			heading,
+		};
+	}
+
+	private buildCrowd(
+		ls: {parsed: {stations: {id: string}[]}; track: any; realStationDists: number[]},
+		stationIdx: number,
+		count: number,
+	): StationCrowd | null {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		if (!sceneSystem || this.variants.length === 0) return null;
+
+		const place = this.stationWorldPos(ls, stationIdx);
+		if (!place) return null;
+
+		const stationId = ls.parsed.stations[stationIdx]?.id ?? `idx-${stationIdx}`;
+		const slots = this.getSlots(stationId, count);
+		const baseHeight = this.deckHeight(stationIdx, place.x, place.z);
+
+		const cosH = Math.cos(place.heading);
+		const sinH = Math.sin(place.heading);
+
+		let totalVerts = 0;
+		let totalIndices = 0;
+		for (let i = 0; i < count; i++) {
+			const v = this.variants[slots[i].variant % this.variants.length];
+			totalVerts += v.position.length / 3;
+			totalIndices += v.indices.length;
+		}
+
+		const position = new Float32Array(totalVerts * 3);
+		const normal = new Float32Array(totalVerts * 3);
+		const color = new Float32Array(totalVerts * 3);
+		const indices = new Uint32Array(totalIndices);
+
+		let vOff = 0;
+		let iOff = 0;
+
+		for (let i = 0; i < count; i++) {
+			const slot = slots[i];
+			const v = this.variants[slot.variant % this.variants.length];
+			const vCount = v.position.length / 3;
+
+			// Figure-local yaw. The model faces +z; the track is at -z in
+			// platform-local space, so people turn to watch for the train with
+			// only a little scatter — a platform of people facing random
+			// directions reads as a bus queue that lost its bus.
+			const fy = Math.PI + slot.yaw;
+			const cosY = Math.cos(fy), sinY = Math.sin(fy);
+
+			for (let k = 0; k < vCount; k++) {
+				const px = v.position[k * 3] * slot.scale;
+				const py = v.position[k * 3 + 1] * slot.scale;
+				const pz = v.position[k * 3 + 2] * slot.scale;
+
+				// yaw about Y, then platform-local offset, then station heading
+				const yx = px * cosY + pz * sinY;
+				const yz = -px * sinY + pz * cosY;
+
+				const lx = yx + slot.x;
+				const lz = yz + slot.z;
+
+				const wx = place.x + lx * sinH + lz * cosH;
+				const wz = place.z + lx * cosH - lz * sinH;
+
+				const o = (vOff + k) * 3;
+				position[o] = wx;
+				position[o + 1] = baseHeight + py;
+				position[o + 2] = wz;
+
+				const nx = v.normal[k * 3] ?? 0;
+				const ny = v.normal[k * 3 + 1] ?? 1;
+				const nz = v.normal[k * 3 + 2] ?? 0;
+				const nyx = nx * cosY + nz * sinY;
+				const nyz = -nx * sinY + nz * cosY;
+				normal[o] = nyx * sinH + nyz * cosH;
+				normal[o + 1] = ny;
+				normal[o + 2] = nyx * cosH - nyz * sinH;
+
+				color[o] = v.color[k * 3] ?? 0.6;
+				color[o + 1] = v.color[k * 3 + 1] ?? 0.6;
+				color[o + 2] = v.color[k * 3 + 2] ?? 0.6;
+			}
+
+			for (let k = 0; k < v.indices.length; k++) {
+				indices[iOff + k] = v.indices[k] + vOff;
+			}
+
+			vOff += vCount;
+			iOff += v.indices.length;
+		}
+
+		const mesh = new TrainMeshObject({position, normal, color, indices});
+		sceneSystem.objects.wrapper.add(mesh);
+
+		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey};
+	}
+
+	private getSlots(stationId: string, atLeast: number): CrowdSlot[] {
+		const cached = this.slotCache.get(stationId);
+		if (cached && cached.length >= atLeast) return cached;
+
+		const slots = buildCrowdSlots(stationId, {
+			count: Math.max(atLeast, 40),
+			length: PLATFORM_LENGTH,
+			width: PLATFORM_WIDTH,
+			variants: Math.max(1, this.variants.length),
+		});
+		this.slotCache.set(stationId, slots);
+		return slots;
+	}
+
+	/**
+	 * Where the feet go.
+	 *
+	 * Whatever station model the player picked has already been placed at this
+	 * spot, so the deck height is read off that mesh (highest vertex within the
+	 * platform footprint, capped at MAX_DECK_HEIGHT above the terrain) instead
+	 * of assuming a fixed platform height. With no station mesh — or a model
+	 * that is all roof — the figures stand on the ground, which is at least
+	 * never floating.
+	 */
+	private deckHeight(stationIdx: number, x: number, z: number): number {
+		const cached = this.deckHeights.get(stationIdx);
+		if (cached !== undefined) return cached;
+
+		const ground = this.terrainHeight(x, z) + TRACK_HEIGHT_OFFSET;
+		let deck = ground;
+
+		const trainRendering = this.systemManager.getSystem(TrainRenderingSystem);
+		const meshes = trainRendering?.stationMeshes ?? [];
+		const ceiling = ground + MAX_DECK_HEIGHT;
+		const radiusSq = 14 * 14;
+
+		// stationMeshes is NOT guaranteed to be index-aligned with the station
+		// list (models fail to load, procedural placement skips stations), so
+		// the deck is found by proximity: the highest vertex of ANY station
+		// mesh that sits over this platform and within a plausible deck height.
+		for (const mesh of meshes) {
+			const pos = mesh?.buffers?.position;
+			if (!pos) continue;
+			for (let i = 0; i < pos.length; i += 3) {
+				const y = pos[i + 1];
+				if (y <= deck || y > ceiling) continue;
+				const dx = pos[i] - x;
+				const dz = pos[i + 2] - z;
+				if (dx * dx + dz * dz > radiusSq) continue;
+				deck = y;
+			}
+		}
+
+		this.deckHeights.set(stationIdx, deck);
+		return deck;
+	}
+
+	private terrainHeight(x: number, z: number): number {
+		const terrainSystem = this.systemManager.getSystem(TerrainSystem);
+		const provider = terrainSystem?.terrainHeightProvider;
+		if (!provider) return 0;
+		const h = provider.getHeightGlobalInterpolated(x, z, true);
+		return h === null ? 0 : h;
+	}
+
+	private removeCrowd(crowd: StationCrowd): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+		sceneSystem?.objects.wrapper.remove(crowd.mesh);
+	}
+
+	private clearAll(): void {
+		for (const crowd of this.crowds.values()) this.removeCrowd(crowd);
+		this.crowds.clear();
+		this.crowdMeshes = [];
+		this.slotCache.clear();
+		// Deck heights are measured off the station meshes, which are rebuilt
+		// whenever the line or the station model changes.
+		this.deckHeights.clear();
+		this.rebuildTimer = REBUILD_INTERVAL; // rebuild on the next tick
+	}
+}

@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.6',
+		codename: 'The Rush Hour Update',
+		date: '2026-08-12',
+		emblem: '🧍‍♂️🚉',
+		summary: 'Your platforms have people on them — and they get on your train.',
+		changes: [
+			'Passengers are real. Every station gathers people while you are away, and the number is now driven by the actual neighbourhood the station sits in: the busy centre of a city fills its platform far faster than a rural halt.',
+			'You can SEE them: figures stand on the platform waiting for you. Open the doors and the platform empties as they board — the count in the HUD and the crowd on the platform are the same people.',
+			'PAX in the HUD finally works: it shows who is on board, and while the doors are open it also shows how many are still waiting.',
+			'New Passengers settings: how crowded platforms get (Off / Few / Normal / Busy), how busy the line is (Calm / Normal / Rush hour), and which figure models the crowd is made of.',
+			'Passenger figures are part of the model library like trains and stations — upload your own, or import them from Sketchfab into the new "People" category. Any human model works; it is scaled to human height automatically.',
+		],
+	},
+	{
 		version: '1.1.5',
 		codename: 'The Crystal Update',
 		date: '2026-08-12',

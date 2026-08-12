@@ -42,6 +42,7 @@ import PerspectiveCamera from "~/lib/core/PerspectiveCamera";
 import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContainer";
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import TrainSystem from "~/app/game/TrainSystem";
+import PassengerRenderingSystem from "~/app/game/passengers/PassengerRenderingSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 
 export default class GBufferPass extends Pass<{
@@ -603,10 +604,14 @@ export default class GBufferPass extends Pass<{
 		if (!trainRenderingSystem) return;
 
 		const camera = this.manager.sceneSystem.objects.camera;
+		const passengerRendering = this.manager.systemManager.getSystem(PassengerRenderingSystem);
 		const allMeshes = [
 			...trainRenderingSystem.carMeshes,
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
+			// Platform crowds: static world geometry like the stations, so they
+			// take the same material and the same zero motion flag.
+			...(passengerRendering?.crowdMeshes ?? []),
 		].filter(Boolean);
 
 		for (const m of allMeshes) {

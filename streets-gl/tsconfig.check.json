@@ -1,0 +1,5 @@
+{
+	"extends": "./tsconfig.json",
+	"comment": "Typecheck-only config. Excludes src/__tests__: several suites are plain scripts (no imports/exports) that share a global scope and collide, and ts-jest already type-checks them when they run.",
+	"exclude": ["src/__tests__"]
+}

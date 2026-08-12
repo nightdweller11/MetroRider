@@ -25,3 +25,6 @@ Thumbs.db
 
 # Cursor
 .cursor/
+
+# Runtime OSM tile cache written by the standalone server (../server)
+/server/data/

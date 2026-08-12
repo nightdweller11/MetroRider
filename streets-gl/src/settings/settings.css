@@ -2093,3 +2093,76 @@ body {
 .tc-picker-section {
 	margin-top: 24px;
 }
+
+
+/* ---- Passengers panel ---- */
+
+.passenger-controls {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 24px;
+	margin: 18px 0 26px;
+}
+
+.passenger-control-group {
+	min-width: 260px;
+}
+
+.passenger-control-label {
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	opacity: 0.7;
+	margin-bottom: 8px;
+}
+
+.passenger-control-hint {
+	font-size: 12px;
+	opacity: 0.6;
+	margin-top: 7px;
+}
+
+.segmented {
+	display: inline-flex;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.segmented-item {
+	background: rgba(255, 255, 255, 0.04);
+	color: inherit;
+	border: none;
+	border-right: 1px solid rgba(255, 255, 255, 0.1);
+	padding: 8px 16px;
+	font-size: 13px;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+
+.segmented-item:last-child {
+	border-right: none;
+}
+
+.segmented-item:hover {
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.segmented-item.active {
+	background: #2f6df6;
+	color: #fff;
+	font-weight: 600;
+}
+
+.passenger-section-title {
+	font-size: 15px;
+	margin: 6px 0 12px;
+}
+
+.passenger-section-note {
+	font-size: 12px;
+	font-weight: 400;
+	opacity: 0.6;
+	margin-left: 8px;
+}

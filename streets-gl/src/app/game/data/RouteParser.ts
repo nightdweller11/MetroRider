@@ -6,6 +6,10 @@ export interface StationData {
   lat: number;
   lng: number;
   isWaypoint?: boolean;
+  /** Passenger demand weight 0..1 (from the map's density/grade), 0.5 default. */
+  density?: number;
+  /** Transfer station (served by more than one line). */
+  isInterchange?: boolean;
 }
 
 export interface LineData {
@@ -17,7 +21,14 @@ export interface LineData {
 
 export interface MetroMapData {
   name: string;
-  stations: Record<string, { name: string; lat: number; lng: number; isWaypoint?: boolean }>;
+  stations: Record<string, {
+    name: string;
+    lat: number;
+    lng: number;
+    isWaypoint?: boolean;
+    density?: number;
+    isInterchange?: boolean;
+  }>;
   lines: LineData[];
 }
 
@@ -47,7 +58,15 @@ export function parseMetroMap(data: MetroMapData): ParsedLine[] {
       if (!st) {
         throw new Error(`Station "${id}" referenced by line "${line.name}" not found`);
       }
-      return { id, name: st.name, lat: st.lat, lng: st.lng, isWaypoint: st.isWaypoint };
+      return {
+        id,
+        name: st.name,
+        lat: st.lat,
+        lng: st.lng,
+        isWaypoint: st.isWaypoint,
+        density: st.density,
+        isInterchange: st.isInterchange,
+      };
     });
 
     let isLoop = false;

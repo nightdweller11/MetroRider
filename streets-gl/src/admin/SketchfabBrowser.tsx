@@ -34,7 +34,7 @@ interface ImportResult {
 	error?: string;
 }
 
-type ModelCategory = 'stations' | 'trains' | 'tracks';
+type ModelCategory = 'stations' | 'trains' | 'tracks' | 'people';
 
 const SUGGESTED_SEARCHES: {label: string; query: string}[] = [
 	{label: 'Train Stations', query: 'train station platform low poly'},
@@ -381,6 +381,7 @@ const SketchfabBrowser: React.FC = () => {
 									<select value={importCategory} onChange={e => setImportCategory(e.target.value as ModelCategory)}>
 										<option value="stations">Stations</option>
 										<option value="trains">Trains</option>
+										<option value="people">People (passengers)</option>
 										<option value="tracks">Tracks</option>
 									</select>
 								</label>

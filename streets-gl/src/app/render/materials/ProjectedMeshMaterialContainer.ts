@@ -4,7 +4,6 @@ import MaterialContainer from "./MaterialContainer";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
 import ResourceLoader from "../../world/ResourceLoader";
 import AbstractRenderer from "~/lib/renderer/abstract-renderer/AbstractRenderer";
-import Config from "../../Config";
 
 export default class ProjectedMeshMaterialContainer extends MaterialContainer {
 	public constructor(renderer: AbstractRenderer, isExtruded: boolean) {

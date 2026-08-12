@@ -4,7 +4,6 @@ import MaterialContainer from "./MaterialContainer";
 import {RendererTypes} from "~/lib/renderer/RendererTypes";
 import AbstractRenderer from "~/lib/renderer/abstract-renderer/AbstractRenderer";
 import ResourceLoader from "../../world/ResourceLoader";
-import Config from "../../Config";
 
 export default class TerrainMaterialContainer extends MaterialContainer {
 	public constructor(renderer: AbstractRenderer) {

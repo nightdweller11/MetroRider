@@ -14,15 +14,71 @@ function extractMapId(url: string): string {
   return match[1];
 }
 
+interface MDDensityInfo {
+  population?: number;
+  employment?: number;
+  density?: number;
+  builtV?: number;
+}
+
+interface MDStationInfo {
+  densityScore?: number;
+  numNearbyBuildings?: number;
+  buildingArea?: number;
+}
+
 interface MDStation {
   id: string;
   lat: number;
   lng: number;
   name?: string;
   isWaypoint?: boolean;
+  /** 'below' | 'at' | 'above' — TRACK ELEVATION, not demand. */
   grade?: string;
-  info?: Record<string, unknown>;
-  densityInfo?: Record<string, unknown>;
+  info?: MDStationInfo;
+  densityInfo?: MDDensityInfo;
+}
+
+/**
+ * Turn MetroDreamin's catchment numbers into a 0..1 passenger-demand weight.
+ *
+ * MetroDreamin computes, per station, the population and employment inside a
+ * walking catchment (`densityInfo`) plus a `densityScore` from nearby building
+ * footprints. Both matter: population is where trips START, employment is
+ * where they END, so a business district with few residents still deserves a
+ * busy platform.
+ *
+ * Measured on the Israel-railways map (86 real stations): population
+ * 0 / 1,007 / 3,738 / 10,598 / 63,082 (min/p25/median/p75/max), employment
+ * 0 / 42 / 1,056 / 7,044 / 46,726. That is three orders of magnitude, so the
+ * combined weight is compressed logarithmically and normalised so the MEDIAN
+ * station lands near 0.5 — the same value used when a map carries no data at
+ * all, which keeps hand-drawn maps and real ones comparable.
+ *
+ * (`grade` is deliberately unused here: it is 'below'/'at'/'above', the track
+ * elevation. The original plan called it a demand field; the live payload says
+ * otherwise.)
+ */
+const DEMAND_LOG_FLOOR = 2.3;   // log10(1 + ~200 people) — a rural halt
+const DEMAND_LOG_RANGE = 2.7;   // up to log10(1 + ~100k) — a city centre
+
+export function stationDensityFromMD(st: {info?: MDStationInfo; densityInfo?: MDDensityInfo}): number {
+  const di = st.densityInfo;
+  const pop = typeof di?.population === 'number' && di.population >= 0 ? di.population : null;
+  const emp = typeof di?.employment === 'number' && di.employment >= 0 ? di.employment : null;
+
+  if (pop !== null || emp !== null) {
+    const weight = (pop ?? 0) + 0.75 * (emp ?? 0);
+    const norm = (Math.log10(1 + weight) - DEMAND_LOG_FLOOR) / DEMAND_LOG_RANGE;
+    return Math.max(0.05, Math.min(1, norm));
+  }
+
+  const score = st.info?.densityScore;
+  if (typeof score === 'number' && score >= 0) {
+    return Math.max(0.05, Math.min(1, score / 100));
+  }
+
+  return 0.5;
 }
 
 interface MDLine {
@@ -102,7 +158,25 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
     throw new Error('MetroDreamin map has no lines');
   }
 
-  const stations: Record<string, { name: string; lat: number; lng: number; isWaypoint?: boolean }> = {};
+  const interchangeStationIds = new Set<string>();
+  const interchanges = fullSystem.map.interchanges;
+  if (interchanges) {
+    for (const entry of Object.values(interchanges)) {
+      const ids = (entry as {stationIds?: string[]})?.stationIds;
+      if (Array.isArray(ids)) {
+        for (const id of ids) interchangeStationIds.add(id);
+      }
+    }
+  }
+
+  const stations: Record<string, {
+    name: string;
+    lat: number;
+    lng: number;
+    isWaypoint?: boolean;
+    density?: number;
+    isInterchange?: boolean;
+  }> = {};
   let waypointCount = 0;
   let realStationCount = 0;
 
@@ -118,7 +192,14 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
       : (st.name || `Station ${id}`);
 
     if (!isWaypoint) realStationCount++;
-    stations[id] = { name, lat: st.lat, lng: st.lng, isWaypoint: isWaypoint || undefined };
+    stations[id] = {
+      name,
+      lat: st.lat,
+      lng: st.lng,
+      isWaypoint: isWaypoint || undefined,
+      density: isWaypoint ? undefined : stationDensityFromMD(st),
+      isInterchange: interchangeStationIds.has(id) || undefined,
+    };
   }
 
   const lines: LineData[] = [];
@@ -153,7 +234,11 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
     throw new Error('No valid lines found in MetroDreamin map');
   }
 
-  console.log(`[MetroDreaminImporter] Converted: ${realStationCount} real stations, ${waypointCount} waypoints, ${lines.length} lines`);
+  const interchangeCount = Object.values(stations).filter(s => s.isInterchange).length;
+  console.log(
+    `[MetroDreaminImporter] Converted: ${realStationCount} real stations, ` +
+    `${waypointCount} waypoints, ${lines.length} lines, ${interchangeCount} interchange stops`
+  );
 
   return {
     name: systemDocData.title || 'MetroDreamin Map',

@@ -4,6 +4,7 @@ import ModelPreview from './ModelPreview';
 import SketchfabPanel from './SketchfabPanel';
 import FreesoundPanel from './FreesoundPanel';
 import TrainComposer from './TrainComposer';
+import PassengerPanel, {CrowdLevel, DemandLevel} from './PassengerPanel';
 import {releaseLabel} from '~/app/game/version';
 
 interface AssetEntry {
@@ -15,7 +16,7 @@ interface AssetEntry {
 }
 
 interface AssetCatalog {
-	models: {trains: AssetEntry[]; tracks: AssetEntry[]; stations: AssetEntry[]};
+	models: {trains: AssetEntry[]; tracks: AssetEntry[]; stations: AssetEntry[]; people?: AssetEntry[]};
 	sounds: Record<string, AssetEntry[]>;
 }
 
@@ -23,15 +24,19 @@ interface AssetConfig {
 	trainSlots: string[];
 	trackModel: string;
 	stationModel: string;
+	peopleModels: string[];
+	crowdLevel: CrowdLevel;
+	demandLevel: DemandLevel;
 	sounds: Record<string, string>;
 }
 
-type CategoryId = 'trains' | 'tracks' | 'stations' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime' | 'sketchfab' | 'freesound';
+type CategoryId = 'trains' | 'tracks' | 'stations' | 'people' | 'horn' | 'engine' | 'rail' | 'wind' | 'brake' | 'doorChime' | 'stationChime' | 'sketchfab' | 'freesound';
 
 const CATEGORIES: {id: CategoryId; label: string; group: 'models' | 'sounds'; description: string}[] = [
 	{id: 'trains', label: 'Train Models', group: 'models', description: 'Choose the 3D model for your train. Procedural models are generated in real-time.'},
 	{id: 'tracks', label: 'Track Models', group: 'models', description: 'Select how the railway tracks appear along your route.'},
 	{id: 'stations', label: 'Station Models', group: 'models', description: 'Pick the station platform style for stops along the line.'},
+	{id: 'people', label: 'Passengers', group: 'models', description: 'The people waiting on your platforms — how many, how busy the line is, and which figures they use.'},
 	{id: 'horn', label: 'Horn', group: 'sounds', description: 'The horn sound played when you press the horn button.'},
 	{id: 'engine', label: 'Engine', group: 'sounds', description: 'Continuous engine / motor hum while the train is moving.'},
 	{id: 'rail', label: 'Rail Clatter', group: 'sounds', description: 'The rhythmic clatter of wheels on rail joints.'},
@@ -92,7 +97,7 @@ function setSelectedId(config: AssetConfig, category: CategoryId, id: string): A
 function getItems(catalog: AssetCatalog, category: CategoryId): AssetEntry[] {
 	const cat = CATEGORIES.find(c => c.id === category);
 	if (!cat) return [];
-	if (cat.group === 'models') return catalog.models[category as 'trains' | 'tracks' | 'stations'] ?? [];
+	if (cat.group === 'models') return catalog.models[category as 'trains' | 'tracks' | 'stations' | 'people'] ?? [];
 	return catalog.sounds[category] ?? [];
 }
 
@@ -180,6 +185,11 @@ export default function SettingsPage(): React.ReactElement {
 				trainSlots: userSlots || serverSlots,
 				trackModel: userOverrides.trackModel ?? serverCfg.trackModel ?? 'procedural-default',
 				stationModel: userOverrides.stationModel ?? serverCfg.stationModel ?? 'procedural-default',
+				peopleModels: (userOverrides.peopleModels?.length ? userOverrides.peopleModels
+					: serverCfg.peopleModels?.length ? serverCfg.peopleModels
+					: ['procedural-default']),
+				crowdLevel: userOverrides.crowdLevel ?? serverCfg.crowdLevel ?? 'normal',
+				demandLevel: userOverrides.demandLevel ?? serverCfg.demandLevel ?? 'normal',
 				sounds: {...(serverCfg.sounds ?? {}), ...(userOverrides.sounds ?? {})},
 			};
 			setConfig(merged);
@@ -287,6 +297,22 @@ export default function SettingsPage(): React.ReactElement {
 			});
 		} else {
 			flash('Train composition updated');
+		}
+	}, [config, adminMode, adminToken, tokenVerified, flash]);
+
+	/** One writer for every passenger setting, so persistence stays identical. */
+	const updatePassengerConfig = useCallback((patch: Partial<AssetConfig>, message: string): void => {
+		if (!config) return;
+		const next: AssetConfig = {...config, sounds: {...config.sounds}, ...patch};
+		setConfig(next);
+		saveUserConfig(next);
+
+		if (adminMode && adminToken && tokenVerified) {
+			pushConfigToServer(next, adminToken).then(ok => {
+				flash(ok ? `${message} — set as default for all users` : 'Saved locally, but server update failed');
+			});
+		} else {
+			flash(message);
 		}
 	}, [config, adminMode, adminToken, tokenVerified, flash]);
 
@@ -599,6 +625,19 @@ export default function SettingsPage(): React.ReactElement {
 							onImportComplete={refreshCatalog}
 						/>
 					) : (
+						activeCategory === 'people' && config ? (
+							<PassengerPanel
+								people={allItems}
+								selected={config.peopleModels}
+								crowdLevel={config.crowdLevel}
+								demandLevel={config.demandLevel}
+								onSelectedChange={ids => updatePassengerConfig({peopleModels: ids}, 'Passenger figures updated')}
+								onCrowdLevelChange={level => updatePassengerConfig({crowdLevel: level}, `Platform crowds: ${level}`)}
+								onDemandLevelChange={level => updatePassengerConfig({demandLevel: level}, `Line business: ${level}`)}
+								onDelete={handleDelete}
+								adminMode={adminMode}
+							/>
+						) : (
 						<>
 							<h2>{activeCat?.label ?? ''}</h2>
 							<p className="category-description">{activeCat?.description ?? ''}</p>
@@ -741,6 +780,7 @@ export default function SettingsPage(): React.ReactElement {
 								</div>
 							)}
 						</>
+						)
 					)}
 				</main>
 			</div>

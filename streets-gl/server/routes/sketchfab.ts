@@ -97,6 +97,7 @@ export function createSketchfabRouter(dataDir: string): Router {
 	const stationsDir = path.join(dataDir, 'assets', 'models', 'stations');
 	const trainsDir = path.join(dataDir, 'assets', 'models', 'trains');
 	const tracksDir = path.join(dataDir, 'assets', 'models', 'tracks');
+	const peopleDir = path.join(dataDir, 'assets', 'models', 'people');
 
 	router.get('/status', (_req: Request, res: Response) => {
 		const token = getApiToken();
@@ -228,6 +229,7 @@ export function createSketchfabRouter(dataDir: string): Router {
 			stations: stationsDir,
 			trains: trainsDir,
 			tracks: tracksDir,
+			people: peopleDir,
 		};
 
 		const destDir = validCategories[category];

@@ -350,7 +350,8 @@ export default class TrainRenderingSystem extends System {
 		}
 	}
 
-	private async parseGLBWithTextures(buffer: ArrayBuffer, baseUrl: string, skipScaling = false): Promise<GeometryBuffers | null> {
+	/** Public so PassengerRenderingSystem can load figure models through the same path. */
+	public async parseGLBWithTextures(buffer: ArrayBuffer, baseUrl: string, skipScaling = false): Promise<GeometryBuffers | null> {
 		const view = new DataView(buffer);
 		if (view.getUint32(0, true) !== 0x46546C67) {
 			console.error('[TrainRenderingSystem] Not a valid GLB file');

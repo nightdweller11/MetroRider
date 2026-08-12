@@ -1,4 +1,5 @@
 import System from '../System';
+import PassengerSystem from '~/app/game/passengers/PassengerSystem';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem from './GameCameraSystem';
 import AudioSystem from './audio/AudioSystem';
@@ -1580,7 +1581,17 @@ export default class GameUISystem extends System {
 		}
 
 		if (this.paxEl) {
-			this.paxEl.textContent = '0';
+			const passengers = this.systemManager.getSystem(PassengerSystem);
+			if (passengers) {
+				const snap = passengers.getSnapshot();
+				// While the doors are open, show who is still on the platform
+				// next to who is aboard — that is the number the driver acts on.
+				this.paxEl.textContent = snap.boardingActive
+					? `${snap.aboard} · ${snap.waitingHere} waiting`
+					: `${snap.aboard}`;
+			} else {
+				this.paxEl.textContent = '0';
+			}
 		}
 
 		if (this.stationEl && trainSystem.stationState) {

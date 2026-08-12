@@ -13,7 +13,11 @@ interface TrainMeshBuffers {
 
 export default class TrainMeshObject extends RenderableObject3D {
 	public mesh: AbstractMesh = null;
-	private buffers: TrainMeshBuffers;
+	/**
+	 * Public so other systems can measure the placed geometry — the passenger
+	 * crowds read the station mesh to find the platform deck height.
+	 */
+	public buffers: TrainMeshBuffers;
 	private needsRebuild: boolean = false;
 	private dynamic: boolean = false;
 

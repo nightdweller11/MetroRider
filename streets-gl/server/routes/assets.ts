@@ -52,6 +52,14 @@ const PROCEDURAL_MODEL: DiscoveredAsset = {
 	source: 'Built-in',
 };
 
+const PROCEDURAL_PEOPLE: DiscoveredAsset = {
+	id: 'procedural-default',
+	name: 'Default (Procedural person)',
+	path: '',
+	type: 'procedural',
+	source: 'Built-in',
+};
+
 const PROCEDURAL_SOUND: DiscoveredAsset = {
 	id: 'procedural',
 	name: 'Procedural (Synthesized)',
@@ -94,6 +102,9 @@ export function createAssetsRouter(dataDir: string): Router {
 				trains: [PROCEDURAL_MODEL, ...discoverModels('trains')],
 				tracks: [PROCEDURAL_MODEL, ...discoverModels('tracks')],
 				stations: [PROCEDURAL_MODEL, ...discoverModels('stations')],
+				// Passenger figures. The procedural entry is a code-built person,
+				// so crowds work on a fresh install with no uploaded assets.
+				people: [PROCEDURAL_PEOPLE, ...discoverModels('people')],
 			},
 			sounds: {
 				horn: [PROCEDURAL_SOUND, ...discoverSounds('horns')],
@@ -177,6 +188,7 @@ export function createAssetsRouter(dataDir: string): Router {
 			{base: 'models', sub: 'trains'},
 			{base: 'models', sub: 'tracks'},
 			{base: 'models', sub: 'stations'},
+			{base: 'models', sub: 'people'},
 			{base: 'sounds', sub: 'horns'},
 			{base: 'sounds', sub: 'engine'},
 			{base: 'sounds', sub: 'rail'},
@@ -252,7 +264,7 @@ export function createAssetsRouter(dataDir: string): Router {
 		const assetId = req.params.id;
 
 		const searchDirs = [
-			{base: 'models', subs: ['trains', 'tracks', 'stations']},
+			{base: 'models', subs: ['trains', 'tracks', 'stations', 'people']},
 			{base: 'sounds', subs: ['horns', 'engine', 'rail', 'wind', 'brake', 'doorChime', 'stationChime']},
 		];
 

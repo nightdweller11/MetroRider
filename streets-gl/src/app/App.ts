@@ -19,6 +19,8 @@ import SlippyMapSystem from "~/app/systems/SlippyMapSystem";
 import TrainSystem from "~/app/game/TrainSystem";
 import GameCameraSystem from "~/app/game/GameCameraSystem";
 import GameUISystem from "~/app/game/GameUISystem";
+import PassengerSystem from '~/app/game/passengers/PassengerSystem';
+import PassengerRenderingSystem from '~/app/game/passengers/PassengerRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
@@ -64,6 +66,8 @@ class App {
 				AssetConfigSystem,
 				TrainSystem,
 				TrainRenderingSystem,
+				PassengerSystem,
+				PassengerRenderingSystem,
 				AudioSystem,
 				GameCameraSystem,
 				RenderSystem,
