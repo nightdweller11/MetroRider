@@ -40,3 +40,14 @@ The following models were generated programmatically for MetroRider:
 
 All `train-*` prefixed models (electric, diesel, tram variants) are from the
 [Kenney Train Kit](https://kenney.nl/assets/train-kit) under CC0 Public Domain.
+
+## Passenger figures
+
+- **Low poly ordinary man in shirt and pants** — by [Agor_2012](https://sketchfab.com/Agor_2012),
+  [CC Attribution](https://creativecommons.org/licenses/by/4.0/), via
+  [Sketchfab](https://sketchfab.com/3d-models/low-poly-ordinary-man-in-shirt-and-pants-f658b9e1bb324f2ab1e9f00d7d6b4065).
+  Used as the default platform crowd figure; rigged, and its `idle` clip is
+  baked into poses at load (the renderer has no GPU skinning).
+
+The built-in procedural figure (`procedural-default`) is generated in code and
+needs no attribution.

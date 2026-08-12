@@ -8,6 +8,7 @@ import AssetConfigSystem, {CROWD_CAPS} from '../assets/AssetConfigSystem';
 import PassengerSystem from './PassengerSystem';
 import {buildCrowdSlots, CrowdSlot, visibleCount} from './CrowdLayout';
 import {buildPersonGeometry, PERSON_HEIGHT, PersonBuffers} from './PersonGeometry';
+import {loadCharacter} from './CharacterLoader';
 import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '../data/CoordinateSystem';
 import {getPositionAtDistance} from '../data/TrackBuilder';
@@ -28,6 +29,10 @@ const PLATFORM_WIDTH = 5;
 const MAX_DECK_HEIGHT = 1.6;
 /** How many differently-dressed people the built-in figure expands into. */
 const PROCEDURAL_TINTS = 6;
+/** Frames baked out of a character's waiting animation. */
+const POSE_COUNT = 8;
+/** Playback rate of those frames. */
+const POSE_FPS = 8;
 
 /** Beyond this the crowd is a few pixels — not worth a buffer upload. */
 const CROWD_RADIUS = 700;
@@ -70,6 +75,8 @@ export default class PassengerRenderingSystem extends System {
 	private variants: PersonBuffers[] = [];
 	/** For each variant, which configured model id produced it. */
 	private variantSources: number[] = [];
+	/** Baked animation cycles, by configured-model index. */
+	private poseCycles: Map<number, PersonBuffers[]> = new Map();
 	private variantKey = '';
 	private loadingVariants = false;
 	private rebuildTimer = 0;
@@ -133,6 +140,7 @@ export default class PassengerRenderingSystem extends System {
 		// a platform full of one maroon coat looked like.
 		this.variants = [];
 		this.variantSources = [];
+		this.poseCycles.clear();
 		ids.forEach((id, index) => {
 			if (id === 'procedural-default' || id === 'procedural') {
 				for (let t = 0; t < PROCEDURAL_TINTS; t++) {
@@ -170,6 +178,29 @@ export default class PassengerRenderingSystem extends System {
 				const response = await fetch(url);
 				if (!response.ok) throw new Error(`HTTP ${response.status}`);
 				const buffer = await response.arrayBuffer();
+
+				// A rigged character has to be POSED before it can be drawn:
+				// this renderer bakes vertices and has no skinning, so a rig
+				// would otherwise stand on the platform in its T-pose. The
+				// character loader skins it on the CPU into a cycle of poses,
+				// which the crowd then plays back per person.
+				const character = await loadCharacter(buffer, POSE_COUNT);
+				if (character) {
+					const posed = character.poses.map(pose => ({
+						position: pose.position,
+						normal: pose.normal,
+						color: character.color,
+						indices: character.indices,
+					}));
+					for (let v = 0; v < this.variants.length; v++) {
+						if (this.variantSources[v] === index) this.variants[v] = posed[0];
+					}
+					this.poseCycles.set(index, posed);
+					debugLog(`[Passengers] Character "${id}" loaded: ${posed.length} poses, ${posed[0].position.length / 3} verts`);
+					return;
+				}
+
+				// Not rigged — a statue is still better than nothing.
 				const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
 				const parsed = await trainRendering.parseGLBWithTextures(buffer, baseUrl, true);
 				if (!parsed) throw new Error('parse returned null');
@@ -178,7 +209,7 @@ export default class PassengerRenderingSystem extends System {
 				for (let v = 0; v < this.variants.length; v++) {
 					if (this.variantSources[v] === index) this.variants[v] = normalized;
 				}
-				debugLog(`[Passengers] Figure model "${id}" loaded (${parsed.position.length / 3} verts)`);
+				debugLog(`[Passengers] Figure model "${id}" loaded static (${parsed.position.length / 3} verts)`);
 			} catch (err) {
 				console.warn(`[Passengers] Figure model "${id}" unavailable, using the built-in person:`, err);
 			}
@@ -318,7 +349,7 @@ export default class PassengerRenderingSystem extends System {
 		let totalVerts = 0;
 		let totalIndices = 0;
 		for (let i = 0; i < count; i++) {
-			const v = this.variants[slots[i].variant % this.variants.length];
+			const v = this.figureFor(slots[i].variant, animTime, slots[i].x + slots[i].z);
 			totalVerts += v.position.length / 3;
 			totalIndices += v.indices.length;
 		}
@@ -333,7 +364,7 @@ export default class PassengerRenderingSystem extends System {
 
 		for (let i = 0; i < count; i++) {
 			const slot = slots[i];
-			const v = this.variants[slot.variant % this.variants.length];
+			const v = this.figureFor(slot.variant, animTime, slot.x + slot.z);
 			const vCount = v.position.length / 3;
 
 			// Idle life: everyone shifts weight and turns a little, out of phase
@@ -397,6 +428,22 @@ export default class PassengerRenderingSystem extends System {
 		sceneSystem.objects.wrapper.add(mesh);
 
 		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey, animTime};
+	}
+
+	/**
+	 * The buffers to draw this person with right now: a pose from the baked
+	 * cycle when the model is animated, otherwise the static figure. The phase
+	 * offset keeps neighbours out of step — a platform of people moving in
+	 * perfect unison looks worse than a platform of statues.
+	 */
+	private figureFor(variantIndex: number, animTime: number, phaseOffset: number): PersonBuffers {
+		const index = variantIndex % Math.max(1, this.variants.length);
+		const cycle = this.poseCycles.get(this.variantSources[index] ?? -1);
+		if (cycle && cycle.length > 0) {
+			const step = Math.floor((animTime * POSE_FPS + phaseOffset * 3.1)) % cycle.length;
+			return cycle[(step + cycle.length) % cycle.length];
+		}
+		return this.variants[index];
 	}
 
 	private getSlots(stationId: string, atLeast: number): CrowdSlot[] {

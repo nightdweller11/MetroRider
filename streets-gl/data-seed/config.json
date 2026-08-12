@@ -15,5 +15,10 @@
     "brake": "procedural",
     "doorChime": "toronto-subway-door-chime",
     "stationChime": "russian-railways-station-announcement-chime"
-  }
+  },
+  "peopleModels": [
+    "low-poly-ordinary-man-in-shirt-and-pants"
+  ],
+  "crowdLevel": "normal",
+  "demandLevel": "normal"
 }

@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.10',
+		codename: 'The Commuters',
+		date: '2026-08-13',
+		emblem: '🚶‍♂️🚉',
+		summary: 'Real people are waiting for your train.',
+		changes: [
+			'The passengers on the platform are now proper 3D characters from a model library — a person in a shirt and trousers, not a stack of boxes.',
+			'They are animated: the character is rigged, and the game plays its waiting animation, with each person out of step with their neighbours so a platform looks alive.',
+			'Any rigged human model you import into the People category gets the same treatment automatically — its animation is used, and it is scaled to human height.',
+			'The built-in simple figure stays as a fallback, so crowds still work with no downloaded models at all.',
+		],
+	},
+	{
 		version: '1.1.9',
 		codename: 'The Steady Platform',
 		date: '2026-08-13',
