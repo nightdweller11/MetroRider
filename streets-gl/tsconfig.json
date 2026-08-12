@@ -16,6 +16,7 @@
 		"strictFunctionTypes": true,
 		"resolveJsonModule": true,
 		"allowSyntheticDefaultImports": true,
+		"esModuleInterop": true,
 		"noImplicitOverride": true,
 		"noImplicitReturns": true,
 		"skipLibCheck": true,

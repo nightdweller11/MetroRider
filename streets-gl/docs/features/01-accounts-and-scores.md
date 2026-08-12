@@ -1,6 +1,8 @@
 # F1 — Player Profiles & Score Persistence
 
-> STATUS: PLANNED · Foundation feature — most scoring features depend on it.
+> STATUS: SHIPPED (server + client, v1.1.7) — except the Railway volume, which
+> is a deploy-time action and is now flagged in `docs/DEPLOYMENT.md`.
+> Foundation feature — most scoring features depend on it.
 > Scope guard: NO XP, NO ranks, NO progression gating. Scores and records only.
 
 ## 1. Product definition
@@ -84,3 +86,38 @@ Volume + DB + endpoints: 1–2 days. Client UI: 1–2 days.
   (proves the volume actually persists), then delete the test profile.
 - **Data safety check**: deploy pipeline docs updated — with the volume,
   `sync-live-data.mjs` becomes optional (keep as backup tooling).
+
+
+---
+
+## 4. What actually shipped (2026-08-12)
+
+- `server/store/ProfileStore.ts` — SQLite (`better-sqlite3`) at
+  `DATA_DIR/metrorider.db`: profiles, sessions, scores (personal-best flag +
+  rolling 20-run history per key), profile_data KV. scrypt-hashed 4-digit PINs
+  with a 5-attempt / 5-minute lockout; identical error text for "no such
+  profile" and "wrong PIN" so the endpoint cannot enumerate players.
+- `server/routes/profiles.ts` — create / login / logout / me / data KV /
+  score submit / public board, 30 req/min/IP limiter.
+- `src/app/game/profiles/ProfileClient.ts` — token in localStorage, **offline
+  score queue** (a run earned signed-out or offline is flushed on the next
+  sign-in), setup backup/restore.
+- `src/app/game/profiles/ProfileUI.ts` — "Who's driving?" row on the start
+  card, one-tap chips for drivers already on this server, sign-in / new-driver
+  modal, HUD name chip.
+- **27 unit tests** (`src/__tests__/profileStore.test.ts`) over a temp DB,
+  including "survives a process restart", which is the exact property the
+  Railway volume has to provide.
+
+### Validation
+
+HTTP smoke test (create → score → board → list) and a Playwright walkthrough:
+modal renders with existing drivers, correct PIN signs in (HUD chip appears,
+token persisted), wrong PIN says "Wrong name or PIN", no console errors.
+Screenshots: `docs/_artifacts/profiles-2026-08-12/`.
+
+### Not done
+
+- The Railway volume itself (deploy action, needs the operator).
+- Score boards in the UI — they arrive with F2, which is what produces
+  `run-score` values in the first place.

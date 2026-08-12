@@ -30,6 +30,16 @@ Note: a separate project token for the `sing.events` Railway project lives in
 
 ## ⚠️ Data persistence — read before deploying
 
+> **This got MORE important in v1.1.7.** `DATA_DIR` now also holds
+> `metrorider.db` — the SQLite file with every player profile and every saved
+> best run. Without a volume, a deploy deletes the players' accounts, not just
+> uploaded assets. Attach a Railway volume at `/data` and set `DATA_DIR=/data`
+> BEFORE inviting anyone to create a profile on the live site.
+>
+> Verification after attaching: create a profile, post a score, redeploy, and
+> check the profile still signs in (`POST /api/profiles/login`) and the board
+> still lists the run (`GET /api/profiles/scores?...`).
+
 **The Railway service has NO persistent volume.** `DATA_DIR` lives on the container's
 ephemeral disk, so **everything uploaded or saved on the live site since the last
 deploy is wiped by the next deploy or restart**: Sketchfab/Freesound imports, direct

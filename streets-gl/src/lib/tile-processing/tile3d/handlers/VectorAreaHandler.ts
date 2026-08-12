@@ -24,7 +24,7 @@ import {
 } from "~/lib/tile-processing/tile3d/utils";
 import {ExtrudedTextures, ProjectedTextures} from "~/lib/tile-processing/tile3d/textures";
 import VectorNode from "~/lib/tile-processing/vector/features/VectorNode";
-import * as Simplify from "simplify-js";
+import Simplify from "simplify-js";
 import {SurfaceBuilderOrientation} from "~/lib/tile-processing/tile3d/builders/SurfaceBuilder";
 
 const TileSize = 611.4962158203125;

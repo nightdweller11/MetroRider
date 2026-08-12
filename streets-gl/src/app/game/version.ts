@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.1.7',
+		codename: 'The Roster Update',
+		date: '2026-08-12',
+		emblem: '🧑‍✈️🎫',
+		summary: 'Say who is driving — and your best runs follow you.',
+		changes: [
+			'Driver profiles: pick a name and a 4-digit PIN on the start screen. No email, no passwords to remember, nothing else asked.',
+			'Your best runs, badges and train setup are saved to your profile on the server, so they survive a new device or a browser that clears its storage.',
+			'Everyone on the server appears as a one-tap button, so kids do not have to spell their own name to get their scores back.',
+			'Playing as a guest still works exactly as before — a profile only decides whether your results are kept.',
+			'Anything you earn while signed out or offline is saved locally and uploaded the next time you sign in.',
+		],
+	},
+	{
 		version: '1.1.6',
 		codename: 'The Rush Hour Update',
 		date: '2026-08-12',

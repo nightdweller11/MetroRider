@@ -11,6 +11,8 @@ import {createConfigRouter} from './routes/config';
 import {createAssetsRouter} from './routes/assets';
 import {createSketchfabRouter} from './routes/sketchfab';
 import {createFreesoundRouter} from './routes/freesound';
+import {createProfilesRouter} from './routes/profiles';
+import {ProfileStore} from './store/ProfileStore';
 import {getAdminToken} from './middleware/adminAuth';
 
 const app = express();
@@ -48,6 +50,11 @@ app.get('/api/health', (_req, res) => {
 	res.json({status: 'ok', timestamp: Date.now()});
 });
 
+// Profiles live in DATA_DIR alongside assets, so a Railway volume mounted
+// there persists players + scores across deploys (see docs/DEPLOYMENT.md).
+const profileStore = new ProfileStore(DATA_DIR);
+
+app.use('/api/profiles', createProfilesRouter(profileStore));
 app.use('/api/config', createConfigRouter(DATA_DIR));
 app.use('/api/assets', createAssetsRouter(DATA_DIR));
 app.use('/api/sketchfab', createSketchfabRouter(DATA_DIR));

@@ -1,5 +1,6 @@
 import System from '../System';
 import PassengerSystem from '~/app/game/passengers/PassengerSystem';
+import ProfileUI from '~/app/game/profiles/ProfileUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem from './GameCameraSystem';
 import AudioSystem from './audio/AudioSystem';
@@ -43,6 +44,7 @@ export default class GameUISystem extends System {
 	private infoPanelEl: HTMLElement | null = null;
 	private timeEl: HTMLElement | null = null;
 	private paxEl: HTMLElement | null = null;
+	private readonly profileUI: ProfileUI = new ProfileUI();
 	private etaEl: HTMLElement | null = null;
 	private lastMinute: number = -1;
 
@@ -83,6 +85,7 @@ export default class GameUISystem extends System {
 			this.createMobileTopStrip();
 		}
 		this.createStartButton(trainSystem);
+		this.container.appendChild(this.profileUI.createHudChip());
 		this.createDebugOverlay();
 
 		// Announce a new release once per version (tracked in localStorage).
@@ -1157,6 +1160,9 @@ export default class GameUISystem extends System {
 		startBtn.appendChild(title);
 		startBtn.appendChild(versionBadge);
 		startBtn.appendChild(subtitle);
+		// "Who's driving?" — sits above the map controls so a player picks their
+		// profile before a run, but never blocks playing as a guest.
+		startBtn.appendChild(this.profileUI.createStartRow());
 		startBtn.appendChild(playBtn);
 		startBtn.appendChild(statusEl);
 		startBtn.appendChild(urlInput);
