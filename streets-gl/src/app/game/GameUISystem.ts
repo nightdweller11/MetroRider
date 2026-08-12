@@ -12,6 +12,7 @@ import {
 	RELEASE_CODENAME,
 	RELEASE_SUMMARY,
 	RELEASE_HIGHLIGHTS,
+	RELEASE_EMBLEM,
 	CHANGELOG,
 	isReleaseAnnouncementUnseen,
 	markReleaseAnnouncementSeen,
@@ -75,6 +76,7 @@ export default class GameUISystem extends System {
 		this.createControls(trainSystem);
 		this.createLineSelector(trainSystem);
 		this.createSettingsButton();
+		this.createMetroMapButton(trainSystem);
 		this.createMapSelectionButton(trainSystem);
 		if (this.mobile) {
 			this.createMobileTopStrip();
@@ -120,7 +122,7 @@ export default class GameUISystem extends System {
 		`;
 
 		const emblem = document.createElement('div');
-		emblem.textContent = '🔄🚇';
+		emblem.textContent = RELEASE_EMBLEM;
 		emblem.style.cssText = 'font-size: 40px; margin-bottom: 8px;';
 
 		const heading = document.createElement('div');
@@ -916,6 +918,8 @@ export default class GameUISystem extends System {
 				const {fetchMetroDreaminMap} = await import('./data/MetroDreaminImporter');
 				const mapData = await fetchMetroDreaminMap(url);
 				trainSystem.loadMap(mapData);
+				this.currentMapUrl = url;
+				this.closeMetroMapOverlay();
 				this.saveMapEntry(url, mapData.name);
 				statusEl.textContent = `Loaded: ${mapData.name}`;
 
@@ -1193,6 +1197,259 @@ export default class GameUISystem extends System {
 		}
 	}
 
+	private currentMapUrl: string | null = null;
+	private metroMapOverlayEl: HTMLElement | null = null;
+	private metroMapMarkerTimer: number = 0;
+
+	private createMetroMapButton(trainSystem: TrainSystem): void {
+		const m = this.mobile;
+		const size = m ? 32 : 42;
+		const btn = document.createElement('div');
+		btn.id = 'game-metro-map-btn';
+		if (m) {
+			btn.style.cssText = `
+				width: ${size}px; height: ${size}px; border-radius: 8px;
+				background: rgba(0,0,0,0.65); color: #fff;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 14px; cursor: pointer; user-select: none;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+				transition: background 0.15s;
+			`;
+		} else {
+			btn.style.cssText = `
+				position: absolute; top: 20px; right: 176px;
+				width: ${size}px; height: ${size}px; border-radius: 10px;
+				background: rgba(0,0,0,0.65); color: #fff;
+				display: flex; align-items: center; justify-content: center;
+				font-size: 18px; cursor: pointer; user-select: none;
+				backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+				pointer-events: auto; transition: background 0.15s;
+			`;
+		}
+		btn.textContent = '🗺';
+		btn.title = 'Metro map — see the original MetroDreamin map';
+		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
+		btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.65)'; });
+		btn.addEventListener('click', () => {
+			this.toggleMetroMapOverlay(trainSystem);
+		});
+
+		if (m) {
+			this.mobileTopBtns.push(btn);
+		} else {
+			this.container.appendChild(btn);
+		}
+	}
+
+	private closeMetroMapOverlay(): void {
+		if (this.metroMapMarkerTimer) {
+			window.clearInterval(this.metroMapMarkerTimer);
+			this.metroMapMarkerTimer = 0;
+		}
+		if (this.metroMapOverlayEl) {
+			this.metroMapOverlayEl.remove();
+			this.metroMapOverlayEl = null;
+		}
+	}
+
+	/**
+	 * Schematic view of the loaded MetroDreamin map: every line in its color,
+	 * station dots, the current line's station names, and a live marker for
+	 * the train. Links out to the original metrodreamin.com page when the map
+	 * was loaded from a URL.
+	 */
+	private toggleMetroMapOverlay(trainSystem: TrainSystem): void {
+		if (this.metroMapOverlayEl) {
+			this.closeMetroMapOverlay();
+			return;
+		}
+		if (trainSystem.lines.length === 0) return;
+
+		const SVG_NS = 'http://www.w3.org/2000/svg';
+		const W = 1000;
+		const H = 700;
+		const PAD = 50;
+
+		// Project lat/lng → local x/y (equirectangular with latitude correction).
+		let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+		let midLatSum = 0, midLatCount = 0;
+		for (const ls of trainSystem.lines) {
+			for (const pt of ls.parsed.allPoints) {
+				midLatSum += pt.lat;
+				midLatCount++;
+			}
+		}
+		const cosLat = Math.cos((midLatSum / Math.max(1, midLatCount)) * Math.PI / 180);
+		const proj = (lat: number, lng: number): [number, number] => [lng * cosLat, -lat];
+		for (const ls of trainSystem.lines) {
+			for (const pt of ls.parsed.allPoints) {
+				const [x, y] = proj(pt.lat, pt.lng);
+				if (x < minX) minX = x; if (x > maxX) maxX = x;
+				if (y < minY) minY = y; if (y > maxY) maxY = y;
+			}
+		}
+		const spanX = Math.max(1e-9, maxX - minX);
+		const spanY = Math.max(1e-9, maxY - minY);
+		const scale = Math.min((W - 2 * PAD) / spanX, (H - 2 * PAD) / spanY);
+		const offX = (W - spanX * scale) / 2;
+		const offY = (H - spanY * scale) / 2;
+		const toSvg = (lat: number, lng: number): [number, number] => {
+			const [x, y] = proj(lat, lng);
+			return [(x - minX) * scale + offX, (y - minY) * scale + offY];
+		};
+
+		const overlay = document.createElement('div');
+		overlay.id = 'metro-map-overlay';
+		overlay.style.cssText = `
+			position: fixed; inset: 0; z-index: 99998;
+			background: rgba(8, 10, 18, 0.94); backdrop-filter: blur(6px);
+			display: flex; flex-direction: column;
+			pointer-events: auto; font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+		`;
+
+		const header = document.createElement('div');
+		header.style.cssText = `
+			display: flex; align-items: center; gap: 12px;
+			padding: 14px 18px; flex-shrink: 0;
+			border-bottom: 1px solid rgba(255,255,255,0.1);
+		`;
+
+		const mapTitle = document.createElement('div');
+		mapTitle.style.cssText = 'color: #fff; font-size: 15px; font-weight: 700; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+		mapTitle.textContent = `🗺 ${trainSystem.mapName || 'Metro Map'}`;
+
+		header.appendChild(mapTitle);
+
+		if (this.currentMapUrl) {
+			const link = document.createElement('a');
+			link.href = this.currentMapUrl;
+			link.target = '_blank';
+			link.rel = 'noopener';
+			link.textContent = 'Open on MetroDreamin ↗';
+			link.style.cssText = `
+				color: #7fb2ff; font-size: 12px; font-weight: 600;
+				text-decoration: none; border: 1px solid rgba(127,178,255,0.35);
+				border-radius: 999px; padding: 5px 12px; flex-shrink: 0;
+			`;
+			header.appendChild(link);
+		}
+
+		const closeBtn = document.createElement('div');
+		closeBtn.id = 'metro-map-close';
+		closeBtn.textContent = '✕';
+		closeBtn.style.cssText = `
+			width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+			display: flex; align-items: center; justify-content: center;
+			color: #aaa; cursor: pointer; font-size: 15px;
+			border: 1px solid rgba(255,255,255,0.15);
+		`;
+		closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = '#fff'; });
+		closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = '#aaa'; });
+		closeBtn.addEventListener('click', () => this.closeMetroMapOverlay());
+		header.appendChild(closeBtn);
+
+		const svgWrap = document.createElement('div');
+		svgWrap.style.cssText = 'flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 8px;';
+
+		const svg = document.createElementNS(SVG_NS, 'svg');
+		svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+		svg.setAttribute('style', 'width: 100%; height: 100%; max-width: 1400px;');
+
+		const currentIdx = trainSystem.currentLineIdx;
+
+		// Lines (current line drawn last, on top).
+		const order = trainSystem.lines.map((_, i) => i).sort((a, b) => (a === currentIdx ? 1 : 0) - (b === currentIdx ? 1 : 0));
+		for (const i of order) {
+			const ls = trainSystem.lines[i];
+			const poly = document.createElementNS(SVG_NS, 'polyline');
+			const pts = ls.parsed.allPoints.map(p => toSvg(p.lat, p.lng).join(',')).join(' ');
+			poly.setAttribute('points', pts);
+			poly.setAttribute('fill', 'none');
+			poly.setAttribute('stroke', ls.parsed.color || '#888');
+			poly.setAttribute('stroke-width', i === currentIdx ? '7' : '4.5');
+			poly.setAttribute('stroke-opacity', i === currentIdx ? '1' : '0.55');
+			poly.setAttribute('stroke-linejoin', 'round');
+			poly.setAttribute('stroke-linecap', 'round');
+			svg.appendChild(poly);
+		}
+
+		// Stations (dots for every line; names for the current line).
+		for (let i = 0; i < trainSystem.lines.length; i++) {
+			const ls = trainSystem.lines[i];
+			const isCurrent = i === currentIdx;
+			for (const st of ls.parsed.stations) {
+				const [x, y] = toSvg(st.lat, st.lng);
+				const dot = document.createElementNS(SVG_NS, 'circle');
+				dot.setAttribute('cx', String(x));
+				dot.setAttribute('cy', String(y));
+				dot.setAttribute('r', isCurrent ? '5.5' : '3.5');
+				dot.setAttribute('fill', '#fff');
+				dot.setAttribute('stroke', ls.parsed.color || '#888');
+				dot.setAttribute('stroke-width', isCurrent ? '3' : '2');
+				dot.setAttribute('opacity', isCurrent ? '1' : '0.6');
+				svg.appendChild(dot);
+
+				if (isCurrent) {
+					const label = document.createElementNS(SVG_NS, 'text');
+					label.setAttribute('x', String(x + 9));
+					label.setAttribute('y', String(y - 7));
+					label.setAttribute('fill', '#ddd');
+					label.setAttribute('font-size', '11');
+					label.setAttribute('font-weight', '600');
+					label.textContent = st.name;
+					svg.appendChild(label);
+				}
+			}
+		}
+
+		// Live train marker (pulse + dot), updated while the overlay is open.
+		const pulse = document.createElementNS(SVG_NS, 'circle');
+		pulse.setAttribute('r', '13');
+		pulse.setAttribute('fill', 'none');
+		pulse.setAttribute('stroke', '#ffd747');
+		pulse.setAttribute('stroke-width', '2.5');
+		const pulseAnim = document.createElementNS(SVG_NS, 'animate');
+		pulseAnim.setAttribute('attributeName', 'r');
+		pulseAnim.setAttribute('values', '8;16;8');
+		pulseAnim.setAttribute('dur', '1.6s');
+		pulseAnim.setAttribute('repeatCount', 'indefinite');
+		pulse.appendChild(pulseAnim);
+		const marker = document.createElementNS(SVG_NS, 'circle');
+		marker.setAttribute('r', '7');
+		marker.setAttribute('fill', '#ffd747');
+		marker.setAttribute('stroke', '#000');
+		marker.setAttribute('stroke-width', '2');
+		svg.appendChild(pulse);
+		svg.appendChild(marker);
+
+		const updateMarker = (): void => {
+			const tp = trainSystem.trainPosition;
+			if (!tp) {
+				marker.setAttribute('opacity', '0');
+				pulse.setAttribute('opacity', '0');
+				return;
+			}
+			const [x, y] = toSvg(tp.lat, tp.lon);
+			marker.setAttribute('opacity', '1');
+			pulse.setAttribute('opacity', '1');
+			marker.setAttribute('cx', String(x));
+			marker.setAttribute('cy', String(y));
+			pulse.setAttribute('cx', String(x));
+			pulse.setAttribute('cy', String(y));
+		};
+		updateMarker();
+		this.metroMapMarkerTimer = window.setInterval(updateMarker, 300);
+
+		svgWrap.appendChild(svg);
+		overlay.appendChild(header);
+		overlay.appendChild(svgWrap);
+		overlay.addEventListener('click', (ev) => {
+			if (ev.target === overlay) this.closeMetroMapOverlay();
+		});
+		document.body.appendChild(overlay);
+		this.metroMapOverlayEl = overlay;
+	}
+
 	private createMapSelectionButton(trainSystem: TrainSystem): void {
 		const m = this.mobile;
 		const size = m ? 32 : 42;
@@ -1218,8 +1475,8 @@ export default class GameUISystem extends System {
 				pointer-events: auto; transition: background 0.15s;
 			`;
 		}
-		btn.textContent = '\uD83D\uDDFA';
-		btn.title = 'Change Map';
+		btn.textContent = '\uD83C\uDFE0';
+		btn.title = 'Menu \u2014 change map or line';
 		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
 		btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.65)'; });
 		btn.addEventListener('click', () => {

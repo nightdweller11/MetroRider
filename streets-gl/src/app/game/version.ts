@@ -14,9 +14,34 @@ export interface ReleaseEntry {
 	date: string;
 	summary: string;
 	changes: string[];
+	/** Emoji shown at the top of the release splash. */
+	emblem?: string;
 }
 
 export const CHANGELOG: ReleaseEntry[] = [
+	{
+		version: '1.1.2',
+		codename: 'The Navigator Update',
+		date: '2026-08-12',
+		emblem: '🗺️🚇',
+		summary: 'Find your way around: the original MetroDreamin map, right inside the game.',
+		changes: [
+			'New map button (🗺) shows the original MetroDreamin map — every line in its color, all stations, and your train moving on it live.',
+			'A link from the map view opens the real MetroDreamin page.',
+			'The menu button is now a house (🏠) — tap it to change map or line.',
+		],
+	},
+	{
+		version: '1.1.1',
+		codename: 'The Conductor’s Log',
+		date: '2026-08-12',
+		emblem: '📜🚆',
+		summary: 'Know your train, know your history.',
+		changes: [
+			'The train customization button is now a train (🚆) instead of a gear.',
+			'Full changelog inside the release splash — every version, codename and its changes.',
+		],
+	},
 	{
 		version: '1.1.0',
 		codename: 'The Circle Update',
@@ -71,6 +96,7 @@ export const RELEASE_VERSION = CURRENT.version;
 export const RELEASE_CODENAME = CURRENT.codename;
 export const RELEASE_SUMMARY = CURRENT.summary;
 export const RELEASE_HIGHLIGHTS: string[] = CURRENT.changes;
+export const RELEASE_EMBLEM = CURRENT.emblem ?? '🚇';
 
 export const LAST_SEEN_VERSION_KEY = 'metrorider-last-seen-version';
 

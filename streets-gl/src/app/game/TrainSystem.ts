@@ -44,6 +44,7 @@ export interface LineState {
 export default class TrainSystem extends System {
 	public lines: LineState[] = [];
 	public currentLineIdx: number = 0;
+	public mapName: string = '';
 	public physicsState: TrainPhysicsState = createTrainPhysicsState();
 	public trainPosition: TrainWorldPosition | null = null;
 	public stationState: StationState | null = null;
@@ -69,6 +70,7 @@ export default class TrainSystem extends System {
 
 	public loadMap(data: MetroMapData): void {
 		const parsed = parseMetroMap(data);
+		this.mapName = data.name || '';
 
 		this.lines = parsed.map(line => {
 			const track = buildTrackData(line.allPoints, line.isLoop);
