@@ -312,6 +312,25 @@ export default class PassengerRenderingSystem extends System {
 				&& existing.detailed === wantDetail && !stale
 			) continue;
 
+			// A re-bake for animation changes only where the vertices ARE — same
+			// platform, same people, same variants, same detail level. Throwing
+			// the mesh away and building another one meant ~4.8 mesh creations
+			// a second with the train stationary, each allocating a fresh set
+			// of GPU buffers. Rewrite the existing ones instead.
+			const onlyAnimationChanged = existing !== undefined
+				&& existing.drawn === want
+				&& existing.variantKey === this.variantKey
+				&& existing.detailed === wantDetail;
+
+			if (onlyAnimationChanged) {
+				const rebaked = this.buildCrowd(ls, idx, want, this.animClock, wantDetail, existing);
+
+				if (rebaked) {
+					this.crowds.set(idx, rebaked);
+					continue;
+				}
+			}
+
 			if (existing) {
 				this.removeCrowd(existing);
 				this.crowds.delete(idx);
@@ -350,6 +369,11 @@ export default class PassengerRenderingSystem extends System {
 		count: number,
 		animTime: number,
 		detailed: boolean,
+		/**
+		 * An existing crowd to re-pose in place rather than replace. Used for
+		 * the animation re-bake, where only vertex positions change.
+		 */
+		reuse?: StationCrowd,
 	): StationCrowd | null {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem || this.variants.length === 0) return null;
@@ -438,6 +462,23 @@ export default class PassengerRenderingSystem extends System {
 
 			vOff += vCount;
 			iOff += v.indices.length;
+		}
+
+		// Re-pose in place when the topology is unchanged. It usually is, but
+		// not always: a GLB character finishing its download mid-run swaps a
+		// placeholder figure for a rigged one with a different vertex count
+		// WITHOUT changing the variant key, so the lengths are compared rather
+		// than assumed. A mismatch falls through to a full rebuild.
+		if (reuse && reuse.mesh.buffers.position.length === position.length) {
+			reuse.mesh.updatePositionAndNormalBuffers(position, normal);
+			reuse.mesh.position.set(place.x, baseHeight, place.z);
+			reuse.mesh.updateMatrix();
+
+			return {...reuse, animTime};
+		}
+
+		if (reuse) {
+			return null;
 		}
 
 		const mesh = new TrainMeshObject({position, normal, color, indices});
