@@ -205,6 +205,59 @@ export default class PassengerRenderingSystem extends System {
 		this.syncCrowds(trainSystem, passengerSystem, ls, cap);
 	}
 
+	/**
+	 * Recolour one baked vertex colour for a specific person.
+	 *
+	 * A rigged GLB bakes ONE set of vertex colours, so a crowd built from it is
+	 * the same person repeated no matter how many are standing there. The
+	 * geometry cannot be varied per person without re-skinning, but the COLOURS
+	 * can: rotate the clothing hue per individual and nudge skin a shade lighter
+	 * or darker, and one model becomes a crowd.
+	 *
+	 * Skin is protected — a hue rotation applied to a face turns people green.
+	 * It is recognised the way skin actually sits in RGB: red leads, green sits
+	 * between, blue trails. Those get a brightness shift only; everything else
+	 * (clothing, hair, shoes) gets the hue rotation.
+	 */
+	private static recolour(r: number, g: number, b: number, seed: number, out: [number, number, number]): void {
+		const isSkin = r > g && g > b && r > b * 1.12 && r > 0.25;
+
+		if (isSkin) {
+			// Five skin shades spread across the crowd, never a hue change.
+			const shade = 0.82 + ((seed * 7) % 5) * 0.09;
+
+			out[0] = Math.min(1, r * shade);
+			out[1] = Math.min(1, g * shade);
+			out[2] = Math.min(1, b * shade);
+
+			return;
+		}
+
+		// Hue rotation about the luma axis — cheap, and keeps brightness.
+		//
+		// Bounded to +/-140 degrees rather than the full circle: a free
+		// rotation puts people in neon green and electric purple, which reads
+		// as a bug rather than as a crowd.
+		const angle = (((seed * 47) % 280) - 140) * Math.PI / 180;
+		const cosA = Math.cos(angle);
+		const sinA = Math.sin(angle);
+		const m0 = 0.299 + 0.701 * cosA + 0.168 * sinA;
+		const m1 = 0.587 - 0.587 * cosA + 0.330 * sinA;
+		const m2 = 0.114 - 0.114 * cosA - 0.497 * sinA;
+		const m3 = 0.299 - 0.299 * cosA - 0.328 * sinA;
+		const m4 = 0.587 + 0.413 * cosA + 0.035 * sinA;
+		const m5 = 0.114 - 0.114 * cosA + 0.292 * sinA;
+		const m6 = 0.299 - 0.300 * cosA + 1.250 * sinA;
+		const m7 = 0.587 - 0.588 * cosA - 1.050 * sinA;
+		const m8 = 0.114 + 0.886 * cosA - 0.203 * sinA;
+
+		out[0] = Math.min(1, Math.max(0, r * m0 + g * m1 + b * m2));
+		out[1] = Math.min(1, Math.max(0, r * m3 + g * m4 + b * m5));
+		out[2] = Math.min(1, Math.max(0, r * m6 + g * m7 + b * m8));
+	}
+
+	private readonly _recolourOut: [number, number, number] = [0, 0, 0];
+
 	/** Boarding/alighting totals already turned into walkers, per station. */
 	private walkerCursor: Map<number, {boarded: number; alighted: number}> = new Map();
 
@@ -700,9 +753,19 @@ export default class PassengerRenderingSystem extends System {
 				normal[o + 1] = ny;
 				normal[o + 2] = nyx * cosH - nyz * sinH;
 
-				color[o] = v.color[k * 3] ?? 0.6;
-				color[o + 1] = v.color[k * 3 + 1] ?? 0.6;
-				color[o + 2] = v.color[k * 3 + 2] ?? 0.6;
+				// Every figure gets its own palette, so one rigged model still
+				// reads as a crowd rather than a row of clones.
+				PassengerRenderingSystem.recolour(
+					v.color[k * 3] ?? 0.6,
+					v.color[k * 3 + 1] ?? 0.6,
+					v.color[k * 3 + 2] ?? 0.6,
+					slot.tint + i,
+					this._recolourOut,
+				);
+
+				color[o] = this._recolourOut[0];
+				color[o + 1] = this._recolourOut[1];
+				color[o + 2] = this._recolourOut[2];
 			}
 
 			for (let k = 0; k < v.indices.length; k++) {
