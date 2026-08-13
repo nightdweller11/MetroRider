@@ -350,6 +350,19 @@ export default class ShadowMappingPass extends Pass<{
 		}
 	}
 
+	/**
+	 * Horizontal distance from the main camera to a renderable's origin, in the
+	 * same space `inCameraFrustum` works in. The tile paths get this from
+	 * `tile.distanceToCamera`; loose objects have to derive it.
+	 */
+	private distanceToCamera(object: {matrixWorld: Mat4}): number {
+		const camera = this.manager.sceneSystem.objects.camera;
+		const dx = object.matrixWorld.values[12] - camera.position.x;
+		const dz = object.matrixWorld.values[14] - camera.position.z;
+
+		return Math.sqrt(dx * dx + dz * dz);
+	}
+
 	private renderTrains(shadowCamera: CSMCascadeCamera): void {
 		const trainRenderingSystem = this.manager.systemManager.getSystem(TrainRenderingSystem);
 		if (!trainRenderingSystem) return;
@@ -360,7 +373,16 @@ export default class ShadowMappingPass extends Pass<{
 			...trainRenderingSystem.stationMeshes,
 		].filter(Boolean);
 
-		const meshes = allMeshes.filter(m => m.isMeshReady() && m.mesh);
+		// Cull exactly as the tile paths above do. Without this every station on
+		// the line was drawn into every cascade whether or not it was anywhere
+		// near the camera: measured 21 stations drawn 4× a frame with 2 on
+		// screen, which made this the single largest source of GL traffic in
+		// the whole renderer while the train sat still.
+		const meshes = allMeshes.filter(m =>
+			m.isMeshReady() && m.mesh &&
+			m.inCameraFrustum(shadowCamera) &&
+			this.distanceToCamera(m) <= this.shadowDrawDistance
+		);
 
 		if (meshes.length === 0) return;
 
@@ -395,11 +417,17 @@ export default class ShadowMappingPass extends Pass<{
 			if (i < 2) {
 				this.renderInstances(camera);
 				this.renderAircraft(camera);
+				// Trains, platforms and lineside furniture are small objects
+				// whose shadows only read at close range — the same reason
+				// trees and aircraft are limited to the near cascades. The far
+				// cascade covers kilometres, so every station on the line
+				// qualified for it and was redrawn there for a shadow nobody
+				// can resolve.
+				this.renderTrains(camera);
 			}
 
 			this.renderExtrudedMeshes(camera);
 			this.renderHuggingMeshes(camera);
-			this.renderTrains(camera);
 		}
 	}
 

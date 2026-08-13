@@ -12,6 +12,11 @@ interface TrainMeshBuffers {
 }
 
 export default class TrainMeshObject extends RenderableObject3D {
+	/** Slack on a static mesh's bounds, in metres. */
+	private static readonly StaticBoundsMargin: number = 2;
+	/** Slack on a mesh whose vertices are rewritten in place (bogie flex, doors). */
+	private static readonly DynamicBoundsMargin: number = 10;
+
 	public mesh: AbstractMesh = null;
 	/**
 	 * Public so other systems can measure the placed geometry — the passenger
@@ -40,9 +45,55 @@ export default class TrainMeshObject extends RenderableObject3D {
 		super();
 		this.buffers = buffers;
 		this.dynamic = dynamic;
+		this.recomputeBoundingBox();
+	}
+
+	/**
+	 * Derive the local-space bounds from the geometry itself.
+	 *
+	 * These objects used to carry a hard-coded ±100 m box, which made
+	 * `inCameraFrustum` useless — too loose to cull a 20 m train car, and too
+	 * TIGHT for a station platform or a track run that reaches further than
+	 * 100 m from its origin, so culling against it would have popped visible
+	 * geometry out of the frame. Neither render pass culled these meshes at
+	 * all as a result: measured on a 3-cascade frame, 21 station meshes were
+	 * drawn 4× each (GBuffer + every cascade) with only 2 of them on screen.
+	 *
+	 * A dynamic mesh's vertices are rewritten in place as the bogies flex, so
+	 * its box carries a margin rather than being recomputed every frame.
+	 */
+	public recomputeBoundingBox(): void {
+		const positions = this.buffers?.position;
+
+		if (!positions || positions.length < 3) {
+			this.setBoundingBox(new Vec3(-100, -10, -100), new Vec3(100, 50, 100));
+			return;
+		}
+
+		let minX = Infinity, minY = Infinity, minZ = Infinity;
+		let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
+		for (let i = 0; i < positions.length; i += 3) {
+			const x = positions[i], y = positions[i + 1], z = positions[i + 2];
+
+			if (x < minX) minX = x;
+			if (y < minY) minY = y;
+			if (z < minZ) minZ = z;
+			if (x > maxX) maxX = x;
+			if (y > maxY) maxY = y;
+			if (z > maxZ) maxZ = z;
+		}
+
+		if (!Number.isFinite(minX) || !Number.isFinite(maxX)) {
+			this.setBoundingBox(new Vec3(-100, -10, -100), new Vec3(100, 50, 100));
+			return;
+		}
+
+		const margin = this.dynamic ? TrainMeshObject.DynamicBoundsMargin : TrainMeshObject.StaticBoundsMargin;
+
 		this.setBoundingBox(
-			new Vec3(-100, -10, -100),
-			new Vec3(100, 50, 100)
+			new Vec3(minX - margin, minY - margin, minZ - margin),
+			new Vec3(maxX + margin, maxY + margin, maxZ + margin)
 		);
 	}
 
@@ -55,6 +106,7 @@ export default class TrainMeshObject extends RenderableObject3D {
 		this.dispose();
 		this.buffers = buffers;
 		this.needsRebuild = true;
+		this.recomputeBoundingBox();
 	}
 
 	/** Release this object's GPU resources. Safe to call more than once. */

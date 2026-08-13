@@ -3,21 +3,24 @@ import WebGL2Renderer from "~/lib/renderer/webgl2-renderer/WebGL2Renderer";
 import WebGL2Constants from "~/lib/renderer/webgl2-renderer/WebGL2Constants";
 import {Uniform} from "~/lib/renderer/abstract-renderer/Uniform";
 
-function equal(buf1: TypedArray, buf2: TypedArray): boolean {
-	if (buf1.byteLength != buf2.byteLength) return false;
+/**
+ * Byte views onto uniform value arrays, kept so `setUniformValue` does not
+ * allocate a wrapper on every call. This runs once per uniform per draw call —
+ * measured at ~280 uniform-block updates a frame, each rewriting several
+ * uniforms, so the wrappers alone were thousands of short-lived allocations a
+ * frame feeding the GC.
+ */
+const byteViewCache: WeakMap<ArrayBufferLike, Uint8Array> = new WeakMap();
 
-	const dv1 = new Int8Array(buf1.buffer);
-	const dv2 = new Int8Array(buf2.buffer);
+function byteViewOf(buffer: ArrayBufferLike): Uint8Array {
+	let view = byteViewCache.get(buffer);
 
-	for (let i = 0; i != buf1.byteLength; i++) {
-		if (dv1[i] != dv2[i]) return false;
+	if (view === undefined) {
+		view = new Uint8Array(buffer);
+		byteViewCache.set(buffer, view);
 	}
 
-	return true;
-}
-
-const areEqual = (first: TypedArray, second: TypedArray): boolean => {
-	return first.length === second.length && first.every((value, index) => value === second[index]);
+	return view;
 }
 
 export default class WebGL2UBO {
@@ -31,6 +34,10 @@ export default class WebGL2UBO {
 	private buffer: WebGLBuffer;
 	private data: ArrayBuffer;
 	private dataView: Uint8Array;
+	/** What the GPU-side buffer currently holds, when `uploadedIsKnown`. */
+	private uploaded: Uint32Array = null;
+	private uploadedIsKnown: boolean = false;
+	private stagedWords: Uint32Array = null;
 
 	public constructor(renderer: WebGL2Renderer, program: WebGL2Program, blockIndex: number) {
 		this.renderer = renderer;
@@ -56,6 +63,15 @@ export default class WebGL2UBO {
 
 		this.data = new ArrayBuffer(this.blockSize);
 		this.dataView = new Uint8Array(this.data);
+
+		// std140 blocks are 16-byte aligned, so word-wise comparison is always
+		// valid here; the guard is only for a driver that reports otherwise.
+		if (this.blockSize % 4 === 0) {
+			this.stagedWords = new Uint32Array(this.data);
+			this.uploaded = new Uint32Array(this.blockSize / 4);
+		}
+
+		this.uploadedIsKnown = false;
 
 		const indices: Uint32Array = this.gl.getActiveUniformBlockParameter(
 			this.program.WebGLProgram,
@@ -97,10 +113,30 @@ export default class WebGL2UBO {
 			return;
 		}
 
-		this.dataView.set(new Uint8Array(value.buffer), offset);
+		this.dataView.set(byteViewOf(value.buffer), offset);
 	}
 
 	public applyUpdates(): void {
+		// Uploading a block whose bytes the GPU already holds costs a real
+		// bufferSubData — the dominant GL call in this renderer — for nothing.
+		// Skip it when the staged data is identical to what was last sent.
+		if (this.uploadedIsKnown && this.stagedWords !== null) {
+			const staged = this.stagedWords;
+			const uploaded = this.uploaded;
+			let changed = false;
+
+			for (let i = 0; i < staged.length; i++) {
+				if (staged[i] !== uploaded[i]) {
+					changed = true;
+					break;
+				}
+			}
+
+			if (!changed) {
+				return;
+			}
+		}
+
 		this.bind();
 
 		this.gl.bufferSubData(
@@ -108,9 +144,18 @@ export default class WebGL2UBO {
 			0,
 			this.data
 		);
+
+		if (this.stagedWords !== null) {
+			this.uploaded.set(this.stagedWords);
+			this.uploadedIsKnown = true;
+		}
 	}
 
 	public setRawData(data: ArrayBufferView, byteLength?: number): void {
+		// This writes the GPU buffer behind `data`'s back, so the shadow copy
+		// no longer describes what the buffer holds.
+		this.uploadedIsKnown = false;
+
 		this.bind();
 
 		if (byteLength !== undefined && byteLength < data.byteLength) {

@@ -637,6 +637,16 @@ export default class GBufferPass extends Pass<{
 		const motionFactor = Math.min(1, Math.max(0, speed / 3));
 
 		for (const meshObj of meshes) {
+			// Off-screen meshes still need their previous world matrix kept
+			// current — TAA reads it the frame they come back into view, and a
+			// stale one ghosts them for a frame — but they must not be drawn.
+			// Every station on the line used to be drawn here regardless of
+			// where the camera was pointing.
+			if (!meshObj.inCameraFrustum(camera)) {
+				meshObj.storePrevFrameMatrix();
+				continue;
+			}
+
 			const isCar = trainRenderingSystem.carMeshes.includes(meshObj as any);
 			this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
 			this._tmpMat4B.set(meshObj.matrixWorld.values);
