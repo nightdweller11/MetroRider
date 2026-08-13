@@ -6,6 +6,67 @@
  * train.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+/** Newest mtime anywhere under a directory, in ms. */
+function newestMtime(dir) {
+	let newest = 0;
+
+	for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+		if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+
+		const full = path.join(dir, entry.name);
+		const mtime = entry.isDirectory() ? newestMtime(full) : fs.statSync(full).mtimeMs;
+
+		if (mtime > newest) newest = mtime;
+	}
+
+	return newest;
+}
+
+/**
+ * Refuse to measure a build that predates the source.
+ *
+ * The port the probes hit serves a BUILT bundle, not a dev server — so
+ * editing a file changes nothing until `npm run build` runs. Comparing the
+ * browser against the server does not catch this: both happily agree on a
+ * bundle that is two edits old. This has now produced a confident, entirely
+ * fictitious measurement twice, most recently a "41% improvement" that was
+ * really just a different camera position. An instrument that can silently
+ * measure code you did not write is worse than no instrument.
+ */
+function assertBuildIsCurrent() {
+	const indexPath = path.join(repoRoot, 'build', 'index.html');
+
+	if (!fs.existsSync(indexPath)) return null;
+
+	const bundleName = (fs.readFileSync(indexPath, 'utf8').match(/index\.[a-f0-9]+\.js/) ?? [])[0];
+
+	if (!bundleName) return null;
+
+	const bundlePath = path.join(repoRoot, 'build', 'js', bundleName);
+
+	if (!fs.existsSync(bundlePath)) return null;
+
+	const builtAt = fs.statSync(bundlePath).mtimeMs;
+	const sourcedAt = newestMtime(path.join(repoRoot, 'src'));
+
+	if (sourcedAt > builtAt) {
+		const staleBy = Math.round((sourcedAt - builtAt) / 1000);
+
+		throw new Error(
+			`stale build: src/ is ${staleBy}s newer than ${bundleName}. ` +
+			`Run "npm run build" — measuring now would describe code that is not running.`
+		);
+	}
+
+	return bundleName;
+}
+
 /**
  * Open the game IN THE PAGE THE RUNNER ALREADY HAS.
  *
@@ -26,11 +87,13 @@ export async function openGame(page, {url = 'http://localhost:3111/', telemetry 
 	// measurement taken through it is then a measurement of code that no longer
 	// exists. This cost a whole diagnosis round on 2026-08-13. Bust the document
 	// cache on every open, then PROVE the loaded bundle is the one on disk.
+	const expectedOnDisk = assertBuildIsCurrent();
+
 	const bust = `_b=${Date.now()}`;
 	await page.goto(`${url}?${telemetry ? 'telemetry=1&' : ''}${bust}`, {waitUntil: 'domcontentloaded'});
 
 	const served = await (await fetch(url, {cache: 'no-store'})).text();
-	const expected = (served.match(/index\.[a-f0-9]+\.js/) ?? [])[0];
+	const expected = (served.match(/index\.[a-f0-9]+\.js/) ?? [])[0] ?? expectedOnDisk;
 	const loaded = await page.evaluate(
 		() => ([...document.querySelectorAll('script[src]')].map(s => s.getAttribute('src'))
 			.find(s => /index\.[a-f0-9]+\.js/.test(s)) ?? '').replace('./js/', ''),
