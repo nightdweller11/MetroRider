@@ -20,6 +20,22 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.0.0',
+		codename: 'The Line',
+		date: '2026-08-13',
+		emblem: '🚇✨',
+		summary: 'Everything since 1.1, gathered up: a line you drive, a crowd you carry, and a world that holds still while you look at it.',
+		changes: [
+			'PEOPLE — Passengers are individuals now. They wait on the platform, walk to the doors when you open them, and step aboard; arrivals walk out into the station. A crowd built from one character used to be that character repeated, so everybody now gets their own clothes, hair and skin. They stand on the floor rather than hovering above it.',
+			'THE TRAIN — Your train wears its real livery: model textures were being averaged down to a single colour per corner, smearing stripes, windows and logos into a wash. Trains, track and stations are drawn sharp while moving, not just while parked.',
+			'THE LINE — Speed limits are worked out from the track itself, account for banked curves, and are yours to obey or not: the limit informs, it never brakes for you. Lineside boards stand where each limit starts, in the style of the country you are driving in, with a yellow warning triangle before a reduction and the number repeated through long stretches.',
+			'THE JOB — Every stop is scored: punctuality, smooth driving, and how many people you actually carried. Sign in with an email and password, and your best runs follow you.',
+			'THE WORLD — Buildings stop vanishing and reappearing as you drive or turn the camera, and the map holds still: stations no longer wobble, and the world does not rebuild itself behind you.',
+			'PERFORMANCE — The game no longer gets heavier the longer you play; every vertex buffer it created was previously kept forever. It also stopped drawing every station on the line, and every crowd, on every single frame. Auto quality now measures how hard your graphics card is actually working instead of guessing from frame rate, so it can tell a machine that is coasting from one barely keeping up — and it can finally lower quality when you have set a frame-rate limit.',
+			'FINDING YOUR WAY — The original MetroDreamin map is inside the game, with your own line drawn on it.',
+		],
+	},
+	{
 		version: '1.2.0',
 		codename: 'Platform Life',
 		date: '2026-08-13',
