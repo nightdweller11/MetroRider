@@ -30,6 +30,21 @@ export default class Labels extends RenderableObject3D {
 	};
 	private attributeBuffersDirty: boolean = false;
 	private tree: RBush<any> = new RBush<any>();
+	/**
+	 * What was last sent to the GPU.
+	 *
+	 * `updateFromTiles` runs every frame, and it used to mark the buffers dirty
+	 * unconditionally — so every frame re-uploaded all four label buffers AND
+	 * recreated the index buffer (`setIndices` deletes and re-creates it).
+	 * Measured with the render telemetry: 406 buffer uploads per frame, 987 MB
+	 * uploaded in ten seconds, 89% of ALL GPU uploads in the game, while parked
+	 * at a station with nothing moving.
+	 *
+	 * The visible label set only changes when labels enter, leave or lose a
+	 * declutter contest, so the merged result is compared with what was last
+	 * uploaded and the frame becomes a no-op when nothing changed.
+	 */
+	private lastUploaded: AttributeBuffers = {position: null, offset: null, uv: null, index: null};
 
 	public constructor() {
 		super();
@@ -202,6 +217,31 @@ export default class Labels extends RenderableObject3D {
 		};
 	}
 
+	/** True when the merged label geometry differs from what the GPU already has. */
+	private buffersChanged(buffers: AttributeBuffers): boolean {
+		return (
+			!Labels.sameArray(buffers.position, this.lastUploaded.position)
+			|| !Labels.sameArray(buffers.offset, this.lastUploaded.offset)
+			|| !Labels.sameArray(buffers.uv, this.lastUploaded.uv)
+			|| !Labels.sameArray(buffers.index, this.lastUploaded.index)
+		);
+	}
+
+	private static sameArray(a: Float32Array | Uint32Array, b: Float32Array | Uint32Array): boolean {
+		if (!b || a.length !== b.length) return false;
+		for (let i = 0; i < a.length; i++) {
+			if (a[i] !== b[i]) return false;
+		}
+		return true;
+	}
+
+	private rememberUploaded(buffers: AttributeBuffers): void {
+		this.lastUploaded.position = buffers.position.slice();
+		this.lastUploaded.offset = buffers.offset.slice();
+		this.lastUploaded.uv = buffers.uv.slice();
+		this.lastUploaded.index = buffers.index.slice();
+	}
+
 	public updateFromTiles(tiles: Tile[], camera: Camera, resolution: Vec2): void {
 		const visibleLabels = this.getVisibleLabels(tiles, camera);
 		const sortedLabels = this.sortLabelsByPriority(visibleLabels);
@@ -220,6 +260,9 @@ export default class Labels extends RenderableObject3D {
 		this.attributeBuffers.uv = buffers.uv;
 		this.attributeBuffers.index = buffers.index;
 
-		this.attributeBuffersDirty = true;
+		if (this.buffersChanged(buffers)) {
+			this.attributeBuffersDirty = true;
+			this.rememberUploaded(buffers);
+		}
 	}
 }

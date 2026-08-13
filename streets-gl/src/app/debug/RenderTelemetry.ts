@@ -185,6 +185,10 @@ function instrument(gl: GlLike): void {
 	wrap(gl, 'bufferSubData', (args) => {
 		counters.bufferUploads++;
 		counters.bufferUploadBytes += byteLengthOf(args[2]);
+		// Attributed too. Leaving it out made blame() lie by omission: the
+		// visible callers looked dominant only because the biggest source of
+		// uploads was not being sampled at all.
+		attribute('bufferSubData');
 	});
 
 	for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) {
@@ -247,19 +251,97 @@ function growthPerMinute(values: number[], times: number[]): number {
 	return den === 0 ? 0 : (num / den) * 60_000;
 }
 
+/** Per-frame mesh rebuilds, by class — filled by RenderSystem when enabled. */
+const meshRebuilds = new Map<string, number>();
+let meshRebuildFrames = 0;
+
+/**
+ * Called from the renderer's "objects that need a mesh" loop.
+ *
+ * An object should build its mesh ONCE. One that appears here every frame is
+ * being rebuilt continuously — new GPU buffers, new VAO, re-bound textures —
+ * which is both the cost and the most likely cause of textures flickering on
+ * the objects concerned.
+ */
+export function noteMeshRebuild(className: string): void {
+	if (!installed) return;
+	meshRebuilds.set(className, (meshRebuilds.get(className) ?? 0) + 1);
+}
+
+export function noteMeshRebuildFrame(): void {
+	if (!installed) return;
+	meshRebuildFrames++;
+}
+
 function installApi(): void {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	(window as any).__telemetry = {
 		snapshot: (): TelemetryCounters => ({...counters}),
 		series: (): TelemetrySample[] => samples.slice(),
 		markPhase: (name: string): void => { phase = name; },
-		reset: (): void => { samples.length = 0; attribution.clear(); },
-		/** Who created the GPU resources, ranked. The leak's return address. */
-		blame: (limit = 12): {caller: string; approxCount: number}[] =>
+		reset: (): void => {
+			samples.length = 0;
+			attribution.clear();
+			meshRebuilds.clear();
+			meshRebuildFrames = 0;
+		},
+		/** Which classes rebuild their mesh, and how often per frame. */
+		meshChurn: (): {className: string; total: number; perFrame: number}[] =>
+			[...meshRebuilds.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.map(([className, total]) => ({
+					className,
+					total,
+					perFrame: +(total / Math.max(1, meshRebuildFrames)).toFixed(2),
+				})),
+		/**
+		 * Who created the GPU work, ranked — the leak's return address.
+		 *
+		 * Reports the share of the TOTAL, not of the listed rows. Ranking the
+		 * top ten and quoting a percentage of those ten reads as "89% of all
+		 * uploads" when it may be 89% of 0.6% of them; that mistake sent me
+		 * after the wrong code once already.
+		 */
+		blame: (limit = 12): {
+			caller: string; approxCount: number; shareOfAllPct: number;
+		}[] => {
+			let total = 0;
+			for (const n of attribution.values()) total += n;
+			const everything = Math.max(total, 1);
+			return [...attribution.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, limit)
+				.map(([caller, approxCount]) => ({
+					caller,
+					approxCount,
+					shareOfAllPct: +((approxCount / everything) * 100).toFixed(1),
+				}));
+		},
+		/**
+		 * Blame for ONE kind of work.
+		 *
+		 * Uniform-block writes (one `bufferSubData` per draw) legitimately
+		 * dominate the raw count, and they drown out the thing that actually
+		 * leaks — a `createBuffer` that is never matched by a delete. Filtering
+		 * by kind is what separates "expensive by design" from "wrong".
+		 */
+		blameKind: (kind: string, limit = 10): {caller: string; approxCount: number}[] =>
 			[...attribution.entries()]
+				.filter(([key]) => key.startsWith(`${kind} ←`))
 				.sort((a, b) => b[1] - a[1])
 				.slice(0, limit)
 				.map(([caller, approxCount]) => ({caller, approxCount})),
+		/** How much of the sampled work the top `limit` rows actually explain. */
+		blameCoverage: (limit = 12): {rows: number; distinctCallers: number; coveredPct: number} => {
+			const values = [...attribution.values()].sort((a, b) => b - a);
+			const total = values.reduce((a, b) => a + b, 0) || 1;
+			const covered = values.slice(0, limit).reduce((a, b) => a + b, 0);
+			return {
+				rows: Math.min(limit, values.length),
+				distinctCallers: values.length,
+				coveredPct: +((covered / total) * 100).toFixed(1),
+			};
+		},
 		report: (): Record<string, unknown> => {
 			if (samples.length < 3) return {error: 'not enough samples yet'};
 			const times = samples.map(s => s.t);

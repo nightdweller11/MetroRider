@@ -1,3 +1,4 @@
+import {noteMeshRebuild, noteMeshRebuildFrame} from '~/app/debug/RenderTelemetry';
 import Vec2 from "~/lib/math/Vec2";
 import Config from "~/app/Config";
 import System from "../System";
@@ -187,7 +188,12 @@ export default class RenderSystem extends System {
 			sceneSystem.objects.labels.updateFromTiles(tiles, sceneSystem.objects.camera, this.resolutionScene);
 		}
 
+		// An object should build its mesh once. Anything that shows up here every
+		// frame is rebuilding continuously; the telemetry names it so the churn
+		// can be traced to a class instead of guessed at from a stack trace.
+		noteMeshRebuildFrame();
 		for (const object of sceneSystem.getObjectsToUpdateMesh()) {
+			noteMeshRebuild(object.constructor.name);
 			object.updateMesh(this.renderer);
 		}
 
