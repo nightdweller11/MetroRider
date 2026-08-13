@@ -47,6 +47,24 @@ export default class TrainMaterialContainer extends MaterialContainer {
 					value: new Float32Array(1)
 				},
 				{
+					name: 'trackBlendColor',
+					block: 'MainBlock',
+					type: RendererTypes.UniformType.Float4,
+					value: new Float32Array(4)
+				},
+				{
+					name: 'detailFadeStart',
+					block: 'MainBlock',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array(1)
+				},
+				{
+					name: 'detailFadeEnd',
+					block: 'MainBlock',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array(1)
+				},
+				{
 					name: 'tDiffuse',
 					block: null,
 					type: RendererTypes.UniformType.Texture2D,

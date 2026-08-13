@@ -12,6 +12,8 @@ interface TrainMeshBuffers {
 	indices: Uint32Array;
 	/** Texture coordinates, when the source model carries a base-colour map. */
 	uv?: Float32Array;
+	/** Fine-detail weight per vertex, driving the distance fade on track. */
+	detail?: Float32Array;
 }
 
 /** Decoded base-colour image from the source GLB. */
@@ -165,6 +167,10 @@ export default class TrainMeshObject extends RenderableObject3D {
 		const uv = this.buffers.uv && this.buffers.uv.length >= vertexCount * 2
 			? this.buffers.uv
 			: new Float32Array(vertexCount * 2);
+		// Zero for everything that is not track: no fade, no behaviour change.
+		const detail = this.buffers.detail && this.buffers.detail.length >= vertexCount
+			? this.buffers.detail
+			: new Float32Array(vertexCount);
 
 		if (this.texture && !this.gpuTexture) {
 			this.gpuTexture = renderer.createTexture2D({
@@ -190,6 +196,14 @@ export default class TrainMeshObject extends RenderableObject3D {
 			indexed: true,
 			indices: this.buffers.indices,
 			attributes: [
+				renderer.createAttribute({
+					name: 'detail',
+					size: 1,
+					type: RendererTypes.AttributeType.Float32,
+					format: RendererTypes.AttributeFormat.Float,
+					normalized: false,
+					buffer: renderer.createAttributeBuffer({data: detail, usage}),
+				}),
 				renderer.createAttribute({
 					name: 'uv',
 					size: 2,

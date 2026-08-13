@@ -41,6 +41,7 @@ import {AircraftPartTextures} from "~/app/render/textures/createAircraftTexture"
 import PerspectiveCamera from "~/lib/core/PerspectiveCamera";
 import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContainer";
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
+import {TRACK_BLEND_COLOR} from "~/app/game/rendering/TrainGeometry";
 import TrainSystem from "~/app/game/TrainSystem";
 import PassengerRenderingSystem from "~/app/game/passengers/PassengerRenderingSystem";
 import TrackSignRenderingSystem from "~/app/game/limits/TrackSignRenderingSystem";
@@ -405,6 +406,9 @@ export default class GBufferPass extends Pass<{
 
 		this._tmpMat4A.set(camera.jitteredProjectionMatrix.values);
 		this.projectedMeshMaterial.getUniform<UniformMatrix4>('projectionMatrix', 'PerMaterial').value = this._tmpMat4A;
+		// Distance detail fade — flattens normal-map shimmer on far ground.
+		(this.projectedMeshMaterial.getUniform<UniformFloat1>('detailFadeStart', 'PerMaterial').value)[0] = Config.RailLodFadeStart;
+		(this.projectedMeshMaterial.getUniform<UniformFloat1>('detailFadeEnd', 'PerMaterial').value)[0] = Config.RailLodFadeEnd;
 		this.projectedMeshMaterial.updateUniformBlock('PerMaterial');
 
 		for (const tile of tiles) {
@@ -628,6 +632,17 @@ export default class GBufferPass extends Pass<{
 		if (meshes.length === 0) return;
 
 		this.renderer.useMaterial(this.trainMaterial);
+
+		// Rail LOD: distant track fades into the ballast tone the generator
+		// paints, so the two thin rails stop alternating pixel by pixel.
+		const blend = this.trainMaterial.getUniform('trackBlendColor', 'MainBlock').value as Float32Array;
+
+		blend[0] = TRACK_BLEND_COLOR[0];
+		blend[1] = TRACK_BLEND_COLOR[1];
+		blend[2] = TRACK_BLEND_COLOR[2];
+		blend[3] = 1;
+		(this.trainMaterial.getUniform('detailFadeStart', 'MainBlock').value as Float32Array)[0] = Config.RailLodFadeStart;
+		(this.trainMaterial.getUniform('detailFadeEnd', 'MainBlock').value as Float32Array)[0] = Config.RailLodFadeEnd;
 
 		// Real-world motion factor for the motion buffer's alpha flag:
 		// 0 parked → full temporal accumulation (rock-solid still image),

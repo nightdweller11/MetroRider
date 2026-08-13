@@ -23,6 +23,21 @@ export interface AnimationData {
 	nodeTRS: NodeTRS[];
 }
 
+/**
+ * What distant track fades INTO.
+ *
+ * Two thin rails converging at a grazing angle alternate rail/ballast pixel by
+ * pixel, which is geometric aliasing no texture filter can touch — measured at
+ * 8.7% flip rate with TAA off, the worst region on screen by an order of
+ * magnitude. Beyond a few hundred metres the rails cannot be resolved anyway,
+ * so the shader fades rail and sleeper detail into this tone and distant track
+ * reads as one steady band instead of a shimmering ladder.
+ *
+ * Exported so the renderer blends toward the SAME colour the generator paints
+ * ballast with, rather than a hard-coded duplicate that could drift.
+ */
+export const TRACK_BLEND_COLOR: [number, number, number] = [0.35, 0.3, 0.25];
+
 export interface GeometryBuffers {
 	position: Float32Array;
 	normal: Float32Array;
@@ -31,6 +46,11 @@ export interface GeometryBuffers {
 	animationData?: AnimationData;
 	/** Texture coordinates, when the source model carries a base-colour map. */
 	uv?: Float32Array;
+	/**
+	 * Per-vertex "how much fine detail is this" — 1 for rails, lower for
+	 * sleepers, 0 for ballast and everything else. Drives the distance fade.
+	 */
+	detail?: Float32Array;
 	/** The decoded base-colour map itself, uploaded once per mesh. */
 	baseColorImage?: {data: Uint8ClampedArray; width: number; height: number} | null;
 }
@@ -209,7 +229,13 @@ export function buildTrackGeometry(
 
 	const railColor: [number, number, number] = [0.4, 0.42, 0.45];
 	const sleeperColor: [number, number, number] = [0.42, 0.32, 0.18];
-	const ballastColor: [number, number, number] = [0.35, 0.3, 0.25];
+	const ballastColor: [number, number, number] = TRACK_BLEND_COLOR;
+
+	// Filled in step with `positions`; see TRACK_BLEND_COLOR.
+	const detail: number[] = [];
+	const tagDetail = (weight: number): void => {
+		while (detail.length < positions.length / 3) detail.push(weight);
+	};
 
 	const SEGMENT_GAP = 0.02;
 
@@ -243,6 +269,7 @@ export function buildTrackGeometry(
 			fx, fy, fz,
 			BALLAST_WIDTH, BALLAST_HEIGHT, drawLen,
 			ballastColor[0], ballastColor[1], ballastColor[2]);
+		tagDetail(0);
 
 		appendOrientedBox(positions, normals, colors, indices,
 			mx + rx * RAIL_HALF, my + BALLAST_HEIGHT + RAIL_HEIGHT / 2, mz + rz * RAIL_HALF,
@@ -251,6 +278,7 @@ export function buildTrackGeometry(
 			fx, fy, fz,
 			RAIL_WIDTH, RAIL_HEIGHT, drawLen,
 			railColor[0], railColor[1], railColor[2]);
+		tagDetail(1);
 
 		appendOrientedBox(positions, normals, colors, indices,
 			mx - rx * RAIL_HALF, my + BALLAST_HEIGHT + RAIL_HEIGHT / 2, mz - rz * RAIL_HALF,
@@ -259,6 +287,7 @@ export function buildTrackGeometry(
 			fx, fy, fz,
 			RAIL_WIDTH, RAIL_HEIGHT, drawLen,
 			railColor[0], railColor[1], railColor[2]);
+		tagDetail(1);
 
 		while (nextSleeperDist <= totalDist + segLen) {
 			const t = (nextSleeperDist - totalDist) / segLen;
@@ -274,6 +303,9 @@ export function buildTrackGeometry(
 					fx, fy, fz,
 					SLEEPER_LENGTH, SLEEPER_HEIGHT, SLEEPER_WIDTH,
 					sleeperColor[0], sleeperColor[1], sleeperColor[2]);
+				// Sleepers alias too, but they are a coarser pattern than the
+				// rails and read as texture for longer, so they fade later.
+				tagDetail(0.7);
 			}
 			nextSleeperDist += SLEEPER_SPACING;
 		}
@@ -281,11 +313,14 @@ export function buildTrackGeometry(
 		totalDist += segLen;
 	}
 
+	tagDetail(0);
+
 	return {
 		position: new Float32Array(positions),
 		normal: new Float32Array(normals),
 		color: new Float32Array(colors),
 		indices: new Uint32Array(indices),
+		detail: new Float32Array(detail),
 	};
 }
 

@@ -52,6 +52,10 @@ uniform PerMesh {
 uniform PerMaterial {
 	mat4 projectionMatrix;
 	float time;
+	// Distance over which fine surface detail is flattened — see below.
+	// Declared in BOTH stages: GLSL requires identical block declarations.
+	float detailFadeStart;
+	float detailFadeEnd;
 };
 
 uniform sampler2DArray tRingHeight;

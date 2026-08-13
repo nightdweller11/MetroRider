@@ -33,6 +33,16 @@ export default class ProjectedMeshMaterialContainer extends MaterialContainer {
 					type: RendererTypes.UniformType.Float1,
 					value: new Float32Array(1)
 				}, {
+					name: 'detailFadeStart',
+					block: 'PerMaterial',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array(1)
+				}, {
+					name: 'detailFadeEnd',
+					block: 'PerMaterial',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array(1)
+				}, {
 					name: 'tMap',
 					block: null,
 					type: RendererTypes.UniformType.Texture2DArray,

@@ -4,11 +4,13 @@ in vec3 position;
 in vec3 normal;
 in vec3 color;
 in vec2 uv;
+in float detail;
 out vec4 vClipPos;
 out vec4 vClipPosPrev;
 
 out vec3 vColor;
 out vec2 vUv;
+out float vDetail;
 out vec3 vNormal;
 out vec3 vPosition;
 
@@ -24,11 +26,16 @@ uniform MainBlock {
 	// uniform block 'MainBlock' differ between VERTEX and FRAGMENT shaders",
 	// which left the material with no MainBlock at all.
 	float hasTexture;
+	// Distance fade for fine geometric detail — see TRACK_BLEND_COLOR.
+	vec4 trackBlendColor;
+	float detailFadeStart;
+	float detailFadeEnd;
 };
 
 void main() {
 	vColor = color;
 	vUv = uv;
+	vDetail = detail;
 
 	vec3 modelNormal = normalize((viewMatrix * modelMatrix * vec4(normal, 0)).xyz);
 	vNormal = modelNormal;

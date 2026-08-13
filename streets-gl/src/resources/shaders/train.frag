@@ -3,6 +3,7 @@
 
 in vec3 vColor;
 in vec2 vUv;
+in float vDetail;
 in vec3 vNormal;
 in vec3 vPosition;
 in vec4 vClipPos;
@@ -16,6 +17,10 @@ uniform MainBlock {
 	float objectMotion;
 	// 1 when this mesh carries a base-colour map, 0 when it is vertex-coloured.
 	float hasTexture;
+	// Distance fade for fine geometric detail — see TRACK_BLEND_COLOR.
+	vec4 trackBlendColor;
+	float detailFadeStart;
+	float detailFadeEnd;
 };
 
 uniform sampler2D tDiffuse;
@@ -34,6 +39,22 @@ void main() {
 
 	if (hasTexture > 0.5) {
 		base = texture(tDiffuse, vUv).rgb * vColor;
+	}
+
+	// Rail LOD.
+	//
+	// Two thin rails converging at a grazing angle alternate rail/ballast pixel
+	// by pixel — geometric aliasing that no texture filter can address, and
+	// measured as by far the worst shimmer on screen. Past the point where the
+	// rails cannot be resolved anyway, fade their colour into the ballast tone
+	// so distant track reads as one steady band rather than a shimmering
+	// ladder. vDetail is 0 for everything that is not track, so nothing else in
+	// this material is affected.
+	if (vDetail > 0.001) {
+		float viewDistance = length(vPosition);
+		float fade = smoothstep(detailFadeStart, detailFadeEnd, viewDistance);
+
+		base = mix(base, trackBlendColor.rgb, fade * vDetail);
 	}
 
 	outColor = vec4(base, 1);

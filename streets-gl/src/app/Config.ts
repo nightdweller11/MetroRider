@@ -84,6 +84,14 @@ const Config = {
 	// Anisotropic filtering level for world textures. 16 is free on desktop
 	// GPUs but measurably slows bandwidth-starved mobile GPUs.
 	TextureAnisotropy: _lowMemory ? 4 : 16,
+	/**
+	 * Rail LOD: distance in metres over which fine track detail fades into the
+	 * ballast tone. Kept here rather than inline in the pass so the fade can be
+	 * A/B'd at runtime — setting the start beyond the far plane disables it,
+	 * which is how its effect was measured against the same camera.
+	 */
+	RailLodFadeStart: 120,
+	RailLodFadeEnd: 420,
 	MaxTilesPerWorker: 1,
 	WorkersCount: _lowMemory
 		? Math.min(2, navigator.hardwareConcurrency)

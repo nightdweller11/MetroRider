@@ -1,4 +1,5 @@
 import System from '../System';
+import Config from '~/app/Config';
 import PassengerSystem from '~/app/game/passengers/PassengerSystem';
 import ProfileUI from '~/app/game/profiles/ProfileUI';
 import ScoringSystem from '~/app/game/scoring/ScoringSystem';
@@ -68,6 +69,12 @@ export default class GameUISystem extends System {
 		// Debug/testing handles (used by automated browser tests).
 		(window as any).__trainSystem = trainSystem;
 		(window as any).__gameSystems = this.systemManager;
+		// Config is a module singleton, so a probe has no way to reach the
+		// render tunables without this. Exposing it is what let the rail-LOD
+		// fade be A/B'd against the SAME camera in one session — the first
+		// attempt silently failed to reach Config and produced two runs with
+		// identical settings whose difference was pure scene variance.
+		(window as any).__config = Config;
 
 		this.mobile = window.innerWidth <= 768 || ('ontouchstart' in window && window.innerWidth <= 1024);
 		this.lineListExpanded = !this.mobile;
