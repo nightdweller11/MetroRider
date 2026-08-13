@@ -29,6 +29,25 @@ const PLATFORM_WIDTH = 5;
 const MAX_DECK_HEIGHT = 1.6;
 /** How far below the platform deck a figure may be placed, metres. */
 const MAX_FOOT_DROP = 0.08;
+/** Across-platform position of the train doors, metres (0 = track edge). */
+const DOOR_EDGE_Z = 0.6;
+/** Walking pace, metres per second — an unhurried commuter. */
+const WALK_SPEED = 1.3;
+/** How far back from the edge an alighting passenger walks before leaving. */
+const ALIGHT_DEPTH = 5.5;
+/**
+ * People crossing the platform at once, per station.
+ *
+ * The first version capped each SPAWN at six, which is not the same thing:
+ * spawns repeat every tick while the doors are open, so a 23-person platform
+ * put 22 people in motion simultaneously. That reads as a stampede, and each
+ * walker is a whole extra character in the bake — at the detailed LOD 22 of
+ * them roughly doubled the crowd mesh. Anyone over the cap boards without the
+ * walk, exactly as they did before.
+ */
+const MAX_CONCURRENT_WALKERS = 8;
+/** Re-bake this often while anyone is walking, so the motion is not steppy. */
+const WALK_REBUILD_INTERVAL = 0.05;
 /** How many differently-dressed people the built-in figure expands into. */
 /**
  * Distinct procedural figures in the mix.
@@ -62,6 +81,28 @@ const DETAIL_RADIUS = 200;
 /** Seconds between animation re-bakes of those platforms. */
 const ANIM_REBAKE_SECONDS = 0.2;
 
+/**
+ * Someone crossing the platform, rather than standing on it.
+ *
+ * Boarding used to be a number: the waiting count dropped and the crowd was
+ * rebuilt one person smaller, so people vanished where they stood. A walker
+ * keeps its own path and phase, and is drawn alongside the standing figures
+ * until it reaches the train (boarding) or the back of the platform
+ * (alighting), at which point it is dropped.
+ */
+interface CrowdWalker {
+	slot: CrowdSlot;
+	/** 0 at the start of the walk, 1 when it is done. */
+	phase: number;
+	/** Metres travelled per second along the path. */
+	speed: number;
+	kind: 'board' | 'alight';
+	fromX: number;
+	fromZ: number;
+	toX: number;
+	toZ: number;
+}
+
 interface StationCrowd {
 	stationIdx: number;
 	mesh: TrainMeshObject;
@@ -71,6 +112,8 @@ interface StationCrowd {
 	animTime: number;
 	/** Whether this crowd was built with the detailed character model. */
 	detailed: boolean;
+	/** People currently walking to or from the train. */
+	walkers: CrowdWalker[];
 }
 
 /**
@@ -136,11 +179,129 @@ export default class PassengerRenderingSystem extends System {
 		}
 
 		this.animClock += deltaTime;
+
+		this.syncWalkers(trainSystem, passengerSystem, deltaTime);
+
 		this.rebuildTimer += deltaTime;
-		if (this.rebuildTimer < REBUILD_INTERVAL) return;
+
+		// People mid-walk need a much higher re-pose rate than people standing
+		// still; at the standing rate a walk reads as five steps a second.
+		const interval = this.hasWalkers() ? WALK_REBUILD_INTERVAL : REBUILD_INTERVAL;
+
+		if (this.rebuildTimer < interval) return;
 		this.rebuildTimer = 0;
 
 		this.syncCrowds(trainSystem, passengerSystem, ls, cap);
+	}
+
+	/** Boarding/alighting totals already turned into walkers, per station. */
+	private walkerCursor: Map<number, {boarded: number; alighted: number}> = new Map();
+
+	private hasWalkers(): boolean {
+		for (const crowd of this.crowds.values()) {
+			if (crowd.walkers.length > 0) return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Turn the passenger model's boarding/alighting counts into people who
+	 * actually cross the platform, and advance the ones already walking.
+	 *
+	 * The model reports totals for the current stop; the difference against
+	 * what has already been dramatised is how many new figures should set off.
+	 */
+	private syncWalkers(
+		trainSystem: TrainSystem,
+		passengerSystem: PassengerSystem,
+		deltaTime: number,
+	): void {
+		for (const crowd of this.crowds.values()) {
+			if (crowd.walkers.length === 0) continue;
+
+			for (const walker of crowd.walkers) {
+				const dx = walker.toX - walker.fromX;
+				const dz = walker.toZ - walker.fromZ;
+				const distance = Math.max(0.5, Math.hypot(dx, dz));
+
+				walker.phase += (walker.speed * deltaTime) / distance;
+			}
+
+			crowd.walkers = crowd.walkers.filter(w => w.phase < 1);
+		}
+
+		const idx = passengerSystem.activeStation;
+
+		if (idx < 0) {
+			// Doors shut: the stop is over, so the next one starts from zero.
+			this.walkerCursor.delete(idx);
+			return;
+		}
+
+		const crowd = this.crowds.get(idx);
+
+		if (!crowd) return;
+
+		const seen = this.walkerCursor.get(idx) ?? {boarded: 0, alighted: 0};
+		const newBoarders = Math.max(0, passengerSystem.boardedThisStop - seen.boarded);
+		const newAlighters = Math.max(0, passengerSystem.alightedThisStop - seen.alighted);
+
+		if (newBoarders === 0 && newAlighters === 0) return;
+
+		this.walkerCursor.set(idx, {
+			boarded: passengerSystem.boardedThisStop,
+			alighted: passengerSystem.alightedThisStop,
+		});
+
+		const stationId = this.stationIdFor(trainSystem, idx);
+		const slots = this.getSlots(stationId, Math.max(crowd.drawn, 8));
+
+		const room = Math.max(0, MAX_CONCURRENT_WALKERS - crowd.walkers.length);
+
+		if (room === 0) return;
+
+		const boarders = Math.min(newBoarders, room);
+		const alighters = Math.min(newAlighters, Math.max(0, room - boarders));
+
+		for (let i = 0; i < boarders; i++) {
+			// Boarders leave from the back of the standing crowd, so the people
+			// who were drawn nearest the edge stay put and the platform thins
+			// from behind — which is what it looks like in life.
+			const slot = slots[(crowd.drawn + i) % slots.length];
+
+			crowd.walkers.push({
+				slot,
+				phase: 0,
+				speed: WALK_SPEED * (0.85 + ((i * 37) % 30) / 100),
+				kind: 'board',
+				fromX: slot.x,
+				fromZ: slot.z,
+				toX: slot.x + ((i * 53) % 7) - 3,
+				toZ: DOOR_EDGE_Z,
+			});
+		}
+
+		for (let i = 0; i < alighters; i++) {
+			const slot = slots[(crowd.drawn + boarders + i) % slots.length];
+
+			crowd.walkers.push({
+				slot,
+				phase: 0,
+				speed: WALK_SPEED * (0.85 + ((i * 41) % 30) / 100),
+				kind: 'alight',
+				fromX: slot.x + ((i * 29) % 7) - 3,
+				fromZ: DOOR_EDGE_Z,
+				toX: slot.x + ((i * 17) % 9) - 4,
+				toZ: ALIGHT_DEPTH,
+			});
+		}
+	}
+
+	private stationIdFor(trainSystem: TrainSystem, stationIdx: number): string {
+		const ls = trainSystem.getCurrentLine();
+
+		return ls?.parsed.stations[stationIdx]?.id ?? `idx-${stationIdx}`;
 	}
 
 	/** Load (or rebuild) the figure variant buffers from the configured models. */
@@ -341,13 +502,16 @@ export default class PassengerRenderingSystem extends System {
 				}
 			}
 
+			// Survives the rebuild: these people are mid-stride.
+			const carried = existing?.walkers ?? [];
+
 			if (existing) {
 				this.removeCrowd(existing);
 				this.crowds.delete(idx);
 			}
-			if (want <= 0) continue;
+			if (want <= 0 && carried.length === 0) continue;
 
-			const crowd = this.buildCrowd(ls, idx, want, this.animClock, wantDetail);
+			const crowd = this.buildCrowd(ls, idx, want, this.animClock, wantDetail, undefined, carried);
 			if (crowd) this.crowds.set(idx, crowd);
 		}
 
@@ -384,15 +548,50 @@ export default class PassengerRenderingSystem extends System {
 		 * the animation re-bake, where only vertex positions change.
 		 */
 		reuse?: StationCrowd,
+		/**
+		 * Walkers to carry into the new crowd.
+		 *
+		 * Adding or finishing a walker CHANGES the vertex count, which is
+		 * precisely the case that falls through to a full rebuild — so reading
+		 * them from `reuse` alone would drop every walker at the moment one
+		 * set off, and boarding would go back to people vanishing where they
+		 * stood.
+		 */
+		carryWalkers?: CrowdWalker[],
 	): StationCrowd | null {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem || this.variants.length === 0) return null;
+		if (count <= 0 && (carryWalkers?.length ?? reuse?.walkers.length ?? 0) === 0) return null;
 
 		const place = this.stationWorldPos(ls, stationIdx);
 		if (!place) return null;
 
 		const stationId = ls.parsed.stations[stationIdx]?.id ?? `idx-${stationIdx}`;
 		const slots = this.getSlots(stationId, count);
+
+		// One list of "who to draw and where": the standing crowd at its slots,
+		// then anyone mid-walk at their interpolated position. Walkers are real
+		// figures, not a separate effect, so they shade and ground identically.
+		const walkers = carryWalkers ?? reuse?.walkers ?? [];
+		const placements: {slot: CrowdSlot; x: number; z: number; yaw: number}[] = [];
+
+		for (let i = 0; i < count; i++) {
+			placements.push({slot: slots[i], x: slots[i].x, z: slots[i].z, yaw: slots[i].yaw});
+		}
+
+		for (const walker of walkers) {
+			// Ease the ends so a walker starts and stops rather than snapping
+			// into motion at full pace.
+			const p = Math.min(1, Math.max(0, walker.phase));
+			const eased = p * p * (3 - 2 * p);
+			const wx = walker.fromX + (walker.toX - walker.fromX) * eased;
+			const wz = walker.fromZ + (walker.toZ - walker.fromZ) * eased;
+
+			// Face the direction of travel.
+			const yaw = Math.atan2(walker.toX - walker.fromX, walker.toZ - walker.fromZ);
+
+			placements.push({slot: walker.slot, x: wx, z: wz, yaw});
+		}
 		const baseHeight = this.deckHeight(stationIdx, place.x, place.z);
 		const grid = this.deckGrid(stationIdx, place.x, place.z);
 
@@ -401,8 +600,8 @@ export default class PassengerRenderingSystem extends System {
 
 		let totalVerts = 0;
 		let totalIndices = 0;
-		for (let i = 0; i < count; i++) {
-			const v = this.figureFor(slots[i].variant, animTime, slots[i].x + slots[i].z, detailed);
+		for (const placement of placements) {
+			const v = this.figureFor(placement.slot.variant, animTime, placement.x + placement.z, detailed);
 			totalVerts += v.position.length / 3;
 			totalIndices += v.indices.length;
 		}
@@ -415,9 +614,10 @@ export default class PassengerRenderingSystem extends System {
 		let vOff = 0;
 		let iOff = 0;
 
-		for (let i = 0; i < count; i++) {
-			const slot = slots[i];
-			const v = this.figureFor(slot.variant, animTime, slot.x + slot.z, detailed);
+		for (let i = 0; i < placements.length; i++) {
+			const placement = placements[i];
+			const slot = placement.slot;
+			const v = this.figureFor(slot.variant, animTime, placement.x + placement.z, detailed);
 			const vCount = v.position.length / 3;
 
 			// Idle life: everyone shifts weight and turns a little, out of phase
@@ -433,13 +633,13 @@ export default class PassengerRenderingSystem extends System {
 				-MAX_FOOT_DROP,
 				this.deckAt(
 					grid,
-					slot.x * sinH + slot.z * cosH,
-					slot.x * cosH - slot.z * sinH,
+					placement.x * sinH + placement.z * cosH,
+					placement.x * cosH - placement.z * sinH,
 					baseHeight,
 				) - baseHeight,
 			);
 
-			const phase = animTime * 1.7 + slot.x * 0.7 + slot.z * 1.3;
+			const phase = animTime * 1.7 + placement.x * 0.7 + placement.z * 1.3;
 			const bob = Math.sin(phase) * 0.04;
 			const sway = Math.sin(phase * 0.5) * 0.25;
 
@@ -447,7 +647,7 @@ export default class PassengerRenderingSystem extends System {
 			// platform-local space, so people turn to watch for the train with
 			// only a little scatter — a platform of people facing random
 			// directions reads as a bus queue that lost its bus.
-			const fy = Math.PI + slot.yaw + sway;
+			const fy = Math.PI + placement.yaw + sway;
 			const cosY = Math.cos(fy), sinY = Math.sin(fy);
 
 			for (let k = 0; k < vCount; k++) {
@@ -459,8 +659,8 @@ export default class PassengerRenderingSystem extends System {
 				const yx = px * cosY + pz * sinY;
 				const yz = -px * sinY + pz * cosY;
 
-				const lx = yx + slot.x;
-				const lz = yz + slot.z;
+				const lx = yx + placement.x;
+				const lz = yz + placement.z;
 
 				// Local to the platform centre — the mesh transform carries the
 				// world position (same float32 reason as the stations).
@@ -513,7 +713,7 @@ export default class PassengerRenderingSystem extends System {
 		mesh.updateMatrix();
 		sceneSystem.objects.wrapper.add(mesh);
 
-		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey, animTime, detailed};
+		return {stationIdx, mesh, drawn: count, variantKey: this.variantKey, animTime, detailed, walkers};
 	}
 
 	/**

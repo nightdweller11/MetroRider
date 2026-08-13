@@ -15,6 +15,12 @@ export default class PassengerSystem extends System {
 	private boundLineKey = '';
 	private lastDoorsOpen = false;
 	/** Station whose doors we are currently working, -1 when closed. */
+	/** Station whose doors are open, or -1. Read by the crowd renderer so
+	 *  boarding can be shown as people walking rather than a falling number. */
+	public get activeStation(): number {
+		return this.activeStationIdx;
+	}
+
 	private activeStationIdx = -1;
 	/** Station we were last stopped at, to detect a roll-past without doors. */
 	private lastNearIdx = -1;
