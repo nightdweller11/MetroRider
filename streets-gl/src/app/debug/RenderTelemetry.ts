@@ -40,6 +40,8 @@ export interface TelemetryCounters {
 	bufferUploadBytes: number;
 	drawCalls: number;
 	frames: number;
+	/** A texture-array layer rewritten with different dimensions than before. */
+	layerReassignments: number;
 }
 
 export interface TelemetrySample extends TelemetryCounters {
@@ -65,8 +67,16 @@ const counters: TelemetryCounters = {
 	framebuffersLive: 0, programsLive: 0,
 	textureUploads: 0, textureUploadBytes: 0,
 	bufferUploads: 0, bufferUploadBytes: 0,
-	drawCalls: 0, frames: 0,
+	drawCalls: 0, frames: 0, layerReassignments: 0,
 };
+
+/** Per texture-array layer: what was written there and how often. */
+const layerWrites = new Map<string, {
+	signature: string; writes: number; unpackAlignment: number; shearRisk: boolean;
+}>();
+let currentUnpackAlignment = 4;
+let unpackAlignmentChanges = 0;
+let unpackFlipYChanges = 0;
 
 const samples: TelemetrySample[] = [];
 
@@ -168,12 +178,61 @@ function instrument(gl: GlLike): void {
 	const countUpload = (args: unknown[]): void => {
 		counters.textureUploads++;
 		counters.textureUploadBytes += byteLengthOf(args[args.length - 1]);
+		// Attributed separately from texture CREATION: the symptom reported was
+		// textures changing on structures as the camera moves, which is a
+		// re-upload onto an existing texture, not a new one.
+		attribute('texUpload');
 	};
 	wrap(gl, 'texImage2D', countUpload);
 	wrap(gl, 'texSubImage2D', countUpload);
 	wrap(gl, 'texImage3D', countUpload);
-	wrap(gl, 'texSubImage3D', countUpload);
 	wrap(gl, 'compressedTexImage2D', countUpload);
+
+	/**
+	 * Texture ARRAY writes, tracked per layer.
+	 *
+	 * A building atlas is a texture array with a fixed number of layers, handed
+	 * out to tiles as they stream in. Two symptoms point straight at this:
+	 * "the texture changes every time" (a layer reassigned while a tile still
+	 * samples it) and "applied diagonally" (a write whose row stride does not
+	 * match the layer's width shears the image). Counting writes per layer, and
+	 * noting when a layer is REWRITTEN with different dimensions, makes both
+	 * visible instead of a matter of opinion.
+	 */
+	wrap(gl, 'texSubImage3D', (args) => {
+		countUpload(args);
+		const zOffset = typeof args[4] === 'number' ? (args[4] as number) : -1;
+		const width = typeof args[5] === 'number' ? (args[5] as number) : -1;
+		const height = typeof args[6] === 'number' ? (args[6] as number) : -1;
+		const key = String(zOffset);
+		const previous = layerWrites.get(key);
+		const signature = `${width}x${height}`;
+
+		if (previous && previous.signature !== signature) {
+			counters.layerReassignments++;
+		}
+		layerWrites.set(key, {
+			signature,
+			writes: (previous?.writes ?? 0) + 1,
+			unpackAlignment: currentUnpackAlignment,
+			shearRisk: width > 0 && (width * 4) % currentUnpackAlignment !== 0,
+		});
+	});
+
+	// Row stride comes from UNPACK_ALIGNMENT; a mismatch is exactly what makes
+	// an uploaded image look sheared. Track it so the shear question is
+	// answerable rather than arguable.
+	wrap(gl, 'pixelStorei', (args) => {
+		const pname = args[0] as number;
+		const value = args[1] as number;
+		if (pname === 0x0CF5) { // UNPACK_ALIGNMENT
+			currentUnpackAlignment = value;
+			unpackAlignmentChanges++;
+		}
+		if (pname === 0x9240) { // UNPACK_FLIP_Y_WEBGL
+			unpackFlipYChanges++;
+		}
+	});
 
 	wrap(gl, 'bufferData', (args) => {
 		counters.bufferUploads++;
@@ -284,6 +343,10 @@ function installApi(): void {
 			attribution.clear();
 			meshRebuilds.clear();
 			meshRebuildFrames = 0;
+			layerWrites.clear();
+			counters.layerReassignments = 0;
+			unpackAlignmentChanges = 0;
+			unpackFlipYChanges = 0;
 		},
 		/** Which classes rebuild their mesh, and how often per frame. */
 		meshChurn: (): {className: string; total: number; perFrame: number}[] =>
@@ -331,6 +394,26 @@ function installApi(): void {
 				.sort((a, b) => b[1] - a[1])
 				.slice(0, limit)
 				.map(([caller, approxCount]) => ({caller, approxCount})),
+		/**
+		 * The texture-array picture: which layers are being written, how often,
+		 * whether any layer changed shape (a reassignment a tile may not know
+		 * about), and whether any write has a row stride that would shear it.
+		 */
+		textures: (): Record<string, unknown> => {
+			const layers = [...layerWrites.entries()]
+				.map(([layer, v]) => ({layer: Number(layer), ...v}))
+				.sort((a, b) => b.writes - a.writes);
+			return {
+				distinctLayers: layers.length,
+				layerReassignments: counters.layerReassignments,
+				shearRiskLayers: layers.filter(l => l.shearRisk).length,
+				unpackAlignment: currentUnpackAlignment,
+				unpackAlignmentChanges,
+				unpackFlipYChanges,
+				rewrittenLayers: layers.filter(l => l.writes > 1).length,
+				busiestLayers: layers.slice(0, 8),
+			};
+		},
 		/** How much of the sampled work the top `limit` rows actually explain. */
 		blameCoverage: (limit = 12): {rows: number; distinctCallers: number; coveredPct: number} => {
 			const values = [...attribution.values()].sort((a, b) => b - a);
