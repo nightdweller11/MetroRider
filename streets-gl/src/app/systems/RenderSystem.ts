@@ -34,6 +34,7 @@ import CursorStyleSystem from "~/app/systems/CursorStyleSystem";
 import TrainSystem from "~/app/game/TrainSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 import GpuFrameTimer from '~/app/systems/GpuFrameTimer';
+import {setTelemetryGpuTimer} from '~/app/debug/RenderTelemetry';
 
 export default class RenderSystem extends System {
 	private renderer: AbstractRenderer;
@@ -73,6 +74,9 @@ export default class RenderSystem extends System {
 		}
 
 		this.gpuFrameTimer = new GpuFrameTimer(gl);
+		// The debug telemetry reads this one rather than opening a second
+		// TIME_ELAPSED query, which WebGL does not allow concurrently.
+		setTelemetryGpuTimer(this.gpuFrameTimer);
 
 		canvas.addEventListener('webglcontextlost', (e) => {
 			e.preventDefault();

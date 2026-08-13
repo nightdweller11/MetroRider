@@ -102,6 +102,23 @@ export default class GpuFrameTimer {
 		return this.samples.length;
 	}
 
+	/** Distribution over the recent window, for the debug telemetry report. */
+	public percentiles(): {samples: number; medianMs: number; p95Ms: number; minMs: number; maxMs: number} | null {
+		if (this.samples.length === 0) return null;
+
+		const sorted = this.samples.slice().sort((a, b) => a - b);
+		const at = (q: number): number =>
+			+sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))].toFixed(3);
+
+		return {
+			samples: sorted.length,
+			medianMs: at(0.5),
+			p95Ms: at(0.95),
+			minMs: +sorted[0].toFixed(3),
+			maxMs: +sorted[sorted.length - 1].toFixed(3),
+		};
+	}
+
 	/** Forget history — call after a quality change so the old cost is not averaged in. */
 	public reset(): void {
 		this.samples.length = 0;

@@ -287,20 +287,9 @@ function instrument(gl: GlLike): void {
 	});
 
 	for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) {
-		wrap(gl, name, () => { counters.drawCalls++; noteRenderedFrame(); openGpuQueryForFrame(); });
+		wrap(gl, name, () => { counters.drawCalls++; noteRenderedFrame(); });
 	}
 
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const anyGl = gl as any;
-
-	if (typeof anyGl.getExtension === 'function' && typeof anyGl.createQuery === 'function') {
-		const ext = anyGl.getExtension('EXT_disjoint_timer_query_webgl2');
-
-		if (ext) {
-			timerExt = ext;
-			timerGl = anyGl;
-		}
-	}
 }
 
 let lastSample: TelemetrySample | null = null;
@@ -321,53 +310,27 @@ let framesAtLastSample = 0;
  * next, bracketing exactly one frame of submitted work. Results are polled
  * without blocking, and disjoint results are discarded as the spec requires.
  */
-const gpuTimings: number[] = [];
-let timerExt: {TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number} | null = null;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let timerGl: any = null;
-let openQuery: WebGLQuery | null = null;
-const pendingQueries: WebGLQuery[] = [];
-
-function pollGpuQueries(): void {
-	if (!timerGl || !timerExt) return;
-
-	const disjoint = timerGl.getParameter(timerExt.GPU_DISJOINT_EXT);
-
-	for (let i = pendingQueries.length - 1; i >= 0; i--) {
-		const query = pendingQueries[i];
-
-		if (!timerGl.getQueryParameter(query, 0x8867 /* QUERY_RESULT_AVAILABLE */)) continue;
-
-		if (!disjoint) {
-			const ns = timerGl.getQueryParameter(query, 0x8866 /* QUERY_RESULT */);
-
-			gpuTimings.push(ns / 1e6);
-			if (gpuTimings.length > 4000) gpuTimings.shift();
-		}
-
-		timerGl.deleteQuery(query);
-		pendingQueries.splice(i, 1);
-	}
-}
-
 /**
- * Open a query on the FIRST draw of a frame and close it as soon as that
- * frame's synchronous render has finished.
+ * The GPU timer is owned by RenderSystem (`GpuFrameTimer`), which runs it
+ * always-on for the auto-quality governor. The telemetry only READS it.
  *
- * The first attempt opened at one animation frame and closed at the next,
- * which brackets the render AND the idle gap that follows it. Validated by
- * varying `renderScale`: quartering the pixel count left the number flat at
- * ~13 ms, i.e. it was reporting the vsync period, not the render. Any verdict
- * from it would have been noise.
- *
- * The engine renders synchronously inside its rAF callback, so a microtask
- * queued from the first draw call runs the moment that callback's JS stack
- * unwinds — after every draw, before the browser idles. That brackets the
- * command stream and nothing else.
+ * It used to run a second timer of its own, which is invalid: WebGL allows one
+ * active TIME_ELAPSED query per target, so the two owners fought and the
+ * console filled with `beginQuery: a query is already active` /
+ * `endQuery: target query is not active` — 265 warnings in a 14-second run, and
+ * whichever query lost the race produced no data. One owner, one query.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let gpuTimer: {percentiles: () => any; supported: boolean} | null = null;
+
 /**
- * Mark that this animation frame produced a render. Reset in a microtask, so
- * the next frame's first draw counts again.
+ * Mark that this animation frame produced a render. Reset on a microtask so the
+ * next frame's first draw counts again.
+ *
+ * A frame limiter skips the render on some ticks, so counting animation-frame
+ * callbacks counts the DISPLAY refresh rate: on a 120Hz panel capped at 60 the
+ * telemetry reported 120 frames a second and every per-frame figure came out
+ * diluted by two.
  */
 let frameHasDrawn = false;
 
@@ -379,33 +342,14 @@ function noteRenderedFrame(): void {
 	queueMicrotask(() => { frameHasDrawn = false; });
 }
 
-function openGpuQueryForFrame(): void {
-	if (!timerGl || !timerExt || openQuery !== null) return;
-
-	pollGpuQueries();
-
-	// Keep the in-flight set bounded if the driver stops answering.
-	if (pendingQueries.length > 240) return;
-
-	const query = timerGl.createQuery();
-
-	if (!query) return;
-
-	timerGl.beginQuery(timerExt.TIME_ELAPSED_EXT, query);
-	openQuery = query;
-
-	queueMicrotask(() => {
-		if (openQuery === null) return;
-
-		timerGl.endQuery(timerExt.TIME_ELAPSED_EXT);
-		pendingQueries.push(openQuery);
-		openQuery = null;
-	});
+export function setTelemetryGpuTimer(timer: {percentiles: () => unknown; supported: boolean}): void {
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	gpuTimer = timer as any;
 }
 
 function startSampling(): void {
 	const countFrame = (): void => {
-		pollGpuQueries();
+
 		requestAnimationFrame(countFrame);
 	};
 	requestAnimationFrame(countFrame);
@@ -516,7 +460,6 @@ function installApi(): void {
 			samples.length = 0;
 			attribution.clear();
 			kindCounters.clear();
-			gpuTimings.length = 0;
 			// kindsSeen deliberately survives reset: it describes what this
 			// build can record, not what happened in the last window, and
 			// blameKind must not start rejecting valid kinds after a reset.
@@ -619,27 +562,11 @@ function installApi(): void {
 		 * cap, not the renderer.
 		 */
 		gpuFrameMs: (): Record<string, unknown> => {
-			if (!timerExt) {
+			if (!gpuTimer || !gpuTimer.supported) {
 				return {supported: false, reason: 'EXT_disjoint_timer_query_webgl2 unavailable', samples: 0};
 			}
 
-			const sorted = [...gpuTimings].sort((a, b) => a - b);
-
-			if (sorted.length === 0) {
-				return {supported: true, samples: 0, note: 'no completed queries yet'};
-			}
-
-			const at = (q: number): number =>
-				+sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))].toFixed(3);
-
-			return {
-				supported: true,
-				samples: sorted.length,
-				medianMs: at(0.5),
-				p95Ms: at(0.95),
-				minMs: +sorted[0].toFixed(3),
-				maxMs: +sorted[sorted.length - 1].toFixed(3),
-			};
+			return gpuTimer.percentiles() ?? {supported: true, samples: 0, note: 'no completed queries yet'};
 		},
 		/** What `blameKind` will accept, and how often each kind is sampled. */
 		kinds: (): {kind: string; observed: number; sampledOneIn: number}[] =>
