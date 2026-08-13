@@ -39,6 +39,14 @@ export interface TelemetryCounters {
 	bufferUploads: number;
 	bufferUploadBytes: number;
 	drawCalls: number;
+	/**
+	 * Frames in which the engine actually RENDERED.
+	 *
+	 * Not animation-frame callbacks. A frame limiter works by skipping the
+	 * render on some ticks, so counting rAF callbacks counts the display's
+	 * refresh rate instead: at a 60 limit on a 120Hz panel it reported 120
+	 * "frames" a second, and every per-frame figure came out diluted by two.
+	 */
 	frames: number;
 	/** A texture-array layer rewritten with different dimensions than before. */
 	layerReassignments: number;
@@ -279,7 +287,7 @@ function instrument(gl: GlLike): void {
 	});
 
 	for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) {
-		wrap(gl, name, () => { counters.drawCalls++; openGpuQueryForFrame(); });
+		wrap(gl, name, () => { counters.drawCalls++; noteRenderedFrame(); openGpuQueryForFrame(); });
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -357,6 +365,20 @@ function pollGpuQueries(): void {
  * unwinds — after every draw, before the browser idles. That brackets the
  * command stream and nothing else.
  */
+/**
+ * Mark that this animation frame produced a render. Reset in a microtask, so
+ * the next frame's first draw counts again.
+ */
+let frameHasDrawn = false;
+
+function noteRenderedFrame(): void {
+	if (frameHasDrawn) return;
+
+	frameHasDrawn = true;
+	counters.frames++;
+	queueMicrotask(() => { frameHasDrawn = false; });
+}
+
 function openGpuQueryForFrame(): void {
 	if (!timerGl || !timerExt || openQuery !== null) return;
 
@@ -383,7 +405,6 @@ function openGpuQueryForFrame(): void {
 
 function startSampling(): void {
 	const countFrame = (): void => {
-		counters.frames++;
 		pollGpuQueries();
 		requestAnimationFrame(countFrame);
 	};
