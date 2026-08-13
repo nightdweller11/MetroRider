@@ -40,6 +40,18 @@ export default class TrainMaterialContainer extends MaterialContainer {
 					type: RendererTypes.UniformType.Float1,
 					value: new Float32Array(1)
 				},
+				{
+					name: 'hasTexture',
+					block: 'MainBlock',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array(1)
+				},
+				{
+					name: 'tDiffuse',
+					block: null,
+					type: RendererTypes.UniformType.Texture2D,
+					value: null
+				},
 			],
 			primitive: {
 				frontFace: RendererTypes.FrontFace.CCW,

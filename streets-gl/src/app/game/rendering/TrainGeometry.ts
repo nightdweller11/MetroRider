@@ -29,6 +29,10 @@ export interface GeometryBuffers {
 	color: Float32Array;
 	indices: Uint32Array;
 	animationData?: AnimationData;
+	/** Texture coordinates, when the source model carries a base-colour map. */
+	uv?: Float32Array;
+	/** The decoded base-colour map itself, uploaded once per mesh. */
+	baseColorImage?: {data: Uint8ClampedArray; width: number; height: number} | null;
 }
 
 function hexToRGB(hex: string): [number, number, number] {

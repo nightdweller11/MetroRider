@@ -224,7 +224,9 @@ export default class TrainRenderingSystem extends System {
 				normal: new Float32Array(buf.normal),
 				color: new Float32Array(buf.color),
 				indices: new Uint32Array(buf.indices),
+				uv: buf.uv ? new Float32Array(buf.uv) : undefined,
 			}, hasAnim);
+			mesh.texture = buf.baseColorImage ?? null;
 			sceneSystem.objects.wrapper.add(mesh);
 			this.carMeshes.push(mesh);
 			carLengths.push(this.getCarLength(buf));
@@ -393,6 +395,11 @@ export default class TrainRenderingSystem extends System {
 		const allPositions: number[] = [];
 		const allNormals: number[] = [];
 		const allColors: number[] = [];
+		// Kept alongside the baked vertex colours: the loader still bakes, so a
+		// model whose map cannot be uploaded keeps exactly its old appearance,
+		// but a real map now also reaches the GPU and is sampled per fragment.
+		const allUvs: number[] = [];
+		let baseColorImage: {data: Uint8ClampedArray; width: number; height: number} | null = null;
 		const allIndices: number[] = [];
 		const animatedNodesInfo: AnimatedNodeInfo[] = [];
 
@@ -491,6 +498,13 @@ export default class TrainRenderingSystem extends System {
 								if (uvData) {
 									texColors = [];
 									this.sampleTextureColors(uvData, pixels, vertCount, texColors);
+
+									// Keep the coordinates and the image itself.
+									const stride = uvData.length / vertCount;
+									for (let v = 0; v < vertCount; v++) {
+										allUvs.push(uvData[v * stride], uvData[v * stride + 1]);
+									}
+									if (!baseColorImage) baseColorImage = pixels;
 								}
 							}
 						}
@@ -512,6 +526,10 @@ export default class TrainRenderingSystem extends System {
 						}
 						colorsApplied = true;
 					}
+				}
+
+				while (allUvs.length < (allPositions.length / 3) * 2) {
+					allUvs.push(0, 0);
 				}
 
 				if (!colorsApplied) {
@@ -611,11 +629,13 @@ export default class TrainRenderingSystem extends System {
 		}
 
 		return {
+			uv: new Float32Array(allUvs),
 			position: new Float32Array(allPositions),
 			normal: new Float32Array(allNormals),
 			color: new Float32Array(allColors),
 			indices: new Uint32Array(allIndices),
 			animationData,
+			baseColorImage,
 		};
 	}
 

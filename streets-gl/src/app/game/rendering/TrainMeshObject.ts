@@ -3,12 +3,22 @@ import AbstractMesh from '~/lib/renderer/abstract-renderer/AbstractMesh';
 import AbstractRenderer from '~/lib/renderer/abstract-renderer/AbstractRenderer';
 import {RendererTypes} from '~/lib/renderer/RendererTypes';
 import Vec3 from '~/lib/math/Vec3';
+import AbstractTexture2D from '~/lib/renderer/abstract-renderer/AbstractTexture2D';
 
 interface TrainMeshBuffers {
 	position: Float32Array;
 	normal: Float32Array;
 	color: Float32Array;
 	indices: Uint32Array;
+	/** Texture coordinates, when the source model carries a base-colour map. */
+	uv?: Float32Array;
+}
+
+/** Decoded base-colour image from the source GLB. */
+export interface TrainMeshTexture {
+	data: Uint8ClampedArray;
+	width: number;
+	height: number;
 }
 
 export default class TrainMeshObject extends RenderableObject3D {
@@ -35,6 +45,16 @@ export default class TrainMeshObject extends RenderableObject3D {
 	 */
 	public readonly matrixWorldPrevFrame: Float64Array = new Float64Array(16);
 	public hasPrevFrame: boolean = false;
+
+	/**
+	 * The model's own base-colour map.
+	 *
+	 * The GLB loader used to sample this down to one colour per vertex, which
+	 * at this vertex density smears a livery stripe or a window into a wash.
+	 * Kept as an image and uploaded once, the material samples it per fragment.
+	 */
+	public texture: TrainMeshTexture | null = null;
+	public gpuTexture: AbstractTexture2D | null = null;
 
 	public storePrevFrameMatrix(): void {
 		this.matrixWorldPrevFrame.set(this.matrixWorld.values);
@@ -115,6 +135,9 @@ export default class TrainMeshObject extends RenderableObject3D {
 			this.mesh.delete();
 			this.mesh = null;
 		}
+
+		this.gpuTexture?.delete();
+		this.gpuTexture = null;
 	}
 
 	public updatePositionAndNormalBuffers(position: Float32Array, normal: Float32Array): void {
@@ -136,10 +159,45 @@ export default class TrainMeshObject extends RenderableObject3D {
 			? RendererTypes.BufferUsage.DynamicDraw
 			: RendererTypes.BufferUsage.StaticDraw;
 
+		// The shader always declares `uv`, so the attribute always exists —
+		// a mesh without a map gets zeroes and takes the vertex-colour branch.
+		const vertexCount = this.buffers.position.length / 3;
+		const uv = this.buffers.uv && this.buffers.uv.length >= vertexCount * 2
+			? this.buffers.uv
+			: new Float32Array(vertexCount * 2);
+
+		if (this.texture && !this.gpuTexture) {
+			this.gpuTexture = renderer.createTexture2D({
+				width: this.texture.width,
+				height: this.texture.height,
+				data: new Uint8Array(this.texture.data.buffer.slice(0)),
+				format: RendererTypes.TextureFormat.RGBA8Unorm,
+				minFilter: RendererTypes.MinFilter.LinearMipmapLinear,
+				magFilter: RendererTypes.MagFilter.Linear,
+				wrap: RendererTypes.TextureWrap.Repeat,
+				// NOT flipped. The image arrives as canvas pixels (first row =
+				// top) and the loader's existing vertex-colour baker indexes it
+				// as `row = v * height`, i.e. v grows downward. Uploading
+				// unflipped makes the GPU sampler agree with that convention;
+				// flipping sent it to the wrong rows and the rear cars came out
+				// black.
+				flipY: false,
+				mipmaps: true,
+			});
+		}
+
 		this.mesh = renderer.createMesh({
 			indexed: true,
 			indices: this.buffers.indices,
 			attributes: [
+				renderer.createAttribute({
+					name: 'uv',
+					size: 2,
+					type: RendererTypes.AttributeType.Float32,
+					format: RendererTypes.AttributeFormat.Float,
+					normalized: false,
+					buffer: renderer.createAttributeBuffer({data: uv, usage}),
+				}),
 				renderer.createAttribute({
 					name: 'position',
 					size: 3,

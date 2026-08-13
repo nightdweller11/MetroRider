@@ -685,7 +685,18 @@ export default class GBufferPass extends Pass<{
 			this.trainMaterial.getUniform('modelViewMatrixPrev', 'MainBlock').value = this._tmpMat4D;
 			// Only the cars move; track and station meshes are static world geometry.
 			(this.trainMaterial.getUniform('objectMotion', 'MainBlock').value as Float32Array)[0] = isCar ? motionFactor : 0;
+
+			// The model's own base-colour map, when it has one. Bound per mesh
+			// because each carriage, station and sign carries its own image.
+			const meshTexture = (meshObj as {gpuTexture?: unknown}).gpuTexture ?? null;
+
+			(this.trainMaterial.getUniform('hasTexture', 'MainBlock').value as Float32Array)[0] = meshTexture ? 1 : 0;
 			this.trainMaterial.updateUniformBlock('MainBlock');
+
+			if (meshTexture) {
+				this.trainMaterial.getUniform('tDiffuse').value = meshTexture as never;
+				this.trainMaterial.updateUniform('tDiffuse');
+			}
 
 			meshObj.draw();
 
