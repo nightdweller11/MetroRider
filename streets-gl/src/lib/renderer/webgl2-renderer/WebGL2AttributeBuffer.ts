@@ -63,9 +63,39 @@ export default class WebGL2AttributeBuffer implements AbstractAttributeBuffer {
 		this.renderer.gl.bindBuffer(WebGL2Constants.ARRAY_BUFFER, null);
 	}
 
+	/**
+	 * How many attributes point at this buffer.
+	 *
+	 * One buffer can back many meshes — that is the whole point of the tile
+	 * mega-buffers — so an attribute cannot simply free the buffer it holds.
+	 * It also must not leave it allocated forever, which is what happened:
+	 * `WebGL2Attribute.delete()` was an empty stub, so every per-mesh
+	 * attribute buffer ever created stayed on the GPU. Measured while parked
+	 * at a station, that was 357 orphaned buffers every 25 seconds.
+	 */
+	private refCount: number = 0;
+
+	public retain(): void {
+		this.refCount++;
+	}
+
+	/** Drop one reference; free once nothing points here any more. */
+	public release(): void {
+		this.refCount--;
+
+		if (this.refCount <= 0) {
+			this.delete();
+		}
+	}
+
 	public delete(): void {
+		if (this.buffer === null) {
+			return;
+		}
+
 		this.renderer.gl.deleteBuffer(this.buffer);
 		this.buffer = null;
+		this.refCount = 0;
 	}
 
 	public static convertUsageToWebGLConstant(usage: RendererTypes.BufferUsage): number {

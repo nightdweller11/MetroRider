@@ -46,6 +46,7 @@ export default class WebGL2Attribute implements AbstractAttribute {
 		this.offset = offset;
 		this.stride = stride;
 		this.buffer = buffer as WebGL2AttributeBuffer;
+		this.buffer?.retain();
 	}
 
 	public locate(program: WebGL2Program): void {
@@ -74,8 +75,14 @@ export default class WebGL2Attribute implements AbstractAttribute {
 		}
 	}
 
+	/**
+	 * This was an empty stub, so `WebGL2Mesh.delete()` freed the VAO and the
+	 * index buffer and silently leaked every vertex buffer. Releasing the
+	 * reference frees the buffer only when it is the last one holding it, so
+	 * meshes sharing a mega-buffer are unaffected.
+	 */
 	public delete(): void {
-
+		this.buffer?.release();
 	}
 
 	public static convertTypeToWebGLConstant(type: RendererTypes.AttributeType): number {

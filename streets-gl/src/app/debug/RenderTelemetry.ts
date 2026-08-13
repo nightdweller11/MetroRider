@@ -89,13 +89,41 @@ const samples: TelemetrySample[] = [];
  * timing. Sampling keeps it cheap — one in twenty is more than enough to rank
  * callers.
  */
-const ATTRIBUTION_SAMPLE_RATE = 20;
+/**
+ * Sampling rate PER KIND, not across all kinds.
+ *
+ * This used to be one global counter sampling one call in twenty of the whole
+ * stream. That silently destroys exactly the signal this is for: `bufferSubData`
+ * fires ~11,500 times a second and `createBuffer` around ten, so creations are
+ * ~0.1% of events and almost every sampling slot went to a uniform upload. A
+ * leak — the rare event — was the one guaranteed to be invisible. Resource
+ * creations are rare and are the leak signal, so every one is captured; the
+ * per-draw traffic stays sampled because it is ranked, not hunted.
+ */
+const KIND_SAMPLE_RATES: Record<string, number> = {
+	buffer: 1,
+	texture: 1,
+	vao: 1,
+	bufferData: 20,
+	bufferSubData: 20,
+	texUpload: 20,
+};
+const DEFAULT_SAMPLE_RATE = 20;
+
 const attribution = new Map<string, number>();
-let creationCounter = 0;
+const kindCounters = new Map<string, number>();
+/** Every kind seen this run, so an unknown query can be answered honestly. */
+const kindsSeen = new Set<string>();
 
 function attribute(kind: string): void {
-	creationCounter++;
-	if (creationCounter % ATTRIBUTION_SAMPLE_RATE !== 0) return;
+	kindsSeen.add(kind);
+
+	const rate = KIND_SAMPLE_RATES[kind] ?? DEFAULT_SAMPLE_RATE;
+	const seen = (kindCounters.get(kind) ?? 0) + 1;
+
+	kindCounters.set(kind, seen);
+
+	if (rate > 1 && seen % rate !== 0) return;
 
 	const stack = new Error().stack ?? '';
 	const frames = stack.split('\n').slice(2, 14)
@@ -103,7 +131,7 @@ function attribute(kind: string): void {
 		.filter(name => name && !name.includes('RenderTelemetry') && !name.includes('patched') && !/^https?:/.test(name));
 
 	const key = `${kind} ← ${frames.slice(0, 5).join(' ← ') || 'unknown'}`;
-	attribution.set(key, (attribution.get(key) ?? 0) + ATTRIBUTION_SAMPLE_RATE);
+	attribution.set(key, (attribution.get(key) ?? 0) + rate);
 }
 let phase = 'boot';
 let installed = false;
@@ -370,6 +398,10 @@ function installApi(): void {
 		reset: (): void => {
 			samples.length = 0;
 			attribution.clear();
+			kindCounters.clear();
+			// kindsSeen deliberately survives reset: it describes what this
+			// build can record, not what happened in the last window, and
+			// blameKind must not start rejecting valid kinds after a reset.
 			meshRebuilds.clear();
 			meshRebuildFrames = 0;
 			tileEvents.created = 0;
@@ -438,12 +470,33 @@ function installApi(): void {
 		 * leaks — a `createBuffer` that is never matched by a delete. Filtering
 		 * by kind is what separates "expensive by design" from "wrong".
 		 */
-		blameKind: (kind: string, limit = 10): {caller: string; approxCount: number}[] =>
-			[...attribution.entries()]
+		blameKind: (kind: string, limit = 10): {caller: string; approxCount: number}[] => {
+			// An unknown kind used to return [], which reads identically to
+			// "this work never happened" — and did: `blameKind('createBuffer')`
+			// came back empty for a whole diagnosis round because the kind is
+			// named 'buffer'. That was taken as evidence the buffer growth was
+			// unattributable. Fail loudly instead of answering a question that
+			// was never asked.
+			if (!kindsSeen.has(kind)) {
+				throw new Error(
+					`blameKind: no such kind "${kind}". Kinds recorded this run: ` +
+					`${[...kindsSeen].sort().join(', ') || '(none yet)'}.`
+				);
+			}
+
+			return [...attribution.entries()]
 				.filter(([key]) => key.startsWith(`${kind} ←`))
 				.sort((a, b) => b[1] - a[1])
 				.slice(0, limit)
-				.map(([caller, approxCount]) => ({caller, approxCount})),
+				.map(([caller, approxCount]) => ({caller, approxCount}));
+		},
+		/** What `blameKind` will accept, and how often each kind is sampled. */
+		kinds: (): {kind: string; observed: number; sampledOneIn: number}[] =>
+			[...kindsSeen].sort().map(kind => ({
+				kind,
+				observed: kindCounters.get(kind) ?? 0,
+				sampledOneIn: KIND_SAMPLE_RATES[kind] ?? DEFAULT_SAMPLE_RATE,
+			})),
 		/**
 		 * The texture-array picture: which layers are being written, how often,
 		 * whether any layer changed shape (a reassignment a tile may not know
