@@ -281,14 +281,93 @@ function instrument(gl: GlLike): void {
 	for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) {
 		wrap(gl, name, () => { counters.drawCalls++; });
 	}
+
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const anyGl = gl as any;
+
+	if (typeof anyGl.getExtension === 'function' && typeof anyGl.createQuery === 'function') {
+		const ext = anyGl.getExtension('EXT_disjoint_timer_query_webgl2');
+
+		if (ext) {
+			timerExt = ext;
+			timerGl = anyGl;
+		}
+	}
 }
 
 let lastSample: TelemetrySample | null = null;
 let framesAtLastSample = 0;
 
+/**
+ * GPU time per frame, in milliseconds.
+ *
+ * FRAME RATE IS NOT A THROUGHPUT MEASURE HERE. `requestAnimationFrame` is
+ * vsync-locked, so fps cannot exceed the display refresh however much headroom
+ * the frame has — and with the frame limiter set (a persisted graphics setting)
+ * it is pinned lower still. A "74 → 77 fps" reading was quoted as evidence of a
+ * win on 2026-08-13 when both numbers were sitting at a cap, while the in-game
+ * HUD read 120 at the same moment.
+ *
+ * `EXT_disjoint_timer_query_webgl2` measures what actually matters: how long the
+ * GPU spends on a frame. A query opens at one animation frame and closes at the
+ * next, bracketing exactly one frame of submitted work. Results are polled
+ * without blocking, and disjoint results are discarded as the spec requires.
+ */
+const gpuTimings: number[] = [];
+let timerExt: {TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number} | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let timerGl: any = null;
+let openQuery: WebGLQuery | null = null;
+const pendingQueries: WebGLQuery[] = [];
+
+function pollGpuQueries(): void {
+	if (!timerGl || !timerExt) return;
+
+	const disjoint = timerGl.getParameter(timerExt.GPU_DISJOINT_EXT);
+
+	for (let i = pendingQueries.length - 1; i >= 0; i--) {
+		const query = pendingQueries[i];
+
+		if (!timerGl.getQueryParameter(query, 0x8867 /* QUERY_RESULT_AVAILABLE */)) continue;
+
+		if (!disjoint) {
+			const ns = timerGl.getQueryParameter(query, 0x8866 /* QUERY_RESULT */);
+
+			gpuTimings.push(ns / 1e6);
+			if (gpuTimings.length > 4000) gpuTimings.shift();
+		}
+
+		timerGl.deleteQuery(query);
+		pendingQueries.splice(i, 1);
+	}
+}
+
+function sampleGpuFrame(): void {
+	if (!timerGl || !timerExt) return;
+
+	if (openQuery !== null) {
+		timerGl.endQuery(timerExt.TIME_ELAPSED_EXT);
+		pendingQueries.push(openQuery);
+		openQuery = null;
+	}
+
+	pollGpuQueries();
+
+	// Keep the in-flight set bounded if the driver stops answering.
+	if (pendingQueries.length > 240) return;
+
+	const query = timerGl.createQuery();
+
+	if (!query) return;
+
+	timerGl.beginQuery(timerExt.TIME_ELAPSED_EXT, query);
+	openQuery = query;
+}
+
 function startSampling(): void {
 	const countFrame = (): void => {
 		counters.frames++;
+		sampleGpuFrame();
 		requestAnimationFrame(countFrame);
 	};
 	requestAnimationFrame(countFrame);
@@ -399,6 +478,7 @@ function installApi(): void {
 			samples.length = 0;
 			attribution.clear();
 			kindCounters.clear();
+			gpuTimings.length = 0;
 			// kindsSeen deliberately survives reset: it describes what this
 			// build can record, not what happened in the last window, and
 			// blameKind must not start rejecting valid kinds after a reset.
@@ -489,6 +569,39 @@ function installApi(): void {
 				.sort((a, b) => b[1] - a[1])
 				.slice(0, limit)
 				.map(([caller, approxCount]) => ({caller, approxCount}));
+		},
+		/**
+		 * GPU milliseconds per frame — the metric to judge a render change by.
+		 *
+		 * Median and p95 rather than a mean, because occasional tile-upload
+		 * frames skew an average badly. `supported: false` means the browser
+		 * withheld the timer extension, and there is NO substitute: report the
+		 * work counts and say the GPU cost was not measured. Do not fall back
+		 * to frame rate — under vsync and a frame limiter that measures the
+		 * cap, not the renderer.
+		 */
+		gpuFrameMs: (): Record<string, unknown> => {
+			if (!timerExt) {
+				return {supported: false, reason: 'EXT_disjoint_timer_query_webgl2 unavailable', samples: 0};
+			}
+
+			const sorted = [...gpuTimings].sort((a, b) => a - b);
+
+			if (sorted.length === 0) {
+				return {supported: true, samples: 0, note: 'no completed queries yet'};
+			}
+
+			const at = (q: number): number =>
+				+sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))].toFixed(3);
+
+			return {
+				supported: true,
+				samples: sorted.length,
+				medianMs: at(0.5),
+				p95Ms: at(0.95),
+				minMs: +sorted[0].toFixed(3),
+				maxMs: +sorted[sorted.length - 1].toFixed(3),
+			};
 		},
 		/** What `blameKind` will accept, and how often each kind is sampled. */
 		kinds: (): {kind: string; observed: number; sampledOneIn: number}[] =>

@@ -75,7 +75,28 @@ function assertBuildIsCurrent() {
  * the operator is doing anything else. The existing page is reused and simply
  * parked on a blank page when the probe finishes.
  */
-export async function openGame(page, {url = 'http://localhost:3111/', telemetry = true, viewport = {width: 1280, height: 800}} = {}) {
+/**
+ * Graphics settings a performance run is pinned to.
+ *
+ * `fpsLimit: 'off'` removes the limiter so the frame is not gated by a cap —
+ * but note that removing it does NOT make frame rate a valid throughput metric,
+ * because requestAnimationFrame is still vsync-locked. Judge a render change by
+ * `__telemetry.gpuFrameMs()` and the work counts, never by fps.
+ */
+export const PERF_QUALITY = {
+	fpsLimit: 'off',
+	renderScale: '1',
+	shadows: 'on',
+	ssao: 'on',
+	bloom: 'on',
+};
+
+export async function openGame(page, {
+	url = 'http://localhost:3111/',
+	telemetry = true,
+	viewport = {width: 1280, height: 800},
+	quality = PERF_QUALITY,
+} = {}) {
 	const ctx = page.context();
 	await page.setViewportSize(viewport);
 	const errors = [];
@@ -125,10 +146,32 @@ export async function openGame(page, {url = 'http://localhost:3111/', telemetry 
 			if (v && v.ctx && typeof v.ctx.suspend === 'function') { try { v.ctx.suspend(); } catch {} }
 		}
 		window.__h = handles;
-		handles.settings?.update('fpsLimit', {statusValue: 'off'});
 	});
 
-	return {ctx, page, errors};
+	// Pin the graphics settings the measurement runs under.
+	//
+	// These persist per browser profile, so a probe used to inherit whatever
+	// the operator last selected — including a frame limiter, which silently
+	// makes every frame-rate reading a reading of the limiter. Set them
+	// explicitly and hand them back so the run reports what it measured under.
+	const graphics = await page.evaluate((wanted) => {
+		const settings = window.__h?.settings;
+
+		if (!settings) return null;
+
+		for (const [key, statusValue] of Object.entries(wanted)) {
+			try { settings.update(key, {statusValue}); } catch { /* unknown key on this build */ }
+		}
+
+		const applied = {};
+		for (const key of Object.keys(wanted)) {
+			applied[key] = settings.get?.(key)?.statusValue ?? wanted[key];
+		}
+
+		return applied;
+	}, quality);
+
+	return {ctx, page, errors, graphics};
 }
 
 /**
