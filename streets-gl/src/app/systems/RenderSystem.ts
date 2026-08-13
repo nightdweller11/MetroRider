@@ -33,6 +33,7 @@ import ControlsSystem from "~/app/systems/ControlsSystem";
 import CursorStyleSystem from "~/app/systems/CursorStyleSystem";
 import TrainSystem from "~/app/game/TrainSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
+import GpuFrameTimer from '~/app/systems/GpuFrameTimer';
 
 export default class RenderSystem extends System {
 	private renderer: AbstractRenderer;
@@ -51,6 +52,12 @@ export default class RenderSystem extends System {
 	private _cachedResolutionScene: Vec2 = new Vec2(0, 0);
 	private _resolutionDirty: boolean = true;
 	private _renderScale: number = 1.0;
+	/**
+	 * GPU cost of the frame, for the auto-quality governor. Always on: the
+	 * governor needs it to know how much headroom it has, which frame rate
+	 * cannot tell it under vsync or a frame limiter.
+	 */
+	public gpuFrameTimer: GpuFrameTimer | null = null;
 
 	public postInit(): void {
 		const canvas = <HTMLCanvasElement>document.getElementById('canvas');
@@ -64,6 +71,8 @@ export default class RenderSystem extends System {
 			);
 			throw new Error('[RenderSystem] WebGL2 context creation failed');
 		}
+
+		this.gpuFrameTimer = new GpuFrameTimer(gl);
 
 		canvas.addEventListener('webglcontextlost', (e) => {
 			e.preventDefault();
@@ -206,7 +215,11 @@ export default class RenderSystem extends System {
 			jitterFactor
 		);
 
+		this.gpuFrameTimer?.begin();
+
 		this.renderGraph.render();
+
+		this.gpuFrameTimer?.end();
 
 		this.pickObjectId();
 

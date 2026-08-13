@@ -3,6 +3,7 @@ import SettingsSystem from '~/app/systems/SettingsSystem';
 import AssetConfigSystem, {CrowdLevel} from '~/app/game/assets/AssetConfigSystem';
 import TrainSystem from '~/app/game/TrainSystem';
 import {debugLog} from '~/app/game/debug';
+import RenderSystem from '~/app/systems/RenderSystem';
 
 /**
  * Quality tiers + the auto governor.
@@ -98,6 +99,28 @@ const OSCILLATION_LOCK = 120;     // s to forbid re-climbing a rung we just fell
 const STEP_EFFECT_MIN = 1.05;
 const DOWN_LOCK_AFTER_INEFFECTIVE = 180; // s
 
+/**
+ * GPU headroom thresholds, as a fraction of the frame budget.
+ *
+ * Frame rate alone cannot answer the question this governor actually asks.
+ * Under a cap the rate can only sit AT the target, so "median >= target" is
+ * true whether the GPU is 30% busy or 99% busy — the up-step therefore used to
+ * climb blind until the frame rate finally broke, then step back down, which
+ * guarantees oscillation around the edge and a visible stutter each time round.
+ * It also could not see a machine that was holding 60 only just, so it would
+ * happily raise quality on hardware with nothing to spare.
+ *
+ * GPU milliseconds per frame answers it directly and keeps working under any
+ * cap: measured against the frame budget it IS utilisation. Measured on this
+ * scene 2026-08-13, the frame is FILL-RATE bound — halving the render scale
+ * halved GPU time, while cutting draw calls by 46% changed it by ~1% — which is
+ * why render scale is the ladder's strongest lever and why a governor steering
+ * on GPU cost will pull the right one.
+ */
+const GPU_TIGHT = 0.90;        // above this fraction of budget → no headroom
+const GPU_COMFORTABLE = 0.65;  // below this → genuinely room to raise quality
+const GPU_TIGHT_CONFIRM = 3;   // consecutive tight evaluations before acting
+
 export default class AutoQualitySystem extends System {
 	private engaged: boolean = false;
 	private rung: number = 1;
@@ -116,6 +139,8 @@ export default class AutoQualitySystem extends System {
 	private applying: boolean = false;
 	private announcedDownStep: boolean = false;
 	private preStepMedian: number = 0;
+	/** GPU cost before the last down-step, for the effectiveness audit. */
+	private preStepGpuMs: number | null = null;
 	private checkingStepEffect: boolean = false;
 	private downLockedUntil: number = 0;
 
@@ -191,6 +216,29 @@ export default class AutoQualitySystem extends System {
 		return `rung ${this.rung} → ${fps} fps`;
 	}
 
+	private gpuTightCount: number = 0;
+	private lastGpuMs: number | null = null;
+
+	/**
+	 * GPU cost of a frame as a fraction of the frame budget, or null when the
+	 * timer extension is unavailable (in which case the governor falls back to
+	 * frame rate alone, exactly as it behaved before).
+	 */
+	private gpuLoad(): number | null {
+		const timer = this.systemManager.getSystem(RenderSystem).gpuFrameTimer;
+		const ms = timer?.medianMs() ?? null;
+
+		this.lastGpuMs = ms;
+
+		if (ms === null) return null;
+
+		// Budget comes from the TARGET rate, not the observed one: the question
+		// is whether the frame fits in the time we are aiming for.
+		const budget = 1000 / (this.mode === 'fallback30' ? 30 : 60);
+
+		return ms / budget;
+	}
+
 	private lastMedian: number = 0;
 	private lastP75Delta: number = 0;
 	private recentDeltasSample: number[] = [];
@@ -203,6 +251,8 @@ export default class AutoQualitySystem extends System {
 			mode: this.mode,
 			buckets: [...this.buckets].map(b => Math.round(b * 10) / 10),
 			lastMedian: Math.round(this.lastMedian * 10) / 10,
+			gpuMs: this.lastGpuMs === null ? null : Math.round(this.lastGpuMs * 100) / 100,
+			gpuTightCount: this.gpuTightCount,
 			lastP75Delta: Math.round(this.lastP75Delta * 100) / 100,
 			recentDeltasMs: this.recentDeltasSample.map(d => Math.round(d * 100) / 100),
 			now: Math.round(this.now * 10) / 10,
@@ -248,6 +298,10 @@ export default class AutoQualitySystem extends System {
 		this.troubleCount = 0;
 		this.holdTimer = 0;
 		this.failTimer = 0;
+		this.gpuTightCount = 0;
+		// The old cost describes the old settings — averaging it across a
+		// change would have the governor react to a frame it no longer renders.
+		this.systemManager.getSystem(RenderSystem).gpuFrameTimer?.reset();
 		this.warmupUntil = this.now + WARMUP;
 	}
 
@@ -343,11 +397,58 @@ export default class AutoQualitySystem extends System {
 		// step and stop degrading for a while.
 		if (this.checkingStepEffect) {
 			this.checkingStepEffect = false;
-			if (median < this.preStepMedian * STEP_EFFECT_MIN && this.rung > 0) {
+
+			// Did lowering quality actually make the frame cheaper?
+			//
+			// This used to ask the frame RATE, which cannot answer under a cap:
+			// 30 fps before and 30 fps after means every down-step is judged
+			// useless, gets reverted, and down-stepping locks for three minutes
+			// — so a capped game could never shed load however hard the GPU was
+			// working. Observed live at 4x pixels: GPU at 215% of budget, rate
+			// pinned at 30, governor stepping down and immediately undoing it.
+			// GPU cost answers the question directly and works under any cap.
+			const gpuNow = this.gpuLoad() === null ? null : this.lastGpuMs;
+			const ineffective = (this.preStepGpuMs !== null && gpuNow !== null)
+				? gpuNow > this.preStepGpuMs / STEP_EFFECT_MIN
+				: median < this.preStepMedian * STEP_EFFECT_MIN;
+
+			// An ineffective step means one of two very different things.
+			//
+			// If the GPU has headroom, quality was not the bottleneck (CPU,
+			// tile streaming, a hitch) and degrading the picture is pure loss —
+			// revert and stop, which is what this audit was built for.
+			//
+			// If the GPU is still over budget, quality IS the bottleneck and
+			// the step simply was not big enough. Reverting there strands the
+			// player at an unplayable setting: observed live at 4x pixels, the
+			// governor stepped 0→1 (which changes only shadows and crowds —
+			// both rungs render at full scale), measured no gain on a
+			// fill-rate-bound frame, reverted, and then sat at 215% of budget
+			// for three minutes refusing to act. Keep descending instead; the
+			// ladder drops render scale a rung or two further down, and that is
+			// the lever that actually moves this frame.
+			const gpuOverBudget = gpuNow !== null && this.preStepGpuMs !== null
+				&& gpuNow > (1000 / (this.mode === 'fallback30' ? 30 : 60)) * GPU_TIGHT;
+
+			if (ineffective && gpuOverBudget && this.rung < RUNGS.length - 1) {
+				this.applyRung(`step-down insufficient (gpu ${gpuNow.toFixed(1)}ms still over budget) — descending further`);
+				this.rung++;
+				this.checkingStepEffect = true;
+				this.preStepGpuMs = gpuNow;
+				this.preStepMedian = median;
+				this.resetMeasurement();
+				return;
+			}
+
+			if (ineffective && this.rung > 0) {
 				this.rung--;
 				this.downLockedUntil = this.now + DOWN_LOCK_AFTER_INEFFECTIVE;
 				this.lockedRungAbove = -1; // the revert is intentional — allow future climbs
-				this.applyRung(`step-down ineffective (median ${this.preStepMedian.toFixed(0)}→${median.toFixed(0)}) — reverting`);
+				this.applyRung(
+					this.preStepGpuMs !== null && gpuNow !== null
+						? `step-down ineffective (gpu ${this.preStepGpuMs.toFixed(1)}→${gpuNow.toFixed(1)}ms) — reverting`
+						: `step-down ineffective (median ${this.preStepMedian.toFixed(0)}→${median.toFixed(0)}) — reverting`
+				);
 				this.resetMeasurement();
 				return;
 			}
@@ -368,6 +469,7 @@ export default class AutoQualitySystem extends System {
 				this.lockedRungAbove = this.rung;
 				this.lockedUntil = this.now + OSCILLATION_LOCK;
 				this.preStepMedian = median;
+				this.preStepGpuMs = this.gpuLoad() === null ? null : this.lastGpuMs;
 				this.checkingStepEffect = true;
 				this.rung++;
 				this.applyRung(`median ${median.toFixed(0)} < ${Math.round(target * DOWN_RATIO)}`);
@@ -395,6 +497,37 @@ export default class AutoQualitySystem extends System {
 		this.troubleCount = 0;
 		this.failTimer = 0;
 
+		const gpuLoad = this.gpuLoad();
+
+		// The frame rate is being met — but a capped rate is met identically at
+		// 30% and 99% GPU. If the GPU is at the edge, the next tile stream or
+		// busy platform is a visible stutter, so step down BEFORE the player
+		// sees it rather than after.
+		if (gpuLoad !== null && gpuLoad > GPU_TIGHT) {
+			this.gpuTightCount++;
+
+			if (
+				this.gpuTightCount >= GPU_TIGHT_CONFIRM &&
+				this.rung < RUNGS.length - 1 &&
+				this.now >= this.downLockedUntil
+			) {
+				this.gpuTightCount = 0;
+				this.lockedRungAbove = this.rung;
+				this.lockedUntil = this.now + OSCILLATION_LOCK;
+				this.preStepMedian = median;
+				this.preStepGpuMs = this.lastGpuMs;
+				this.checkingStepEffect = true;
+				this.rung++;
+				this.applyRung(`gpu ${(gpuLoad * 100).toFixed(0)}% of budget — no headroom`);
+				this.resetMeasurement();
+			}
+
+			this.holdTimer = 0;
+			return;
+		}
+
+		this.gpuTightCount = 0;
+
 		// Meeting the target NEVER reduces quality. Holding it comfortably
 		// earns a step up (or an uncap at the top).
 		if (median >= target * UP_RATIO) {
@@ -402,12 +535,17 @@ export default class AutoQualitySystem extends System {
 
 			const wantRung = this.rung - 1;
 			const rungLocked = wantRung >= 0 && wantRung <= this.lockedRungAbove && this.now < this.lockedUntil;
+			// Under a cap the rate sits at the target whatever the GPU is
+			// doing, so "target met" is not evidence of room. Require measured
+			// headroom before spending it; with no GPU timer, fall back to the
+			// old rate-only behaviour rather than refusing to climb at all.
+			const hasHeadroom = gpuLoad === null || gpuLoad < GPU_COMFORTABLE;
 
-			if (this.rung > 0 && !rungLocked && this.holdTimer >= UP_HOLD) {
+			if (this.rung > 0 && !rungLocked && hasHeadroom && this.holdTimer >= UP_HOLD) {
 				this.rung--;
 				this.applyRung('headroom available');
 				this.resetMeasurement();
-			} else if (this.rung === 0 && this.mode === 'strive60' && this.holdTimer >= UNCAP_HOLD) {
+			} else if (this.rung === 0 && this.mode === 'strive60' && hasHeadroom && this.holdTimer >= UNCAP_HOLD) {
 				this.mode = 'unlimited';
 				this.applyRung('max settings hold 60 — uncapping');
 				this.resetMeasurement();
