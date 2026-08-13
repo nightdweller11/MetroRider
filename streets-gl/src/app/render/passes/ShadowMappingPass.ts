@@ -427,7 +427,15 @@ export default class ShadowMappingPass extends Pass<{
 			}
 
 			this.renderExtrudedMeshes(camera);
-			this.renderHuggingMeshes(camera);
+
+			// Hugging meshes lie ON the terrain, so the only thing they can
+			// cast a shadow onto is the ground directly beneath them, at the
+			// same height. Buildings genuinely need every cascade; these do
+			// not, and they were the single largest caller in the renderer
+			// once the station overdraw was gone.
+			if (i < 2) {
+				this.renderHuggingMeshes(camera);
+			}
 		}
 	}
 
