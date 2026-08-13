@@ -27,8 +27,18 @@ const PLATFORM_WIDTH = 5;
  * the roof.
  */
 const MAX_DECK_HEIGHT = 1.6;
+/** How far below the platform deck a figure may be placed, metres. */
+const MAX_FOOT_DROP = 0.08;
 /** How many differently-dressed people the built-in figure expands into. */
-const PROCEDURAL_TINTS = 6;
+/**
+ * Distinct procedural figures in the mix.
+ *
+ * The palette carries 8 coats x 4 leg colours x 5 hair x 5 skin — 800
+ * combinations — and the crowd was drawing six of them, so a busy platform
+ * showed each person about seven times. Each figure is a few hundred
+ * vertices, so a wider cast is cheap.
+ */
+const PROCEDURAL_TINTS = 24;
 /** Frames baked out of a character's waiting animation. */
 const POSE_COUNT = 8;
 /** Playback rate of those frames. */
@@ -155,7 +165,7 @@ export default class PassengerRenderingSystem extends System {
 		ids.forEach((id, index) => {
 			if (id === 'procedural-default' || id === 'procedural') {
 				for (let t = 0; t < PROCEDURAL_TINTS; t++) {
-					this.variants.push(buildPersonGeometry(t * 5 + 1));
+					this.variants.push(buildPersonGeometry(t));
 					this.variantSources.push(index);
 				}
 			} else {
@@ -384,6 +394,7 @@ export default class PassengerRenderingSystem extends System {
 		const stationId = ls.parsed.stations[stationIdx]?.id ?? `idx-${stationIdx}`;
 		const slots = this.getSlots(stationId, count);
 		const baseHeight = this.deckHeight(stationIdx, place.x, place.z);
+		const grid = this.deckGrid(stationIdx, place.x, place.z);
 
 		const cosH = Math.cos(place.heading);
 		const sinH = Math.sin(place.heading);
@@ -412,6 +423,22 @@ export default class PassengerRenderingSystem extends System {
 			// Idle life: everyone shifts weight and turns a little, out of phase
 			// with their neighbours. A platform of statues reads as scenery; the
 			// same platform with a small amount of motion reads as people.
+			// Where the floor actually is under THIS person, relative to the
+			// mesh origin (which carries the platform's own height).
+			// Clamped: a slot on the very edge of the platform can sample the
+			// drop to track level in its cell, and a person sunk 35 cm into the
+			// deck reads exactly as wrong as one hovering above it. Small dips
+			// (a ramp, a slightly uneven deck) are kept; a plunge is not.
+			const footY = Math.max(
+				-MAX_FOOT_DROP,
+				this.deckAt(
+					grid,
+					slot.x * sinH + slot.z * cosH,
+					slot.x * cosH - slot.z * sinH,
+					baseHeight,
+				) - baseHeight,
+			);
+
 			const phase = animTime * 1.7 + slot.x * 0.7 + slot.z * 1.3;
 			const bob = Math.sin(phase) * 0.04;
 			const sway = Math.sin(phase * 0.5) * 0.25;
@@ -439,7 +466,7 @@ export default class PassengerRenderingSystem extends System {
 				// world position (same float32 reason as the stations).
 				const o = (vOff + k) * 3;
 				position[o] = lx * sinH + lz * cosH;
-				position[o + 1] = py + bob;
+				position[o + 1] = py + bob + footY;
 				position[o + 2] = lx * cosH - lz * sinH;
 
 				const nx = v.normal[k * 3] ?? 0;
@@ -536,6 +563,82 @@ export default class PassengerRenderingSystem extends System {
 	 * that is all roof — the figures stand on the ground, which is at least
 	 * never floating.
 	 */
+	/**
+	 * Deck height sampled UNDER EACH PERSON, not once for the platform.
+	 *
+	 * The single cached height was taken at the platform centre and given to
+	 * everyone, and it was the highest vertex within a 14 m radius — which is
+	 * not the walking surface. A bench top, a railing or a canopy lip under the
+	 * 1.6 m ceiling wins that max and lifts the whole crowd off the floor,
+	 * which is the floating the operator reported.
+	 *
+	 * One pass over the station geometry fills a 1 m grid of "highest surface
+	 * in this cell"; each figure then reads the cell it actually stands in. Two
+	 * metres away a bench no longer decides where someone's feet go.
+	 */
+	private deckGrids: Map<number, Map<string, number>> = new Map();
+
+	private static gridKey(x: number, z: number): string {
+		return `${Math.round(x)},${Math.round(z)}`;
+	}
+
+	private deckGrid(stationIdx: number, cx: number, cz: number): Map<string, number> {
+		const cached = this.deckGrids.get(stationIdx);
+
+		if (cached) return cached;
+
+		const grid = new Map<string, number>();
+		const ground = this.terrainHeight(cx, cz) + TRACK_HEIGHT_OFFSET;
+		const ceiling = ground + MAX_DECK_HEIGHT;
+		const meshes = this.systemManager.getSystem(TrainRenderingSystem)?.stationMeshes ?? [];
+
+		for (const mesh of meshes) {
+			const pos = mesh?.buffers?.position;
+
+			if (!pos) continue;
+
+			// Station geometry is baked at the origin and placed by the mesh
+			// transform, so vertices are LOCAL and the position supplies the offset.
+			const ox = mesh.position.x, oy = mesh.position.y, oz = mesh.position.z;
+
+			for (let i = 0; i < pos.length; i += 3) {
+				const y = pos[i + 1] + oy;
+
+				if (y < ground || y > ceiling) continue;
+
+				const wx = pos[i] + ox, wz = pos[i + 2] + oz;
+
+				if (Math.abs(wx - cx) > 40 || Math.abs(wz - cz) > 40) continue;
+
+				const key = PassengerRenderingSystem.gridKey(wx - cx, wz - cz);
+				const best = grid.get(key);
+
+				if (best === undefined || y > best) grid.set(key, y);
+			}
+		}
+
+		this.deckGrids.set(stationIdx, grid);
+
+		return grid;
+	}
+
+	/** Surface height under a point given in platform-local metres. */
+	private deckAt(grid: Map<string, number>, localX: number, localZ: number, fallback: number): number {
+		const here = grid.get(PassengerRenderingSystem.gridKey(localX, localZ));
+
+		if (here !== undefined) return here;
+
+		// A person standing on the very edge of the deck can land in a cell with
+		// no geometry sample; borrow the nearest neighbour before giving up.
+		for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+			const near = grid.get(PassengerRenderingSystem.gridKey(localX + dx, localZ + dz));
+
+			if (near !== undefined) return near;
+		}
+
+		return fallback;
+	}
+
 	private deckHeight(stationIdx: number, x: number, z: number): number {
 		const cached = this.deckHeights.get(stationIdx);
 		if (cached !== undefined) return cached;
@@ -598,6 +701,7 @@ export default class PassengerRenderingSystem extends System {
 		// Deck heights are measured off the station meshes, which are rebuilt
 		// whenever the line or the station model changes.
 		this.deckHeights.clear();
+		this.deckGrids.clear();
 		this.rebuildTimer = REBUILD_INTERVAL; // rebuild on the next tick
 	}
 }

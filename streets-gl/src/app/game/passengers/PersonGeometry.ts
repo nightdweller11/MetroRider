@@ -52,6 +52,20 @@ const SKIN_COLORS: [number, number, number][] = [
 	[0.93, 0.79, 0.68],
 ];
 
+/**
+ * A well-mixed index into one palette. Salt separates the axes so clothing,
+ * hair and skin vary independently of one another.
+ */
+function paletteIndex(tint: number, salt: number, length: number): number {
+	let h = (tint + 1) * (salt | 1);
+
+	h ^= h >>> 13;
+	h = Math.imul(h, 0x5bd1);
+	h ^= h >>> 11;
+
+	return Math.abs(h) % length;
+}
+
 function pushBox(
 	positions: number[], normals: number[], colors: number[], indices: number[],
 	cx: number, cy: number, cz: number,
@@ -90,15 +104,26 @@ export function buildPersonGeometry(tint: number): PersonBuffers {
 	const indices: number[] = [];
 
 	const t = Math.abs(Math.floor(tint));
-	const coat = COAT_COLORS[t % COAT_COLORS.length];
-	const legs = LEG_COLORS[(t >> 3) % LEG_COLORS.length];
-	const skin = SKIN_COLORS[(t >> 1) % SKIN_COLORS.length];
+
+	// Each palette axis is picked from an INDEPENDENT hash of the tint.
+	//
+	// They used to be slices of the tint itself — `t % 8` for the coat, `t % 5`
+	// for the hair, `(t >> 1) % 5` for skin — which ties them to each other and,
+	// worse, to whatever step the caller happens to walk the tint in. The crowd
+	// built its figures with `tint = t * 5 + 1`, and every one of those is 1 mod
+	// 5, so all six people came out with exactly the same hair and only two
+	// skin tones between them. That is the "no variability" the platform showed.
+	// Hashing each axis separately means no caller's stride can collapse an
+	// axis again.
+	const coat = COAT_COLORS[paletteIndex(t, 0x9e37, COAT_COLORS.length)];
+	const legs = LEG_COLORS[paletteIndex(t, 0x85eb, LEG_COLORS.length)];
+	const skin = SKIN_COLORS[paletteIndex(t, 0xc2b2, SKIN_COLORS.length)];
 
 	// Human proportions matter more than polygon count at this distance: a
 	// head is about 1/7.5 of a person, shoulders about 1.6 head-widths, and the
 	// legs are half the total height. The first version had a huge square head
 	// on a wide slab and read as a Lego brick.
-	const hair = HAIR_COLORS[t % HAIR_COLORS.length];
+	const hair = HAIR_COLORS[paletteIndex(t, 0x27d4, HAIR_COLORS.length)];
 	const shoe: [number, number, number] = [0.10, 0.09, 0.09];
 
 	// legs: thighs + calves, tapering, with a real gap between them
