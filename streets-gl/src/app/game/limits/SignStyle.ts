@@ -92,10 +92,14 @@ export function railSignStyle(countryCode: string): SignStyle {
 		};
 	}
 
-	// Israel, Spain, Italy, and most other km/h railways: the full number.
+	// Israel, Spain, Italy, and most other km/h railways: the full number on a
+	// square board, with a yellow triangle warning of a reduction ahead. The
+	// warning board was missing here, which is why these lines showed exactly
+	// one kind of sign.
 	return {
 		shape: 'square', background: WHITE, border: BLACK, borderWidth: 3, text: BLACK,
 		tensOfKmh: false, unit: 'kmh', name: 'Speed board (km/h)',
+		advance: {shape: 'triangle', background: WARNING_YELLOW, border: BLACK, text: BLACK, name: 'Advance warning'},
 	};
 }
 

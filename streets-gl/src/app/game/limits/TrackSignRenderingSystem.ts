@@ -14,12 +14,31 @@ const SIGN_OFFSET = 4.5;
 /** Only build boards this close to the train. */
 const SIGN_RADIUS = 900;
 /** Never build more than this many at once. */
-const MAX_SIGNS = 10;
+const MAX_SIGNS = 14;
+/** How far before a REDUCTION the yellow warning board stands, metres. */
+const ADVANCE_DISTANCE = 300;
+/**
+ * Reminder boards inside a long stretch of unchanged limit.
+ *
+ * Boards were only ever placed where the limit CHANGED, so on a line whose
+ * limits change rarely the driver saw almost nothing for kilometres at a time
+ * — measured at one board ahead against five behind. Real railways repeat the
+ * number periodically for exactly this reason.
+ */
+const REMINDER_SPACING = 750;
+const REMINDER_MIN_SEGMENT = 1100;
 const REBUILD_INTERVAL = 0.5;
 
 interface PlacedSign {
 	dist: number;
 	mesh: TrainMeshObject;
+}
+
+/** A board to stand somewhere: where, what number, and which face. */
+interface SignPlan {
+	at: number;
+	value: number;
+	advance: boolean;
 }
 
 /**
@@ -69,12 +88,59 @@ export default class TrackSignRenderingSystem extends System {
 		const dist = trainSystem.physicsState.trainDist;
 
 		// A board belongs at the START of each limit — the point where the new
-		// number takes effect.
-		const wanted = segments
-			.map(s => s.startDist)
-			.filter(d => Math.abs(d - dist) <= SIGN_RADIUS)
-			.slice(0, MAX_SIGNS);
+		// number takes effect — and a yellow warning board stands ahead of any
+		// REDUCTION, which is what a driver actually needs to see coming.
+		const plans: SignPlan[] = [];
 
+		for (let i = 0; i < segments.length; i++) {
+			const segment = segments[i];
+
+			plans.push({at: segment.startDist, value: segment.limit, advance: false});
+
+			// Repeat the number through a long stretch.
+			const next = segments[i + 1];
+			const segmentEnd = next ? next.startDist : segment.startDist + REMINDER_SPACING;
+			const segmentLength = segmentEnd - segment.startDist;
+
+			if (segmentLength >= REMINDER_MIN_SEGMENT) {
+				for (let at = segment.startDist + REMINDER_SPACING; at < segmentEnd - 120; at += REMINDER_SPACING) {
+					plans.push({at, value: segment.limit, advance: false});
+				}
+			}
+
+			const previous = segments[i - 1];
+
+			if (previous && segment.limit < previous.limit) {
+				const at = segment.startDist - ADVANCE_DISTANCE;
+
+				// Only if it does not land on top of the board before it.
+				if (!previous || at > previous.startDist + 40) {
+					plans.push({at, value: segment.limit, advance: true});
+				}
+			}
+		}
+
+		// Nearest FIRST, and ahead of the train before behind it.
+		//
+		// This used to take the first ten segment starts within the window in
+		// segment order, which is line order — so on a line whose limits change
+		// early, every board built was behind the driver and the road ahead was
+		// bare. Ranking by how far away it is, with a penalty for being behind,
+		// puts the boards where they can actually be read.
+		const direction = trainSystem.physicsState.direction >= 0 ? 1 : -1;
+		const ranked = plans
+			.filter(p => Math.abs(p.at - dist) <= SIGN_RADIUS)
+			.map(p => {
+				const delta = (p.at - dist) * direction;
+				const behind = delta < 0;
+
+				return {plan: p, rank: Math.abs(delta) + (behind ? SIGN_RADIUS : 0)};
+			})
+			.sort((a, b) => a.rank - b.rank)
+			.slice(0, MAX_SIGNS)
+			.map(r => r.plan);
+
+		const wanted = ranked.map(p => p.at);
 		const keep = new Set(wanted);
 		for (const [at, sign] of this.placed) {
 			if (!keep.has(at)) {
@@ -84,12 +150,12 @@ export default class TrackSignRenderingSystem extends System {
 			}
 		}
 
-		for (const at of wanted) {
-			if (this.placed.has(at)) continue;
-			const segment = segments.find(s => s.startDist === at);
-			if (!segment) continue;
-			const mesh = this.buildSign(ls, at, limits.signFaceFor(segment.limit), limits);
-			if (mesh) this.placed.set(at, {dist: at, mesh});
+		for (const plan of ranked) {
+			if (this.placed.has(plan.at)) continue;
+
+			const mesh = this.buildSign(ls, plan.at, limits.signFaceFor(plan.value), limits, plan.advance);
+
+			if (mesh) this.placed.set(plan.at, {dist: plan.at, mesh});
 		}
 
 		this.signMeshes = [...this.placed.values()].map(s => s.mesh);
@@ -100,6 +166,7 @@ export default class TrackSignRenderingSystem extends System {
 		at: number,
 		face: number,
 		limits: SpeedLimitSystem,
+		advance: boolean,
 	): TrainMeshObject | null {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem) return null;
@@ -114,11 +181,14 @@ export default class TrackSignRenderingSystem extends System {
 		const worldZ = centre.y - Math.sin(heading) * SIGN_OFFSET;
 
 		const style = limits.sign;
+		// A reduction ahead is signed with the warning board when the country
+		// has one; without it, the same permanent board stands there.
+		const variant = advance && style.advance ? style.advance : style;
 		const buffers = buildSignGeometry(face, {
-			shape: style.shape,
-			background: style.background,
-			border: style.border,
-			text: style.text,
+			shape: variant.shape,
+			background: variant.background,
+			border: variant.border,
+			text: variant.text,
 		});
 
 		// The board faces back down the line, so an approaching driver reads it.

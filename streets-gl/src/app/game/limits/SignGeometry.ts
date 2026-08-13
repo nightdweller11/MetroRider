@@ -99,6 +99,38 @@ function disc(b: Builder, cx: number, cy: number, radius: number, z: number, col
 	}
 }
 
+/**
+ * An upright triangle, point up — the advance-warning board.
+ *
+ * `SignShape` has declared 'triangle' since the sign system was written, but
+ * nothing ever built one: the face builder tested for 'disc' and drew a quad
+ * for everything else, so a warning sign silently came out square. That is
+ * half of why every board on the line looked the same.
+ */
+function triangle(b: Builder, cx: number, cy: number, halfWidth: number, height: number, z: number, color: RGB): void {
+	const base = b.position.length / 3;
+	const corners: [number, number][] = [
+		[cx - halfWidth, cy],
+		[cx + halfWidth, cy],
+		[cx, cy + height],
+	];
+
+	for (const [x, y] of corners) {
+		b.position.push(x, y, z);
+		b.normal.push(0, 0, 1);
+		b.color.push(color[0], color[1], color[2]);
+	}
+	b.indices.push(base, base + 1, base + 2);
+
+	const back = b.position.length / 3;
+	for (const [x, y] of [corners[1], corners[0], corners[2]]) {
+		b.position.push(x, y, z - 0.02);
+		b.normal.push(0, 0, -1);
+		b.color.push(color[0] * 0.55, color[1] * 0.55, color[2] * 0.55);
+	}
+	b.indices.push(back, back + 1, back + 2);
+}
+
 export interface SignFaceOptions {
 	shape: SignShape;
 	background: string;
@@ -117,8 +149,10 @@ export interface SignFaceOptions {
 export function buildSignGeometry(value: number, options: SignFaceOptions): SignBuffers {
 	// Real boards are smaller, but this one has to be read from a moving cab
 	// at 40+ m, which is the distance the driver actually needs it at.
-	const width = options.width ?? 1.7;
-	const postHeight = options.postHeight ?? 2.3;
+	// Sized up from 1.7/2.3: at the offset these stand from the track they read
+	// as postage stamps from the cab.
+	const width = options.width ?? 2.1;
+	const postHeight = options.postHeight ?? 2.7;
 	const bg = hexToRgb(options.background);
 	const border = hexToRgb(options.border);
 	const ink = hexToRgb(options.text);
@@ -130,6 +164,7 @@ export function buildSignGeometry(value: number, options: SignFaceOptions): Sign
 	quad(b, -0.06, 0, 0.12, postHeight, -0.03, post);
 
 	const round = options.shape === 'disc';
+	const isTriangle = options.shape === 'triangle';
 	const height = round ? width : width * (options.shape === 'plate' ? 0.62 : 0.9);
 	const left = -width / 2;
 	const bottom = postHeight;
@@ -137,19 +172,28 @@ export function buildSignGeometry(value: number, options: SignFaceOptions): Sign
 	if (round) {
 		disc(b, 0, bottom + width / 2, width / 2, 0, border);
 		disc(b, 0, bottom + width / 2, width / 2 - 0.09, 0.01, bg);
+	} else if (isTriangle) {
+		// Equilateral-ish, point up, sitting on the post.
+		const triHeight = width * 0.92;
+
+		triangle(b, 0, bottom, width / 2, triHeight, 0, border);
+		triangle(b, 0, bottom + 0.12, width / 2 - 0.14, triHeight - 0.26, 0.01, bg);
 	} else {
 		quad(b, left, bottom, width, height, 0, border);
 		quad(b, left + 0.07, bottom + 0.07, width - 0.14, height - 0.14, 0.01, bg);
 	}
 
-	// Numerals, centred on the face.
+	// Numerals, centred on the face. A triangle's usable area is the lower
+	// half, so digits sit lower and smaller than on a square board.
 	const text = String(Math.round(value));
-	const digitHeight = height * 0.5;
+	const digitHeight = height * (isTriangle ? 0.34 : 0.5);
 	const digitWidth = digitHeight * 0.52;
 	const gap = digitWidth * 0.22;
 	const totalWidth = text.length * digitWidth + (text.length - 1) * gap;
 	let penX = -totalWidth / 2;
-	const digitBottom = bottom + (height - digitHeight) / 2;
+	const digitBottom = isTriangle
+		? bottom + width * 0.16
+		: bottom + (height - digitHeight) / 2;
 
 	for (const ch of text) {
 		const segments = DIGITS[ch] ?? [];
