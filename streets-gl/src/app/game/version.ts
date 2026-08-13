@@ -20,6 +20,22 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '1.2.0',
+		codename: 'Platform Life',
+		date: '2026-08-13',
+		emblem: '🚶‍♂️🚉',
+		summary: 'People walk on and off the train, the crowd stops being clones, and the game stops leaking memory as you play.',
+		changes: [
+			'Passengers walk. Boarding used to be a number going down; now people cross the platform to the doors and step aboard, and arrivals walk out into the station.',
+			'The crowd is a crowd. Everyone on a platform had the same hair and one of two skin tones — a quirk of how the figures were picked meant the palette collapsed. There are now 24 distinct people, with five hair colours, five skin tones and eight coats between them.',
+			'People stand on the floor. Their height used to be measured once at the middle of the platform and given to everybody, so figures hovered; each person is now placed on the surface actually under their feet.',
+			'The train wears its real livery. Model textures were being averaged down to one colour per corner, which smeared stripes, windows and logos into a wash — they are now drawn properly.',
+			'Lineside signs are readable and varied: bigger boards, a yellow warning triangle before a speed reduction (the triangle had never actually been drawn), and the number repeated through long stretches instead of only where the limit changes.',
+			'The game stops getting heavier the longer you play. Every vertex buffer it ever created was being kept forever; that is fixed, along with drawing every station on the line each frame whether or not it was on screen.',
+			'Auto quality now measures how hard the graphics card is working instead of guessing from frame rate, so it can tell a machine coasting from one barely keeping up — and it can finally lower quality when you have set a frame rate limit.',
+		],
+	},
+	{
 		version: '1.1.14',
 		codename: 'Lineside',
 		date: '2026-08-13',
