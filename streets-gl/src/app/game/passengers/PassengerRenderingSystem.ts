@@ -58,6 +58,17 @@ const WALK_REBUILD_INTERVAL = 0.05;
  * vertices, so a wider cast is cheap.
  */
 const PROCEDURAL_TINTS = 24;
+/**
+ * A platform must never be one person repeated.
+ *
+ * A rigged GLB character bakes ONE set of vertex colours, so selecting a
+ * single model — which is what the shipped configuration does — produces a
+ * crowd of identical clones however many people are standing there. Measured
+ * on production: `variants: 1`. Whatever the configuration asks for, the cast
+ * is topped up with procedural figures until there are enough distinct people
+ * to fill a platform.
+ */
+const MIN_CROWD_VARIANTS = 12;
 /** Frames baked out of a character's waiting animation. */
 const POSE_COUNT = 8;
 /** Playback rate of those frames. */
@@ -335,6 +346,17 @@ export default class PassengerRenderingSystem extends System {
 				this.variantSources.push(index);
 			}
 		});
+		// Top up so the platform is never a row of clones.
+		if (this.variants.length < MIN_CROWD_VARIANTS) {
+			const proceduralIndex = ids.findIndex(id => id === 'procedural-default' || id === 'procedural');
+			const sourceIndex = proceduralIndex >= 0 ? proceduralIndex : 0;
+
+			for (let t = this.variants.length; t < MIN_CROWD_VARIANTS; t++) {
+				this.variants.push(buildPersonGeometry(t));
+				this.variantSources.push(sourceIndex);
+			}
+		}
+
 		this.clearAll();
 
 		const catalog = assetConfig?.getCatalog();
