@@ -279,7 +279,7 @@ function instrument(gl: GlLike): void {
 	});
 
 	for (const name of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) {
-		wrap(gl, name, () => { counters.drawCalls++; });
+		wrap(gl, name, () => { counters.drawCalls++; openGpuQueryForFrame(); });
 	}
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -342,14 +342,23 @@ function pollGpuQueries(): void {
 	}
 }
 
-function sampleGpuFrame(): void {
-	if (!timerGl || !timerExt) return;
-
-	if (openQuery !== null) {
-		timerGl.endQuery(timerExt.TIME_ELAPSED_EXT);
-		pendingQueries.push(openQuery);
-		openQuery = null;
-	}
+/**
+ * Open a query on the FIRST draw of a frame and close it as soon as that
+ * frame's synchronous render has finished.
+ *
+ * The first attempt opened at one animation frame and closed at the next,
+ * which brackets the render AND the idle gap that follows it. Validated by
+ * varying `renderScale`: quartering the pixel count left the number flat at
+ * ~13 ms, i.e. it was reporting the vsync period, not the render. Any verdict
+ * from it would have been noise.
+ *
+ * The engine renders synchronously inside its rAF callback, so a microtask
+ * queued from the first draw call runs the moment that callback's JS stack
+ * unwinds — after every draw, before the browser idles. That brackets the
+ * command stream and nothing else.
+ */
+function openGpuQueryForFrame(): void {
+	if (!timerGl || !timerExt || openQuery !== null) return;
 
 	pollGpuQueries();
 
@@ -362,12 +371,20 @@ function sampleGpuFrame(): void {
 
 	timerGl.beginQuery(timerExt.TIME_ELAPSED_EXT, query);
 	openQuery = query;
+
+	queueMicrotask(() => {
+		if (openQuery === null) return;
+
+		timerGl.endQuery(timerExt.TIME_ELAPSED_EXT);
+		pendingQueries.push(openQuery);
+		openQuery = null;
+	});
 }
 
 function startSampling(): void {
 	const countFrame = (): void => {
 		counters.frames++;
-		sampleGpuFrame();
+		pollGpuQueries();
 		requestAnimationFrame(countFrame);
 	};
 	requestAnimationFrame(countFrame);

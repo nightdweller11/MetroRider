@@ -84,7 +84,7 @@ function assertBuildIsCurrent() {
  * `__telemetry.gpuFrameMs()` and the work counts, never by fps.
  */
 export const PERF_QUALITY = {
-	fpsLimit: 'off',
+	fpsLimit: '60',
 	renderScale: '1',
 	shadows: 'on',
 	ssao: 'on',
