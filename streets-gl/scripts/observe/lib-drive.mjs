@@ -21,7 +21,24 @@ export async function openGame(page, {url = 'http://localhost:3111/', telemetry 
 	page.on('pageerror', e => errors.push(String(e).slice(0, 300)));
 	page.on('console', m => { if (m.type() === 'error' && !m.text().includes('404')) errors.push(m.text().slice(0, 200)); });
 
-	await page.goto(url + (telemetry ? '?telemetry=1' : ''), {waitUntil: 'domcontentloaded'});
+	// The HTML document is cacheable, so the browser will happily keep serving an
+	// index.html that points at a bundle from two builds ago — and every
+	// measurement taken through it is then a measurement of code that no longer
+	// exists. This cost a whole diagnosis round on 2026-08-13. Bust the document
+	// cache on every open, then PROVE the loaded bundle is the one on disk.
+	const bust = `_b=${Date.now()}`;
+	await page.goto(`${url}?${telemetry ? 'telemetry=1&' : ''}${bust}`, {waitUntil: 'domcontentloaded'});
+
+	const served = await (await fetch(url, {cache: 'no-store'})).text();
+	const expected = (served.match(/index\.[a-f0-9]+\.js/) ?? [])[0];
+	const loaded = await page.evaluate(
+		() => ([...document.querySelectorAll('script[src]')].map(s => s.getAttribute('src'))
+			.find(s => /index\.[a-f0-9]+\.js/.test(s)) ?? '').replace('./js/', ''),
+	);
+	if (expected && loaded && expected !== loaded) {
+		throw new Error(`stale bundle: page loaded ${loaded}, server serves ${expected}. Rebuild or hard-reload.`);
+	}
+
 	await page.waitForFunction(() => window.__trainSystem && window.__trainSystem.lines.length > 0, null, {timeout: 120000});
 	await page.evaluate(() => { document.getElementById('release-splash-dismiss')?.click(); });
 	await page.waitForFunction(

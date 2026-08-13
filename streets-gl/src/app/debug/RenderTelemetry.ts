@@ -342,13 +342,23 @@ export function noteMeshRebuildFrame(): void {
  * change, instead of inferred from buffer churn.
  */
 const tileEvents = {created: 0, removed: 0};
+/**
+ * Removals BY REASON.
+ *
+ * "152 tiles were destroyed" does not say which policy destroyed them, and I
+ * guessed wrong twice. Every call site names itself, so the breakdown reads
+ * like an answer instead of a riddle.
+ */
+const tileRemovalReasons = new Map<string, number>();
 
 export function noteTileCreated(): void {
 	if (installed) tileEvents.created++;
 }
 
-export function noteTileRemoved(): void {
-	if (installed) tileEvents.removed++;
+export function noteTileRemoved(reason = 'unknown'): void {
+	if (!installed) return;
+	tileEvents.removed++;
+	tileRemovalReasons.set(reason, (tileRemovalReasons.get(reason) ?? 0) + 1);
 }
 
 function installApi(): void {
@@ -364,13 +374,17 @@ function installApi(): void {
 			meshRebuildFrames = 0;
 			tileEvents.created = 0;
 			tileEvents.removed = 0;
+			tileRemovalReasons.clear();
 			layerWrites.clear();
 			counters.layerReassignments = 0;
 			unpackAlignmentChanges = 0;
 			unpackFlipYChanges = 0;
 		},
 		/** Tiles created and destroyed since the last reset. */
-		tileChurn: (): {created: number; removed: number; perSecond: number} => {
+		tileChurn: (): {
+			created: number; removed: number; perSecond: number;
+			removalsByReason: Record<string, number>;
+		} => {
 			const seconds = Math.max(1, (performance.now() - startedAt) / 1000);
 			const windowSeconds = samples.length > 1
 				? Math.max(1, (samples[samples.length - 1].t - samples[0].t) / 1000)
@@ -379,6 +393,9 @@ function installApi(): void {
 				created: tileEvents.created,
 				removed: tileEvents.removed,
 				perSecond: +((tileEvents.created + tileEvents.removed) / windowSeconds).toFixed(1),
+				removalsByReason: Object.fromEntries(
+					[...tileRemovalReasons.entries()].sort((a, b) => b[1] - a[1]),
+				),
 			};
 		},
 		/** Which classes rebuild their mesh, and how often per frame. */

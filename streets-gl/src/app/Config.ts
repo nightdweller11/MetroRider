@@ -32,6 +32,7 @@ function applyPerformanceMode(low: boolean): void {
 	Config.LowMemoryMode = low;
 	Config.MaxConcurrentTiles = low ? 40 : 150;
 	Config.TileRetentionDistance = low ? 900 : 2500;
+	Config.TileWorkingSetDistance = low ? 1400 : 3200;
 	Config.TileEvictionGraceSeconds = low ? 5 : 25;
 	Config.TileFrustumFar = low ? 2000 : 8000;
 	Config.AggressiveEviction = low;
@@ -53,6 +54,16 @@ const Config = {
 	 */
 	TileRetentionDistance: _lowMemory ? 900 : 2500,
 	/**
+	 * Radius of the rotation-invariant tile working set, metres.
+	 *
+	 * Membership must not depend on where the camera is pointing: a set
+	 * defined by the frustum changes completely on a turn, and a full cache
+	 * then swaps itself out and back, which is what made whole blocks of
+	 * buildings vanish and return. Held slightly wider than the retention
+	 * radius so a tile is never wanted and evictable at the same time.
+	 */
+	TileWorkingSetDistance: _lowMemory ? 1400 : 3200,
+	/**
 	 * A tile that has been in view within this many seconds is not evicted.
 	 *
 	 * The queue is rebuilt from the CURRENT frustum every frame, so turning the
@@ -64,6 +75,10 @@ const Config = {
 	 * grace period costs a little memory and removes the thrash entirely.
 	 */
 	TileEvictionGraceSeconds: _lowMemory ? 5 : 25,
+	/** Wait this long before retrying a tile that failed once (a blip). */
+	TileFailureCooldownShort: 20,
+	/** After repeated failures the data does not exist — stop asking. */
+	TileFailureCooldownLong: 900,
 	TileFrustumFar: _lowMemory ? 2000 : 8000,
 	AggressiveEviction: _lowMemory,
 	// Anisotropic filtering level for world textures. 16 is free on desktop

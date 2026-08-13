@@ -79,6 +79,42 @@ export default class TileSystem extends System {
 		}, true);
 	}
 
+	/**
+	 * Tiles that failed to load, and when.
+	 *
+	 * The vector tile server answers 404 for tiles it has no data for — ocean,
+	 * gaps in coverage, zoom levels that were never generated. The old code
+	 * removed the tile on failure, and `updateTiles()` (which rebuilds the queue
+	 * from the frustum every frame) immediately asked for it again. That is an
+	 * infinite request loop: measured at 151 tiles created and 151 destroyed in
+	 * five seconds on a wide view, with the buildings visibly disappearing and
+	 * coming back as their holder tiles were torn down and rebuilt around them.
+	 *
+	 * A failure is remembered so the same missing tile is not requested forever.
+	 */
+	private failedTiles: Map<string, {at: number; attempts: number}> = new Map();
+
+	private isOnFailureCooldown(x: number, y: number): boolean {
+		const failure = this.failedTiles.get(`${x},${y}`);
+		if (!failure) return false;
+
+		// One retry soon (a transient network blip deserves it), then a long
+		// cooldown — a 404 means the data does not exist and never will.
+		const cooldown = failure.attempts >= 2
+			? Config.TileFailureCooldownLong
+			: Config.TileFailureCooldownShort;
+		return performance.now() - failure.at < cooldown * 1000;
+	}
+
+	private noteTileFailure(x: number, y: number): void {
+		const key = `${x},${y}`;
+		const previous = this.failedTiles.get(key);
+		this.failedTiles.set(key, {
+			at: performance.now(),
+			attempts: (previous?.attempts ?? 0) + 1,
+		});
+	}
+
 	public addTile(x: number, y: number): void {
 		let tile: Tile;
 
@@ -99,8 +135,8 @@ export default class TileSystem extends System {
 				}
 
 				if (!tileData) {
-					console.warn(`Tile load failed for (${x}, ${y}), removing orphan entry`);
-					this.removeTile(x, y);
+					this.noteTileFailure(x, y);
+					this.removeTile(x, y, 'load-failed');
 					return;
 				}
 
@@ -116,8 +152,8 @@ export default class TileSystem extends System {
 		return this.tiles.get(`${x},${y}`);
 	}
 
-	public removeTile(x: number, y: number): void {
-		noteTileRemoved();
+	public removeTile(x: number, y: number, reason = 'unspecified'): void {
+		noteTileRemoved(reason);
 		const tile = this.getTile(x, y);
 
 		this.objectsManager.removeTile(tile);
@@ -224,25 +260,51 @@ export default class TileSystem extends System {
 		}
 
 		const worldSpaceFrustum = this.cameraFrustum.toSpace(camera.matrix);
-		const frustumTiles = this.getTilesInFrustum(worldSpaceFrustum, camera.position);
+		const visibleTiles = this.getTilesInFrustum(worldSpaceFrustum, camera.position);
+		// Two different questions, and conflating them was the bug.
+		//
+		// "What is on screen?" is the whole frustum. "What may I ask the network
+		// for?" is capped, because a long frustum wants more tiles than the cache
+		// can ever hold. Marking visibility from the CAPPED list told the system
+		// that a tile ranked 151st was not being looked at — so it aged past the
+		// eviction grace period and was deleted WHILE ON SCREEN, then refetched
+		// when the camera turned back. That is the reported "all the buildings
+		// vanish and come back with the wrong textures": the holder tile for
+		// those buildings changed, so they were redrawn from a different
+		// textureId buffer.
+		const now = performance.now();
 
 		for (const tile of this.tiles.values()) {
 			tile.inFrustum = false;
 		}
 
-		this.queue.length = 0;
-
-		for (const tilePosition of frustumTiles) {
-			if (!this.getTile(tilePosition.x, tilePosition.y)) {
-				this.addTile(tilePosition.x, tilePosition.y);
-				continue;
-			}
-
+		for (const tilePosition of visibleTiles) {
 			const tile = this.getTile(tilePosition.x, tilePosition.y);
 
 			if (tile) {
 				tile.inFrustum = true;
-				tile.lastInFrustumAt = performance.now();
+				tile.lastInFrustumAt = now;
+			}
+		}
+
+		// The load request set is a DISC around the camera, not the frustum.
+		//
+		// Capping "nearest 150 in frustum" makes the set change every time the
+		// camera turns, so a full cache perpetually swaps one 150-tile set for
+		// another: measured at 117 loaded and 129 evicted during a single slow
+		// turn, with the buildings visibly leaving and returning. A disc does
+		// not rotate. Turning now changes only the ORDER things load in, never
+		// which tiles are wanted, so a stationary orbit costs nothing.
+		const frustumTiles = this.getTilesAroundCamera(camera, visibleTiles);
+
+		this.queue.length = 0;
+
+		for (const tilePosition of frustumTiles) {
+			if (!this.getTile(tilePosition.x, tilePosition.y)) {
+				// Do not ask again for a tile the server has already refused.
+				if (!this.isOnFailureCooldown(tilePosition.x, tilePosition.y)) {
+					this.addTile(tilePosition.x, tilePosition.y);
+				}
 			}
 		}
 
@@ -259,6 +321,48 @@ export default class TileSystem extends System {
 			return undefined;
 		}
 		return this.queue.shift();
+	}
+
+	/**
+	 * Tiles worth holding, ordered by how soon they are needed.
+	 *
+	 * Membership is rotation-invariant (a disc of radius
+	 * `Config.TileWorkingSetDistance` around the camera) so that turning the
+	 * camera never changes WHICH tiles are wanted. Ordering puts what is
+	 * currently on screen first, so a turn still loads the new view promptly.
+	 */
+	private getTilesAroundCamera(camera: Camera, visibleTiles: Vec2[]): Vec2[] {
+		const centre = MathUtils.meters2tile(camera.position.x, camera.position.z);
+		const metresPerTile = Math.abs(MathUtils.tile2meters(1, 0).x - MathUtils.tile2meters(0, 0).x) || 611;
+		const radiusTiles = Math.max(1, Math.ceil(Config.TileWorkingSetDistance / metresPerTile));
+		const inView = new Set<string>();
+
+		for (const tile of visibleTiles) {
+			inView.add(`${tile.x},${tile.y}`);
+		}
+
+		const cx = Math.floor(centre.x);
+		const cy = Math.floor(centre.y);
+		const candidates: {position: Vec2; key: number}[] = [];
+
+		for (let dx = -radiusTiles; dx <= radiusTiles; dx++) {
+			for (let dy = -radiusTiles; dy <= radiusTiles; dy++) {
+				const x = cx + dx;
+				const y = cy + dy;
+				const world = MathUtils.tile2meters(x + 0.5, y + 0.5);
+				const distance = Math.hypot(world.x - camera.position.x, world.y - camera.position.z);
+
+				if (distance > Config.TileWorkingSetDistance) continue;
+
+				// On-screen tiles sort ahead of everything behind the camera.
+				const visible = inView.has(`${x},${y}`) ? 0 : 1;
+				candidates.push({position: new Vec2(x, y), key: visible * 1e7 + distance});
+			}
+		}
+
+		candidates.sort((a, b): number => a.key - b.key);
+
+		return candidates.slice(0, Config.MaxConcurrentTiles).map(c => c.position);
 	}
 
 	private updateTilesDistancesToCamera(camera: Camera): void {
@@ -418,7 +522,7 @@ export default class TileSystem extends System {
 
 		if (Config.AggressiveEviction) {
 			for (const {tile} of outOfFrustum) {
-				this.removeTile(tile.x, tile.y);
+				this.removeTile(tile.x, tile.y, 'aggressive-eviction');
 			}
 			return;
 		}
@@ -430,19 +534,31 @@ export default class TileSystem extends System {
 		let toFree = Math.max(0, this.tiles.size + demand - Config.MaxConcurrentTiles);
 
 		for (let i = 0; i < outOfFrustum.length && toFree > 0; i++, toFree--) {
-			this.removeTile(outOfFrustum[i].tile.x, outOfFrustum[i].tile.y);
+			this.removeTile(outOfFrustum[i].tile.x, outOfFrustum[i].tile.y, 'evicted-out-of-frustum');
 		}
 
-		// Safety net: if we are still above the cap (everything is in frustum),
-		// evict the farthest visible tiles. Bounded memory beats far scenery.
-		if (this.tiles.size > Config.MaxConcurrentTiles) {
+		// A VISIBLE tile is never evicted to make room for another visible tile.
+		//
+		// The old safety net evicted "the farthest visible tiles" whenever the
+		// cache was full and everything was in frustum — which on a wide view is
+		// always. That is precisely the reported symptom: the whole set of
+		// buildings you are looking at disappears and comes back seconds later.
+		// The cap still holds; what changes is that reaching it stops LOADING
+		// more distant geography instead of deleting what is already on screen.
+		// Measured on a wide orbit: 151 tiles created and 151 destroyed in five
+		// seconds, all of them in view.
+		//
+		// The escape hatch below only fires when the cache is far beyond the cap
+		// (a genuine runaway), so memory is still bounded.
+		const runawayLimit = Math.round(Config.MaxConcurrentTiles * 1.5);
+		if (this.tiles.size > runawayLimit) {
 			const all = [...this.tiles.values()].sort(
 				(a, b) => b.distanceToCamera - a.distanceToCamera
 			);
-			let excess = this.tiles.size - Config.MaxConcurrentTiles;
+			let excess = this.tiles.size - runawayLimit;
 			for (const tile of all) {
 				if (excess <= 0) break;
-				this.removeTile(tile.x, tile.y);
+				this.removeTile(tile.x, tile.y, 'runaway-cap');
 				excess--;
 			}
 		}
@@ -450,7 +566,7 @@ export default class TileSystem extends System {
 
 	public purgeTiles(): void {
 		for (const tile of this.tiles.values()) {
-			this.removeTile(tile.x, tile.y);
+			this.removeTile(tile.x, tile.y, 'purge');
 		}
 	}
 }
