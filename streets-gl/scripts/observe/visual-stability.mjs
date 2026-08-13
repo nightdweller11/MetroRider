@@ -23,8 +23,8 @@ const REGIONS = {
 };
 
 export default async (page, options = {}) => {
-	const {ctx, page: p, errors} = await openGame(page.context().browser());
-	const cdp = await ctx.newCDPSession(p);
+	const {page: p, errors} = await openGame(page);
+	const cdp = await p.context().newCDPSession(p);
 	await startDriving(p);
 
 	if (options.moveCamera !== false) {
@@ -106,7 +106,6 @@ export default async (page, options = {}) => {
 	}, [use, REGIONS]);
 
 	const telemetry = await p.evaluate(() => window.__telemetry?.report());
-	await p.close();
-	await ctx.close();
+	await releaseGame(p);
 	return {analysis, telemetry, frames: frames.length, errors: errors.slice(0, 5)};
 };

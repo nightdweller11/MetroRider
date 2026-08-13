@@ -332,6 +332,25 @@ export function noteMeshRebuildFrame(): void {
 	meshRebuildFrames++;
 }
 
+/**
+ * Tile lifecycle.
+ *
+ * Everything downstream — building meshes rebuilt, buildings hidden and shown
+ * as their holder tile changes, textures appearing to swap — follows from tiles
+ * being created and destroyed. Counting them directly turns "the tile system
+ * seems too aggressive" into a number that can be compared before and after a
+ * change, instead of inferred from buffer churn.
+ */
+const tileEvents = {created: 0, removed: 0};
+
+export function noteTileCreated(): void {
+	if (installed) tileEvents.created++;
+}
+
+export function noteTileRemoved(): void {
+	if (installed) tileEvents.removed++;
+}
+
 function installApi(): void {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	(window as any).__telemetry = {
@@ -343,10 +362,24 @@ function installApi(): void {
 			attribution.clear();
 			meshRebuilds.clear();
 			meshRebuildFrames = 0;
+			tileEvents.created = 0;
+			tileEvents.removed = 0;
 			layerWrites.clear();
 			counters.layerReassignments = 0;
 			unpackAlignmentChanges = 0;
 			unpackFlipYChanges = 0;
+		},
+		/** Tiles created and destroyed since the last reset. */
+		tileChurn: (): {created: number; removed: number; perSecond: number} => {
+			const seconds = Math.max(1, (performance.now() - startedAt) / 1000);
+			const windowSeconds = samples.length > 1
+				? Math.max(1, (samples[samples.length - 1].t - samples[0].t) / 1000)
+				: seconds;
+			return {
+				created: tileEvents.created,
+				removed: tileEvents.removed,
+				perSecond: +((tileEvents.created + tileEvents.removed) / windowSeconds).toFixed(1),
+			};
 		},
 		/** Which classes rebuild their mesh, and how often per frame. */
 		meshChurn: (): {className: string; total: number; perFrame: number}[] =>

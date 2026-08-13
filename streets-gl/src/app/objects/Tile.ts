@@ -36,6 +36,9 @@ export type TileInstanceBuffers = Map<Tile3DInstanceType, {
 }>;
 
 export default class Tile extends Object3D {
+	/** When this tile was last inside the camera frustum, ms. */
+	public lastInFrustumAt: number = 0;
+
 	private static counter = 0;
 
 	public readonly x: number;

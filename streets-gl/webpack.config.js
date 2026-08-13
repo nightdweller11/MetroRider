@@ -60,7 +60,12 @@ module.exports = (env, argv) => {
 			path: path.resolve(__dirname, 'build')
 		},
 		performance: {maxEntrypointSize: 8000000, maxAssetSize: 8000000},
-		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020'})]},
+		// keepNames costs a little bundle size and buys the ability to DIAGNOSE:
+		// without it every stack trace and every `constructor.name` is a
+		// minified letter pair, so the render telemetry can say "something is
+		// rebuilt 400 times a second" but never which class. That turned two
+		// separate investigations into guesswork.
+		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020', keepNames: true})]},
 		devServer: {
 			port: 8080,
 			hot: true,
@@ -112,7 +117,12 @@ module.exports = (env, argv) => {
 			path: path.resolve(__dirname, 'build')
 		},
 		performance: {maxEntrypointSize: 2000000, maxAssetSize: 2000000},
-		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020'})]},
+		// keepNames costs a little bundle size and buys the ability to DIAGNOSE:
+		// without it every stack trace and every `constructor.name` is a
+		// minified letter pair, so the render telemetry can say "something is
+		// rebuilt 400 times a second" but never which class. That turned two
+		// separate investigations into guesswork.
+		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020', keepNames: true})]},
 		devtool: mode === 'production' ? undefined : 'inline-source-map',
 		plugins: [
 			new HtmlWebpackPlugin({
@@ -137,7 +147,12 @@ module.exports = (env, argv) => {
 			path: path.resolve(__dirname, 'build')
 		},
 		performance: {maxEntrypointSize: 2000000, maxAssetSize: 2000000},
-		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020'})]},
+		// keepNames costs a little bundle size and buys the ability to DIAGNOSE:
+		// without it every stack trace and every `constructor.name` is a
+		// minified letter pair, so the render telemetry can say "something is
+		// rebuilt 400 times a second" but never which class. That turned two
+		// separate investigations into guesswork.
+		optimization: {minimizer: [new EsbuildPlugin({target: 'es2020', keepNames: true})]},
 		devtool: mode === 'production' ? undefined : 'inline-source-map',
 		plugins: [
 			new HtmlWebpackPlugin({

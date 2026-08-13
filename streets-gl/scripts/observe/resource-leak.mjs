@@ -10,7 +10,7 @@
 import {openGame, startDriving, throttle, telemetryReport, markPhase} from './lib-drive.mjs';
 
 export default async (page) => {
-	const {ctx, page: p, errors} = await openGame(page.context().browser());
+	const {page: p, errors} = await openGame(page);
 	await startDriving(p);
 
 	await markPhase(p, 'warmup');
@@ -30,8 +30,7 @@ export default async (page) => {
 	}
 
 	const report = await telemetryReport(p);
-	await p.close();
-	await ctx.close();
+	await releaseGame(p);
 
 	const g = report.growthPerMinute ?? {};
 	const verdict = {

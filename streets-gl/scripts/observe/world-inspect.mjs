@@ -9,7 +9,7 @@
 import {openGame, startDriving} from './lib-drive.mjs';
 
 export default async (page) => {
-	const {ctx, page: p, errors} = await openGame(page.context().browser());
+	const {page: p, errors} = await openGame(page);
 	await startDriving(p);
 	await p.waitForTimeout(6000);
 
@@ -78,7 +78,6 @@ export default async (page) => {
 	});
 
 	const telemetry = await p.evaluate(() => window.__telemetry?.report());
-	await p.close();
-	await ctx.close();
+	await releaseGame(p);
 	return {world, telemetry, errors: errors.slice(0, 5)};
 };

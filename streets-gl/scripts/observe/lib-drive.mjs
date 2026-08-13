@@ -6,9 +6,17 @@
  * train.
  */
 
-export async function openGame(browser, {url = 'http://localhost:3111/', telemetry = true, viewport = {width: 1280, height: 800}} = {}) {
-	const ctx = await browser.newContext({viewport});
-	const page = await ctx.newPage();
+/**
+ * Open the game IN THE PAGE THE RUNNER ALREADY HAS.
+ *
+ * Probes used to create a fresh browser context and close it afterwards, which
+ * pops a window to the front and steals focus every single run — unusable while
+ * the operator is doing anything else. The existing page is reused and simply
+ * parked on a blank page when the probe finishes.
+ */
+export async function openGame(page, {url = 'http://localhost:3111/', telemetry = true, viewport = {width: 1280, height: 800}} = {}) {
+	const ctx = page.context();
+	await page.setViewportSize(viewport);
 	const errors = [];
 	page.on('pageerror', e => errors.push(String(e).slice(0, 300)));
 	page.on('console', m => { if (m.type() === 'error' && !m.text().includes('404')) errors.push(m.text().slice(0, 200)); });
@@ -41,6 +49,19 @@ export async function openGame(browser, {url = 'http://localhost:3111/', telemet
 	});
 
 	return {ctx, page, errors};
+}
+
+/**
+ * Finish a probe without disturbing the operator: leave the shared window on a
+ * blank page rather than closing it (closing the last page tears the window
+ * down and the next probe raises a new one to the front).
+ */
+export async function releaseGame(page) {
+	try {
+		await page.goto('about:blank', {waitUntil: 'domcontentloaded'});
+	} catch {
+		// A probe that already navigated away is fine.
+	}
 }
 
 export async function startDriving(page, {station = 3, line = 0} = {}) {

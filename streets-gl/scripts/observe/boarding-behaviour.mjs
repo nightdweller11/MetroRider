@@ -9,7 +9,7 @@
 import {openGame, startDriving} from './lib-drive.mjs';
 
 export default async (page) => {
-	const {ctx, page: p, errors} = await openGame(page.context().browser());
+	const {page: p, errors} = await openGame(page);
 	await startDriving(p, {station: 3});
 	await p.waitForTimeout(6000);
 
@@ -54,8 +54,7 @@ export default async (page) => {
 		? Math.max(...centroids.map(c => Math.hypot(c.x - centroids[0].x, c.z - centroids[0].z)))
 		: 0;
 
-	await p.close();
-	await ctx.close();
+	await releaseGame(p);
 	return {
 		trace,
 		crowdCentroidTravelM: +movement.toFixed(2),

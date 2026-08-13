@@ -1,3 +1,4 @@
+import {noteTileCreated, noteTileRemoved} from '~/app/debug/RenderTelemetry';
 import Tile from "../objects/Tile";
 import Frustum from "~/lib/core/Frustum";
 import Vec2 from "~/lib/math/Vec2";
@@ -84,6 +85,7 @@ export default class TileSystem extends System {
 		this.queue.push({
 			position: new Vec2(x, y),
 			onBeforeLoad: async () => {
+				noteTileCreated();
 				tile = new Tile(x, y);
 				this.tiles.set(`${x},${y}`, tile);
 
@@ -115,6 +117,7 @@ export default class TileSystem extends System {
 	}
 
 	public removeTile(x: number, y: number): void {
+		noteTileRemoved();
 		const tile = this.getTile(x, y);
 
 		this.objectsManager.removeTile(tile);
@@ -239,6 +242,7 @@ export default class TileSystem extends System {
 
 			if (tile) {
 				tile.inFrustum = true;
+				tile.lastInFrustumAt = performance.now();
 			}
 		}
 
@@ -388,11 +392,23 @@ export default class TileSystem extends System {
 
 	private removeCulledTiles(): void {
 		const outOfFrustum: {tile: Tile; distance: number}[] = [];
+		// Near tiles are held even when the camera is not looking at them.
+		// Frustum membership changes the instant the camera turns; what is
+		// actually near does not. Evicting on frustum alone made a stationary
+		// camera orbit thrash the tile cache — reload, re-hide and re-show every
+		// building whose holder tile changed, which is what the pop-in and the
+		// switching textures were.
+		const retention = Config.TileRetentionDistance;
+		// A tile seen moments ago is about to be seen again — turning the camera
+		// is not a reason to throw it away and fetch it back.
+		const graceMs = Config.TileEvictionGraceSeconds * 1000;
+		const now = performance.now();
 
 		for (const tile of this.tiles.values()) {
-			if (!tile.inFrustum) {
-				outOfFrustum.push({tile, distance: tile.distanceToCamera});
-			}
+			if (tile.inFrustum) continue;
+			if (tile.distanceToCamera <= retention) continue;
+			if (now - tile.lastInFrustumAt < graceMs) continue;
+			outOfFrustum.push({tile, distance: tile.distanceToCamera});
 		}
 
 		// Farthest first.

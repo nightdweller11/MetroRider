@@ -112,18 +112,22 @@ export default class TileExtrudedMesh extends RenderableObject3D {
 			});
 		}
 
-		for (const {start, size, value} of this.meshDisplayBufferPatches) {
+		if (this.meshDisplayBufferPatches.length > 0) {
+			// One upload for the whole batch. Uploading inside the loop sent the
+			// entire display buffer once PER PATCH, so a tile whose holder
+			// changed for twenty buildings paid twenty full uploads in a frame.
 			const buffer = this.mesh.getAttribute('display').buffer;
 			const data = buffer.data;
 
-			for (let i = start; i < start + size; i++) {
-				data[i] = value;
+			for (const {start, size, value} of this.meshDisplayBufferPatches) {
+				for (let i = start; i < start + size; i++) {
+					data[i] = value;
+				}
 			}
 
 			buffer.setData(data);
+			this.meshDisplayBufferPatches.length = 0;
 		}
-
-		this.meshDisplayBufferPatches.length = 0;
 	}
 
 	public dispose(): void {
