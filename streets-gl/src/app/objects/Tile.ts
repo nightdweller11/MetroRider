@@ -37,7 +37,18 @@ export type TileInstanceBuffers = Map<Tile3DInstanceType, {
 
 export default class Tile extends Object3D {
 	/** When this tile was last inside the camera frustum, ms. */
-	public lastInFrustumAt: number = 0;
+	/**
+	 * Starts at creation time, not zero.
+	 *
+	 * The working set deliberately includes tiles behind the camera, which are
+	 * therefore loaded having never been in the frustum. Left at zero they read
+	 * as "not seen for the whole run", so the eviction grace period was already
+	 * expired the instant they finished loading: they were deleted immediately
+	 * and re-requested on the next frame, forever. Every one of those deletions
+	 * re-assigns the holder tile of any building it carries, which is a building
+	 * blinking out on screen.
+	 */
+	public lastInFrustumAt: number = performance.now();
 
 	private static counter = 0;
 

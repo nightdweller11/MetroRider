@@ -511,6 +511,12 @@ export default class TileSystem extends System {
 		for (const tile of this.tiles.values()) {
 			if (tile.inFrustum) continue;
 			if (tile.distanceToCamera <= retention) continue;
+			// Never evict something the loader still wants. The working set is
+			// wider than the retention radius, so without this a tile in the
+			// outer ring is asked for and thrown away on the same frame — it
+			// reloads, is evicted, reloads again, and the buildings it holds
+			// blink each time.
+			if (tile.distanceToCamera <= Config.TileWorkingSetDistance) continue;
 			if (now - tile.lastInFrustumAt < graceMs) continue;
 			outOfFrustum.push({tile, distance: tile.distanceToCamera});
 		}
