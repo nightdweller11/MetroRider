@@ -79,6 +79,7 @@ export default class TrackSignRenderingSystem extends System {
 		for (const [at, sign] of this.placed) {
 			if (!keep.has(at)) {
 				sceneSystem.objects.wrapper.remove(sign.mesh);
+				sign.mesh.dispose();
 				this.placed.delete(at);
 			}
 		}
@@ -159,6 +160,7 @@ export default class TrackSignRenderingSystem extends System {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		for (const sign of this.placed.values()) {
 			sceneSystem?.objects.wrapper.remove(sign.mesh);
+			sign.mesh.dispose();
 		}
 		this.placed.clear();
 		this.signMeshes = [];

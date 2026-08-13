@@ -545,6 +545,8 @@ export default class PassengerRenderingSystem extends System {
 	private removeCrowd(crowd: StationCrowd): void {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		sceneSystem?.objects.wrapper.remove(crowd.mesh);
+		// Removing from the scene graph does not free GPU memory; this does.
+		crowd.mesh.dispose();
 	}
 
 	private clearAll(): void {

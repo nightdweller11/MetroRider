@@ -47,9 +47,22 @@ export default class TrainMeshObject extends RenderableObject3D {
 	}
 
 	public setBuffers(buffers: TrainMeshBuffers): void {
+		// The old mesh owns GPU buffers and a VAO. Dropping the reference does
+		// NOT free them — WebGL objects are not garbage collected — so every
+		// rebuild used to leak. Measured with the render telemetry: ~100 index
+		// buffers a second created and never deleted while parked at a station,
+		// live buffers climbing ~1,000 a minute for as long as the game ran.
+		this.dispose();
 		this.buffers = buffers;
 		this.needsRebuild = true;
-		this.mesh = null;
+	}
+
+	/** Release this object's GPU resources. Safe to call more than once. */
+	public dispose(): void {
+		if (this.mesh) {
+			this.mesh.delete();
+			this.mesh = null;
+		}
 	}
 
 	public updatePositionAndNormalBuffers(position: Float32Array, normal: Float32Array): void {

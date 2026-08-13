@@ -1046,6 +1046,7 @@ export default class TrainRenderingSystem extends System {
 
 		for (const m of this.stationMeshes) {
 			sceneSystem.objects.wrapper.remove(m);
+			m.dispose();
 		}
 		this.stationMeshes = [];
 

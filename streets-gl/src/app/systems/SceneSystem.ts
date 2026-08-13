@@ -39,6 +39,8 @@ export default class SceneSystem extends System {
 	public scene: Object3D;
 	public objects: SceneObjects;
 	public pivotDelta: Vec2 = new Vec2();
+	/** The instance data actually sent to the GPU, per type. */
+	private uploadedInstanceCache: Map<string, Float32Array> = new Map();
 	private mergedBufferCache: Map<string, Float32Array> = new Map();
 	private _instanceBufferFrameId: number = -1;
 	public frameId: number = 0;
@@ -289,7 +291,28 @@ export default class SceneSystem extends System {
 				offset += buffers[i].length;
 			}
 
-			instancedObject.setInstancesInterleavedBuffer(merged);
+			// Uploading the same bytes every frame is the single biggest GPU
+			// cost in the game: measured at ~30,000 buffer uploads a second
+			// (400 per frame) while PARKED, where nothing had moved. The merged
+			// instance data only changes when tiles enter or leave view, so it
+			// is compared against what was last sent and skipped when equal.
+			const previous = this.uploadedInstanceCache.get(name);
+			let changed = !previous || previous.length !== merged.length;
+			if (!changed && previous) {
+				for (let i = 0; i < merged.length; i++) {
+					if (previous[i] !== merged[i]) {
+						changed = true;
+						break;
+					}
+				}
+			}
+
+			if (changed) {
+				instancedObject.setInstancesInterleavedBuffer(merged);
+				const copy = previous && previous.length === merged.length ? previous : new Float32Array(merged.length);
+				copy.set(merged);
+				this.uploadedInstanceCache.set(name, copy);
+			}
 		}
 	}
 

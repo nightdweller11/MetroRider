@@ -1,3 +1,4 @@
+import {installRenderTelemetry} from '~/app/debug/RenderTelemetry';
 import RenderSystem from "./systems/RenderSystem";
 import TileSystem from "./systems/TileSystem";
 import ControlsSystem from "./systems/ControlsSystem";
@@ -40,6 +41,10 @@ class App {
 	}
 
 	private init(): void {
+		// Before anything asks the canvas for a WebGL context — the telemetry
+		// patches getContext, so it has to be first or it sees nothing.
+		installRenderTelemetry();
+
 		this.systemManager = new SystemManager();
 
 		this.systemManager.addSystems(SettingsSystem);
