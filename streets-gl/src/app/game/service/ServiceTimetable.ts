@@ -11,8 +11,67 @@
  * hopelessly late at the next.
  */
 
-/** Assumed running speed between stops, km/h. Below the limit, as real timetables are. */
+/** Fallback running speed where the line has no speed profile yet, km/h. */
 const CRUISE_KMH = 70;
+/**
+ * What fraction of the permitted speed a leg actually averages, once getting
+ * away from a stand and braking into the next one are counted. A schedule
+ * written at the bare limit is one no driver can keep.
+ */
+const REALISM = 0.82;
+
+/** A stretch of line with a speed limit, in metres and metres per second. */
+export interface SpeedLimitSegment {
+	startDist: number;
+	endDist: number;
+	/** Metres per second. */
+	limit: number;
+}
+
+/**
+ * How long a leg takes at the speeds the line actually permits.
+ *
+ * This matters more than it sounds. The first version scheduled every leg at a
+ * flat 70 km/h, which is fine on fast track and impossible where the limit is
+ * 40 — and Simple driving holds the limit exactly, so a child driving properly
+ * would have been permanently and increasingly late through no fault of their
+ * own. Integrating the real profile makes the same schedule keepable in both
+ * driving modes.
+ */
+export function legRunSeconds(
+	segments: SpeedLimitSegment[],
+	fromDist: number,
+	toDist: number,
+): number {
+	const a = Math.min(fromDist, toDist);
+	const b = Math.max(fromDist, toDist);
+	const span = b - a;
+
+	if (span <= 0) return 0;
+
+	if (segments.length === 0) return span / ((CRUISE_KMH / 3.6) * REALISM);
+
+	let covered = 0;
+	let seconds = 0;
+
+	for (const segment of segments) {
+		const start = Math.max(a, segment.startDist);
+		const end = Math.min(b, segment.endDist);
+
+		if (end <= start || segment.limit <= 0) continue;
+
+		seconds += (end - start) / (segment.limit * REALISM);
+		covered += end - start;
+	}
+
+	// Anything the profile does not cover runs at the fallback rather than
+	// silently taking zero time.
+	if (covered < span) {
+		seconds += (span - covered) / ((CRUISE_KMH / 3.6) * REALISM);
+	}
+
+	return seconds;
+}
 /** Seconds lost to slowing, standing and getting away again, per stop. */
 const DWELL_S = 45;
 /** Slack per stop so a competent run is on time rather than permanently late. */
@@ -34,6 +93,7 @@ export function buildTimetable(
 	departAt: number,
 	direction: number = 1,
 	fromDist: number = -Infinity,
+	segments: SpeedLimitSegment[] = [],
 ): ServiceStop[] {
 	// Travel order from WHERE THE TRAIN IS, not index order from the end of the
 	// line. Two things go wrong otherwise. Driving the line the other way
@@ -53,7 +113,7 @@ export function buildTimetable(
 	let previous = Number.isFinite(fromDist) ? fromDist : ahead[0]?.d ?? 0;
 
 	for (const stop of ahead) {
-		const runS = Math.abs(stop.d - previous) / (CRUISE_KMH / 3.6);
+		const runS = legRunSeconds(segments, previous, stop.d);
 
 		when += (runS + DWELL_S + RECOVERY_S) * 1000;
 		previous = stop.d;

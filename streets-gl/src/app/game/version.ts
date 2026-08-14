@@ -20,6 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.7.2',
+		codename: 'Keepable',
+		date: '2026-08-14',
+		emblem: '⏱️✅',
+		summary: 'The timetable is now written for the speeds your line actually allows, so Simple driving can keep it.',
+		changes: [
+			'The schedule used to assume 70 km/h everywhere. That is fine on fast track and impossible where the limit is 40 — and Simple driving holds the limit exactly, so driving properly would have left you further behind at every stop through no fault of your own.',
+			'Each leg is now timed from the real speed limits along it. Driving three stops in a row on Simple — accelerate, brake in gently, open the doors, wait, go — stays comfortably inside the schedule instead of falling behind.',
+		],
+	},
+	{
 		version: '2.7.1',
 		codename: 'Right Way Round',
 		date: '2026-08-14',

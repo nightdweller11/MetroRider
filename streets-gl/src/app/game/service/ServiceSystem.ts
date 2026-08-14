@@ -1,6 +1,7 @@
 import System from '../../System';
 import UISystem from '../../systems/UISystem';
 import TrainSystem from '../TrainSystem';
+import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import {buildTimetable, latenessSeconds, stopFor, type ServiceStop} from './ServiceTimetable';
 
 /**
@@ -86,8 +87,12 @@ export default class ServiceSystem extends System {
 
 		if (this.builtForLine !== trainSystem.currentLineIdx || this.builtForDirection !== direction) {
 			this.builtAt = this.worldNow();
+			// The line's own speed profile, so the schedule is keepable at the
+			// speeds the line actually permits rather than a flat guess.
+			const segments = this.systemManager.getSystem(SpeedLimitSystem)?.getSegments() ?? [];
+
 			this.stops = buildTimetable(
-				ls.realStationDists, this.builtAt, direction, trainSystem.physicsState.trainDist,
+				ls.realStationDists, this.builtAt, direction, trainSystem.physicsState.trainDist, segments,
 			);
 			this.builtForLine = trainSystem.currentLineIdx;
 			this.builtForDirection = direction;
