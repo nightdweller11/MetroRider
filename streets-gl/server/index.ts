@@ -289,9 +289,39 @@ app.get('/{*path}', (_req, res) => {
 	}
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
 	console.log(`[MetroRider Server] Running on http://localhost:${PORT}`);
 	console.log(`[MetroRider Server] DATA_DIR: ${DATA_DIR}`);
 	console.log(`[MetroRider Server] Admin token: ${getAdminToken()}`);
 	console.log(`[MetroRider Server] Admin URL: http://localhost:${PORT}?admin=${getAdminToken()}`);
 });
+
+/**
+ * Shut down when the platform asks, and exit ZERO.
+ *
+ * Railway sends SIGTERM to the old container on every deploy. Without a
+ * handler, node dies by signal, the process is reported as terminated
+ * abnormally, and the platform treats a completely routine redeploy as a
+ * crash — which sends the operator a deployment-failure email every single
+ * time. Roughly fifteen of them in one afternoon is what surfaced this.
+ *
+ * Closing the listener first lets in-flight requests finish; the timer is the
+ * backstop for a connection that will not drain.
+ */
+function shutdown(signal: NodeJS.Signals): void {
+	console.log(`[MetroRider Server] ${signal} received — closing`);
+
+	const done = (): never => process.exit(0);
+	const forced = setTimeout(done, 5000);
+
+	// Do not hold the process open just for the backstop timer.
+	forced.unref();
+
+	server.close(() => {
+		clearTimeout(forced);
+		done();
+	});
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
