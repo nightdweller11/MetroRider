@@ -12,8 +12,9 @@ import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
 import MapWorkerSystem from '../systems/MapWorkerSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
+import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
-import CabSheet from './ui/CabSheet';
+import CabSheet, {type SheetRow} from './ui/CabSheet';
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -589,7 +590,7 @@ export default class GameUISystem extends System {
 			return;
 		}
 		if (action === 'camera') {
-			this.systemManager.getSystem(GameCameraSystem)?.cycleMode();
+			this.openCameraSheet();
 			return;
 		}
 		if (action === 'map') {
@@ -599,6 +600,72 @@ export default class GameUISystem extends System {
 
 		// Menu: the line picker, summoned rather than permanent.
 		this.openLinePicker();
+	}
+
+	/**
+	 * Camera and driving assists.
+	 *
+	 * Cycling blindly through views with a button told you nothing about where
+	 * you would land; this names them. Simple/Advanced lives here too because
+	 * it is the same decision — how much the game is doing for you.
+	 */
+	private openCameraSheet(): void {
+		const cam = this.systemManager.getSystem(GameCameraSystem);
+		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
+
+		if (!this.cabSheet) return;
+
+		if (this.cabSheet.isOpen()) {
+			this.cabSheet.close();
+			return;
+		}
+
+		const current = cam?.getModeLabel?.() ?? '';
+
+		this.cabSheet.show(`View — now ${current}`, this.cameraSheetRows());
+	}
+
+	/**
+	 * The rows are rebuilt rather than mutated, because the driving row shows
+	 * the mode it is currently in — after a tap it has to redraw as the other
+	 * one, in place, while the sheet stays up.
+	 */
+	private cameraSheetRows(): SheetRow[] {
+		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
+		const simple = settings?.get('driveMode')?.statusValue === 'simple';
+
+		return [
+			{badge: 'CAB', badgeColor: '#4fb6ef', title: 'Cab', subtitle: 'From the driver\'s seat',
+				onSelect: (): void => this.setCameraMode('Cab')},
+			{badge: 'CHA', badgeColor: '#4fd996', title: 'Chase', subtitle: 'Behind the train',
+				onSelect: (): void => this.setCameraMode('Chase')},
+			{badge: 'ORB', badgeColor: '#f0a63f', title: 'Orbit', subtitle: 'Look around from outside',
+				onSelect: (): void => this.setCameraMode('Orbit')},
+			{
+				badge: simple ? 'SIM' : 'ADV',
+				badgeColor: simple ? '#4fd996' : '#f0a63f',
+				title: simple ? 'Simple driving' : 'Advanced driving',
+				subtitle: simple
+					? 'Gentler, eases back to the limit, nothing to lose — tap for Advanced'
+					: 'Full control, the limit is yours to judge, runs are scored — tap for Simple',
+				keepOpen: true,
+				onSelect: (): void => {
+					settings?.update('driveMode', {statusValue: simple ? 'advanced' : 'simple'});
+					this.cabSheet?.setRows(this.cameraSheetRows());
+				},
+			},
+		];
+	}
+
+	/** Cycle until the named mode comes up; the camera owns its own order. */
+	private setCameraMode(target: string): void {
+		const cam = this.systemManager.getSystem(GameCameraSystem);
+
+		if (!cam) return;
+
+		for (let i = 0; i < 6 && cam.getModeLabel() !== target; i++) {
+			cam.cycleMode();
+		}
 	}
 
 	/**
@@ -667,6 +734,8 @@ export default class GameUISystem extends System {
 			power: trainSystem.getInput?.().isHeld('throttle') ? 1 : 0,
 			brake: trainSystem.getInput?.().isHeld('brake') ? 1 : 0,
 			lineName: ls?.parsed.id ?? 'LINE',
+			simpleMode: this.systemManager.getSystem(SettingsSystem)
+				?.settings.get('driveMode')?.statusValue === 'simple',
 		});
 	}
 

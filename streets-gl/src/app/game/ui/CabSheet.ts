@@ -66,6 +66,12 @@ export interface SheetRow {
 	badgeColor?: string;
 	title: string;
 	subtitle?: string;
+	/**
+	 * Leave the sheet up after the tap. Choosing a view is a departure — the
+	 * sheet has done its job and gets out of the way. Flipping a switch is not:
+	 * dismissing on tap would hide the very thing that just changed.
+	 */
+	keepOpen?: boolean;
 	onSelect: () => void;
 }
 
@@ -125,7 +131,7 @@ export default class CabSheet {
 				'<span class="go">›</span>';
 			item.addEventListener('click', () => {
 				row.onSelect();
-				this.close();
+				if (!row.keepOpen) this.close();
 			});
 			body.appendChild(item);
 		}

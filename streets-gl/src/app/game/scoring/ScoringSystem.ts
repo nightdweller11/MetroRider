@@ -5,6 +5,7 @@ import ProfileClient from '../profiles/ProfileClient';
 import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
+import SettingsSystem from '~/app/systems/SettingsSystem';
 
 /**
  * Turns driving into a score.
@@ -123,8 +124,12 @@ export default class ScoringSystem extends System {
 		// running late and taking a curve too fast. Capped, so a messy run is
 		// still a run.
 		const limits = this.systemManager.getSystem(SpeedLimitSystem);
-		const overSeconds = Math.round(limits?.overspeedSeconds ?? 0);
-		const seriousSeconds = Math.round(limits?.seriousOverspeedSeconds ?? 0);
+		// In Simple the train already eases back under the limit, so charging
+		// for the seconds it took to do that would be scoring the assist.
+		const simple = this.systemManager.getSystem(SettingsSystem)
+			?.settings.get('driveMode')?.statusValue === 'simple';
+		const overSeconds = simple ? 0 : Math.round(limits?.overspeedSeconds ?? 0);
+		const seriousSeconds = simple ? 0 : Math.round(limits?.seriousOverspeedSeconds ?? 0);
 		const raw = (overSeconds - seriousSeconds) * 2 + seriousSeconds * 5;
 		const penalty = Math.min(Math.round(result.totalPoints * 0.4), raw);
 		if (penalty > 0) {

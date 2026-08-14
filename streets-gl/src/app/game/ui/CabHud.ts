@@ -36,6 +36,8 @@ export interface CabHudState {
 	/** Route shape in 0..1 space, for the minimap. Empty falls back to a line. */
 	routePoints?: [number, number][];
 	doorsOpen: boolean;
+	/** Simple driving: bigger targets and a calmer console. */
+	simpleMode: boolean;
 	overLimit: boolean;
 	/** Power 0..1 and brake 0..1, for the lever and the gauge. */
 	power: number;
@@ -151,6 +153,13 @@ const CSS = `
 .cab[data-o="port"] .cab-util{left:18px;top:150px;flex-direction:column}
 .cab[data-o="port"] .cab-con{left:18px;right:18px;bottom:18px}
 .cab[data-o="port"] .cab-mini{right:18px;top:150px;width:184px;height:158px}
+
+/* Simple driving: everything you press while moving gets bigger. A child
+   aiming at a moving screen needs the target, not the density. */
+.cab.simple .cab-btn.lg{min-width:98px;min-height:98px;border-radius:18px}
+.cab.simple .cab-btn.lg svg{width:38px;height:38px}
+.cab.simple .cab-btn{min-width:70px;min-height:70px}
+.cab.simple .cab-lever{width:96px}
 
 /* ---- phone: tighter, minimap stands down ---- */
 .cab[data-o="phone"] .cab-dest{left:11px;right:11px;top:11px}
@@ -334,6 +343,8 @@ export default class CabHud {
 		const cap = this.root.querySelector('.cab-mini .micro');
 
 		if (cap) cap.textContent = s.lineName;
+
+		this.root.classList.toggle('simple', s.simpleMode);
 
 		this.lampDoors?.classList.toggle('on-g', s.doorsOpen);
 		this.lampLimit?.classList.toggle('on-a', s.overLimit);

@@ -138,6 +138,13 @@ const Config = {
 	SlippyMapZoomFactor: 0.001,
 	SlippyMapFetchBatchSize: 4,
 	SettingsSchema: {
+		driveMode: {
+			label: 'Driving',
+			status: ['simple', 'advanced'],
+			statusLabels: ['Simple — gentler, nothing to lose', 'Advanced — full control, runs are scored'],
+			statusDefault: 'simple',
+			category: 'general'
+		},
 		performanceMode: {
 			label: 'Graphics tier',
 			status: ['low', 'medium', 'high', 'auto', 'custom'],

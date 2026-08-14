@@ -69,7 +69,7 @@ moves it, in order of effect:
 | **Driving** | speed + limit, next stop, route ribbon, throttle/brake/doors, utility rail |
 | **Pick a line** | replaces the permanent wall |
 | **Service** | F4 — drive the 09:12, clock speed, punctuality read |
-| **Camera & Kid** | F8 — Cab/Chase/Orbit/Ride/Walk/Photo, **Kid mode**, announcements, sound |
+| **Camera & driving** | F8 — Cab/Chase/Orbit/Ride/Walk/Photo, **Simple / Advanced driving**, announcements, sound |
 | **World** | F9/F10 — time of day, weather, season, discoveries |
 | **Settings** | quality, frame limit, crowds, signs, driver profile |
 

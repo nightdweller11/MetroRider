@@ -6,6 +6,8 @@ import ControlsSystem from '../systems/ControlsSystem';
 import TerrainSystem from '../systems/TerrainSystem';
 import MapWorkerSystem from '../systems/MapWorkerSystem';
 import TileSystem from '../systems/TileSystem';
+import SettingsSystem from '../systems/SettingsSystem';
+import SpeedLimitSystem from './limits/SpeedLimitSystem';
 import type {ParsedLine, MetroMapData} from './data/RouteParser';
 import {parseMetroMap} from './data/RouteParser';
 import type {TrackData, PositionOnTrack} from './data/TrackBuilder';
@@ -333,6 +335,13 @@ export default class TrainSystem extends System {
 		if (!ls) return;
 
 		const trainInput: TrainInput = {
+			// Simple driving eases back toward the line limit; Advanced leaves
+			// the limit purely informational, as designed.
+			assist: this.systemManager.getSystem(SettingsSystem)
+				?.settings.get('driveMode')?.statusValue === 'simple',
+			// `.limit` is metres per second; the physics wants km/h. Passing the
+			// raw field held Simple driving to ~12 km/h against a 40 limit.
+			assistLimitKmh: this.systemManager.getSystem(SpeedLimitSystem)?.limitKmh() ?? 0,
 			throttle: this.input.isHeld('throttle'),
 			braking: this.input.isHeld('brake'),
 			emergency: this.input.isHeld('emergency'),

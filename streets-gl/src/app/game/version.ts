@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.1.0',
+		codename: 'Cab',
+		date: '2026-08-14',
+		emblem: '🎛️🚊',
+		summary: 'The controls became a driver\'s desk, the list of lines stopped covering the city, and you can pick how much the train does for you.',
+		changes: [
+			'A DRIVER\'S DESK — Speed is a real dial with a needle and a marked limit, so how close you are reads as a shape instead of two numbers to compare against each other. The arc runs blue up to the limit and red only for the excess. Power is a notched lever with the brake as its own gauge beside it, and DOORS and LIMIT are lamps that light up rather than labels that change colour.',
+			'THE CITY IS BACK — The list of 24 lines used to stand permanently over the screen, covering about a third of it while you drove, to offer a choice you make once. It is now summoned from the menu and dismissed, and when any panel opens the controls step aside instead of being buried.',
+			'A MAP IN THE CORNER — A small live map of your line sits in the corner with your train moving along it and the next stop named.',
+			'SIMPLE OR ADVANCED — Simple driving accelerates gently and eases the train back whenever it runs past the line limit, so holding the throttle down cannot end at 200 km/h in a curve, and nothing is scored against you. Advanced leaves the limit as information only and scores the run. Switch it any time from the camera button.',
+			'BUILT FOR THE iPAD FIRST — The layout is designed per shape of screen rather than one layout scaled down: controls sit in the bottom corners in landscape, in a band across the bottom in portrait, and the phone gets a shorter route strip. Buttons are bigger throughout, and bigger again in Simple driving.',
+		],
+	},
+	{
 		version: '2.0.0',
 		codename: 'The Line',
 		date: '2026-08-13',
