@@ -659,6 +659,14 @@ export default class GameUISystem extends System {
 			// that strip without rehoming them would have removed two real
 			// features rather than tidying the screen.
 			{
+				badge: 'INFO',
+				badgeColor: '#4fb6ef',
+				title: 'About this line',
+				subtitle: 'How long it is, its longest run, who is waiting',
+				keepOpen: true,
+				onSelect: (): void => this.openLineFactsSheet(),
+			},
+			{
 				badge: 'REV',
 				badgeColor: '#8b7bef',
 				title: 'Turn the train around',
@@ -742,6 +750,79 @@ export default class GameUISystem extends System {
 				},
 			},
 		];
+	}
+
+	/**
+	 * Facts about the line being driven.
+	 *
+	 * Every number here is computed from the line actually loaded — its track
+	 * length, its real station spacing, the passengers waiting on it right now.
+	 * Nothing is written down anywhere in advance, so it stays true for a map
+	 * imported five minutes ago as much as for the built-in one.
+	 */
+	private openLineFactsSheet(): void {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const ls = trainSystem?.getCurrentLine();
+
+		if (!ls || !this.cabSheet) return;
+
+		const km = (m: number): string => `${(m / 1000).toFixed(1)} km`;
+		const stops = ls.parsed.stations.length;
+		const length = ls.track.totalLength;
+
+		// Gaps between consecutive stops, from the real distances along track.
+		const gaps: number[] = [];
+
+		for (let i = 1; i < ls.realStationDists.length; i++) {
+			gaps.push(ls.realStationDists[i] - ls.realStationDists[i - 1]);
+		}
+
+		const longest = gaps.length ? Math.max(...gaps) : 0;
+		const shortest = gaps.length ? Math.min(...gaps) : 0;
+		const longestAt = gaps.indexOf(longest);
+		const waiting = this.systemManager.getSystem(PassengerSystem)?.getTotalWaiting() ?? 0;
+		const name = (i: number): string => ls.parsed.stations[i]?.name ?? '—';
+
+		const rows: SheetRow[] = [
+			{badge: 'LEN', badgeColor: '#4fb6ef', title: km(length), subtitle: 'End to end', readOnly: true, onSelect: (): void => undefined},
+			{badge: 'STOP', badgeColor: '#4fd996', title: `${stops} stations`, subtitle:
+				gaps.length ? `About ${km(length / gaps.length)} between stops` : 'A single stop', readOnly: true, onSelect: (): void => undefined},
+		];
+
+		if (gaps.length) {
+			rows.push({
+				badge: 'FAR', badgeColor: '#f0a63f',
+				title: `Longest run ${km(longest)}`,
+				subtitle: `${name(longestAt)} to ${name(longestAt + 1)}`,
+				readOnly: true,
+				onSelect: (): void => undefined,
+			});
+			rows.push({
+				badge: 'NEAR', badgeColor: '#8b7bef',
+				title: `Shortest hop ${km(shortest)}`,
+				subtitle: 'The quickest stop to stop on the line',
+				readOnly: true,
+				onSelect: (): void => undefined,
+			});
+		}
+
+		rows.push({
+			badge: 'PAX', badgeColor: '#ef7b9c',
+			title: `${waiting} people waiting`,
+			subtitle: 'On platforms along this line right now',
+			readOnly: true,
+			onSelect: (): void => undefined,
+		});
+
+		if (ls.parsed.isLoop) {
+			rows.push({
+				badge: 'LOOP', badgeColor: '#4fd996', title: 'This line is a loop',
+				subtitle: 'It comes back round to where it started',
+				readOnly: true, onSelect: (): void => undefined,
+			});
+		}
+
+		this.cabSheet.show(ls.parsed.name, rows);
 	}
 
 	/**

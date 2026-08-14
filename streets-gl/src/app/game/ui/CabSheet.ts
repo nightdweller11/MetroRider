@@ -34,6 +34,10 @@ const CSS = `
   background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.018));
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06);text-align:left;border:0;color:inherit;font:inherit}
 .cab-sheet .row-item:hover{background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.04))}
+/* A stated fact, not a control: no lift on hover, no pointer, full opacity
+   (a disabled button must not read as a control that is switched off). */
+.cab-sheet .row-item.fact{cursor:default;opacity:1}
+.cab-sheet .row-item.fact:hover{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.018))}
 .cab-sheet .row-item .pill{min-width:46px;height:32px;border-radius:7px;display:grid;place-items:center;
   font-family:var(--tech);font-weight:700;font-size:14px;letter-spacing:.06em;color:#05121c;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 3px 8px rgba(0,0,0,.45);flex:0 0 auto}
@@ -71,6 +75,12 @@ export interface SheetRow {
 	 * dismissing on tap would hide the very thing that just changed.
 	 */
 	keepOpen?: boolean;
+	/**
+	 * A row that states something rather than doing something. It loses the
+	 * chevron, the hover and the pointer: an arrow on a row that goes nowhere
+	 * is a promise the interface cannot keep.
+	 */
+	readOnly?: boolean;
 	onSelect: () => void;
 }
 
@@ -123,15 +133,20 @@ export default class CabSheet {
 		for (const row of rows) {
 			const item = document.createElement('button');
 
-			item.className = 'row-item';
+			item.className = row.readOnly ? 'row-item fact' : 'row-item';
 			item.innerHTML =
 				(row.badge ? `<span class="pill" style="background:linear-gradient(180deg,${row.badgeColor ?? '#4fb6ef'},${row.badgeColor ?? '#4fb6ef'}bb)">${row.badge}</span>` : '') +
 				`<span><span class="t">${row.title}</span>${row.subtitle ? `<br><span class="s">${row.subtitle}</span>` : ''}</span>` +
-				'<span class="go">›</span>';
-			item.addEventListener('click', () => {
-				row.onSelect();
-				if (!row.keepOpen) this.close();
-			});
+				(row.readOnly ? '' : '<span class="go">›</span>');
+
+			if (row.readOnly) {
+				item.disabled = true;
+			} else {
+				item.addEventListener('click', () => {
+					row.onSelect();
+					if (!row.keepOpen) this.close();
+				});
+			}
 			body.appendChild(item);
 		}
 

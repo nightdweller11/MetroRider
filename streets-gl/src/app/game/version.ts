@@ -20,6 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.6.0',
+		codename: 'Know Your Line',
+		date: '2026-08-14',
+		emblem: '📏🚉',
+		summary: 'Find out about the railway you are driving: how long it is, its longest run between stops, and how many people are waiting on it right now.',
+		changes: [
+			'ABOUT THIS LINE — A new page in the menu: the length end to end, how many stations, the average distance between stops, the longest run and which two stations it is between, the shortest hop, and a live count of everyone waiting on the platforms.',
+			'Every number is worked out from the line you actually loaded, so it is just as true for a map you imported yourself as for the one that comes with the game.',
+		],
+	},
+	{
 		version: '2.5.0',
 		codename: 'Traffic',
 		date: '2026-08-14',
