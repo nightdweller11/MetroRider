@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.8.0',
+		codename: 'Anywhere',
+		date: '2026-08-14',
+		emblem: '🌍🚇',
+		summary: 'Drive any of your own maps without leaving the game — London, New York, Paris, Singapore and a hundred more.',
+		changes: [
+			'DRIVE ANOTHER MAP — A new page in the menu lists every map on your MetroDreamin profile, biggest first, with how many lines and stations each one has. Tap one and you are driving it: the London Underground is 56 lines and 500 stations.',
+			'The list is fetched fresh every time, so a map you finished this morning is there this afternoon without anything being updated in the game.',
+			'Everything follows you to the new city — the passing trains take the new line\'s colour, and a new timetable is worked out for the stops on your new route.',
+			'Pasting a map or profile link still works, now under "Load a map by link".',
+		],
+	},
+	{
 		version: '2.7.2',
 		codename: 'Keepable',
 		date: '2026-08-14',

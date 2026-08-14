@@ -55,6 +55,15 @@ export default class TrainSystem extends System {
 	public trainPosition: TrainWorldPosition | null = null;
 	public stationState: StationState | null = null;
 	public gameActive: boolean = false;
+	/**
+	 * Bumped every time a different map is loaded.
+	 *
+	 * Systems that cache per-line state (passing traffic, the timetable) key on
+	 * the line INDEX, which is 0 on the old map and 0 on the new one — so
+	 * without this, driving into another city would leave them running the
+	 * previous city's schedule and services.
+	 */
+	public mapGeneration: number = 0;
 
 	private stationManager: StationManager = new StationManager();
 	private input: InputHandler = new InputHandler();
@@ -85,6 +94,8 @@ export default class TrainSystem extends System {
 			const realStationDists = line.stationPointIndices.map(i => track.stationDists[i]);
 			return {parsed: line, track, realStationDists};
 		});
+
+		this.mapGeneration++;
 
 		if (this.lines.length > 0) {
 			this.selectLine(0);

@@ -41,7 +41,10 @@ const CSS = `
 .cab-sheet .row-item .pill{min-width:46px;height:32px;border-radius:7px;display:grid;place-items:center;
   font-family:var(--tech);font-weight:700;font-size:14px;letter-spacing:.06em;color:#05121c;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 3px 8px rgba(0,0,0,.45);flex:0 0 auto}
-.cab-sheet .row-item .t{font-weight:800;font-size:14px}
+.cab-sheet .row-item .t{font-weight:800;font-size:14px;
+  /* Titles come from user-authored maps and some run to a paragraph. Two
+     lines keeps every row the same shape and the list scannable. */
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cab-sheet .row-item .s{color:#5d6f81;font-size:11.5px;font-weight:600}
 .cab-sheet .row-item .go{margin-left:auto;color:#5d6f81;font-size:17px}
 
@@ -134,10 +137,46 @@ export default class CabSheet {
 			const item = document.createElement('button');
 
 			item.className = row.readOnly ? 'row-item fact' : 'row-item';
-			item.innerHTML =
-				(row.badge ? `<span class="pill" style="background:linear-gradient(180deg,${row.badgeColor ?? '#4fb6ef'},${row.badgeColor ?? '#4fb6ef'}bb)">${row.badge}</span>` : '') +
-				`<span><span class="t">${row.title}</span>${row.subtitle ? `<br><span class="s">${row.subtitle}</span>` : ''}</span>` +
-				(row.readOnly ? '' : '<span class="go">›</span>');
+
+			// Built as elements with textContent rather than innerHTML: these
+			// rows now carry titles authored by other people (map names pulled
+			// from MetroDreamin, and any profile a player pastes in). A map
+			// called `<img src=x onerror=…>` must be a silly name, not script.
+			if (row.badge) {
+				const pill = document.createElement('span');
+				const colour = row.badgeColor ?? '#4fb6ef';
+
+				pill.className = 'pill';
+				pill.style.background = `linear-gradient(180deg,${colour},${colour}bb)`;
+				pill.textContent = row.badge;
+				item.appendChild(pill);
+			}
+
+			const text = document.createElement('span');
+			const title = document.createElement('span');
+
+			title.className = 't';
+			title.textContent = row.title;
+			text.appendChild(title);
+
+			if (row.subtitle) {
+				const sub = document.createElement('span');
+
+				sub.className = 's';
+				sub.textContent = row.subtitle;
+				text.appendChild(document.createElement('br'));
+				text.appendChild(sub);
+			}
+
+			item.appendChild(text);
+
+			if (!row.readOnly) {
+				const go = document.createElement('span');
+
+				go.className = 'go';
+				go.textContent = '›';
+				item.appendChild(go);
+			}
 
 			if (row.readOnly) {
 				item.disabled = true;

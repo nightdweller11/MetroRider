@@ -47,6 +47,7 @@ interface AmbientService {
 export default class AmbientTrainSystem extends System {
 	private services: AmbientService[] = [];
 	private builtForLine: number = -1;
+	private builtForMap: number = -1;
 	private carLength: number = 20;
 
 	public postInit(): void {
@@ -84,6 +85,7 @@ export default class AmbientTrainSystem extends System {
 		}
 
 		this.builtForLine = trainSystem.currentLineIdx;
+		this.builtForMap = trainSystem.mapGeneration;
 	}
 
 	public update(deltaTime: number): void {
@@ -100,7 +102,11 @@ export default class AmbientTrainSystem extends System {
 		const playerDist = trainSystem.physicsState.trainDist;
 		const playerDir = trainSystem.physicsState.direction || 1;
 
-		if (this.builtForLine !== trainSystem.currentLineIdx || this.services.length === 0) {
+		if (
+			this.builtForLine !== trainSystem.currentLineIdx ||
+			this.builtForMap !== trainSystem.mapGeneration ||
+			this.services.length === 0
+		) {
 			this.build(trainSystem, playerDist);
 			return;
 		}

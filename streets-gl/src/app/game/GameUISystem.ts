@@ -686,8 +686,16 @@ export default class GameUISystem extends System {
 			{
 				badge: 'CITY',
 				badgeColor: '#ef7b9c',
-				title: 'Change map',
-				subtitle: 'Drive a different city',
+				title: 'Drive another map',
+				subtitle: 'London, New York, Paris, Singapore — and everything else',
+				keepOpen: true,
+				onSelect: (): void => this.openWorldTourSheet(),
+			},
+			{
+				badge: 'LOAD',
+				badgeColor: '#8b7bef',
+				title: 'Load a map by link',
+				subtitle: 'Paste any MetroDreamin map or profile',
 				onSelect: (): void => document.getElementById('game-map-select-btn')?.click(),
 			},
 			{
@@ -812,6 +820,120 @@ export default class GameUISystem extends System {
 		});
 
 		this.cabSheet.show('Timetable', rows);
+	}
+
+	/**
+	 * Every city on the home profile, to drive.
+	 *
+	 * The list is fetched live rather than written down here, for one reason:
+	 * the maps are still being drawn. A hard-coded set of cities would be a
+	 * snapshot that goes stale the moment another one is finished, and would
+	 * mean guessing at map ids — which is how you end up importing a stranger's
+	 * map because the id happened to be valid.
+	 *
+	 * Sorted biggest first, because the big ones are the famous ones.
+	 */
+	private openWorldTourSheet(): void {
+		if (!this.cabSheet) return;
+
+		this.cabSheet.show('Maps to drive', [{
+			badge: '…', badgeColor: '#5d6f81',
+			title: 'Looking up the maps…',
+			subtitle: 'Fetching the latest list',
+			readOnly: true,
+			onSelect: (): void => undefined,
+		}]);
+
+		void this.loadWorldTourRows();
+	}
+
+	private async loadWorldTourRows(): Promise<void> {
+		try {
+			const response = await fetch(`/api/metrodreamin/user/${GameUISystem.HOME_PROFILE_ID}?limit=200`, {
+				headers: {Accept: 'application/json'},
+			});
+
+			if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+			const data = await response.json() as {
+				username: string;
+				maps: {id: string; title: string; numLines: number; numStations: number}[];
+			};
+
+			// A one-station sketch is not somewhere to drive.
+			const worth = data.maps
+				.filter(m => m.numStations >= 6 && m.numLines >= 1)
+				.sort((a, b) => b.numStations - a.numStations);
+
+			if (!this.cabSheet?.isOpen()) return;
+
+			if (worth.length === 0) {
+				this.cabSheet.setRows([{
+					badge: '—', badgeColor: '#5d6f81', title: 'No maps big enough to drive yet',
+					subtitle: `${data.username} has ${data.maps.length} maps, none with six stations`,
+					readOnly: true, onSelect: (): void => undefined,
+				}]);
+
+				return;
+			}
+
+			this.cabSheet.setRows(worth.map(map => ({
+				badge: String(map.numStations),
+				badgeColor: map.numStations >= 200 ? '#ef7b9c' : map.numStations >= 60 ? '#f0a63f' : '#4fb6ef',
+				title: map.title,
+				subtitle: `${map.numLines} line${map.numLines === 1 ? '' : 's'} · ${map.numStations} stations`,
+				onSelect: (): void => void this.driveAnotherCity(map.id, map.title),
+			})));
+		} catch (err) {
+			if (!this.cabSheet?.isOpen()) return;
+
+			this.cabSheet.setRows([{
+				badge: '!', badgeColor: '#ef7b9c',
+				title: 'Could not reach the map list',
+				subtitle: err instanceof Error ? err.message : 'Check the connection and try again',
+				readOnly: true,
+				onSelect: (): void => undefined,
+			}]);
+		}
+	}
+
+	/** Load a different city and start driving it. */
+	private async driveAnotherCity(mapId: string, title: string): Promise<void> {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (!trainSystem) return;
+
+		this.cabSheet?.show('Maps to drive', [{
+			badge: '…', badgeColor: '#4fb6ef', title: `Loading ${title}…`,
+			subtitle: 'Drawing the lines and the streets around them',
+			readOnly: true, onSelect: (): void => undefined,
+		}]);
+
+		try {
+			const {fetchMetroDreaminMap, buildMapUrl} = await import('./data/MetroDreaminImporter');
+			const url = buildMapUrl(mapId);
+			const mapData = await fetchMetroDreaminMap(url);
+
+			trainSystem.loadMap(mapData);
+			this.currentMapUrl = url;
+			this.saveMapEntry(url, mapData.name);
+
+			// loadMap re-selects line 0 and moves the map camera; the follow
+			// camera still has to be told the train is somewhere else entirely.
+			const camera = this.systemManager.getSystem(GameCameraSystem);
+
+			camera?.activate();
+			camera?.snapToTrain();
+
+			this.cabSheet?.close();
+		} catch (err) {
+			this.cabSheet?.setRows([{
+				badge: '!', badgeColor: '#ef7b9c',
+				title: `Could not load ${title}`,
+				subtitle: err instanceof Error ? err.message : 'Try another city',
+				readOnly: true, onSelect: (): void => undefined,
+			}]);
+		}
 	}
 
 	/**
@@ -1419,6 +1541,11 @@ export default class GameUISystem extends System {
 	}
 
 	private static readonly SAVED_MAPS_KEY = 'metrorider-saved-maps';
+	/**
+	 * The MetroDreamin profile the game's cities come from — the same one the
+	 * default map belongs to (its id decodes to `<thisProfile>|16`).
+	 */
+	private static readonly HOME_PROFILE_ID = 'AT6WfHaZrPQ34MZpEKpheVGjGpO2';
 
 	private loadSavedMaps(): {url: string; name: string; ts: number; type?: 'map' | 'user'}[] {
 		try {

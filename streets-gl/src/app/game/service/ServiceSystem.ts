@@ -24,6 +24,7 @@ export default class ServiceSystem extends System {
 	private actuals: Map<number, number> = new Map();
 	private lastRecordedIdx: number = -1;
 	private builtForDirection: number = 0;
+	private builtForMap: number = -1;
 
 	public postInit(): void {
 		// The line and its stations are not loaded yet.
@@ -85,7 +86,11 @@ export default class ServiceSystem extends System {
 		// give them times already gone by.
 		const direction = trainSystem.physicsState.direction || 1;
 
-		if (this.builtForLine !== trainSystem.currentLineIdx || this.builtForDirection !== direction) {
+		if (
+			this.builtForLine !== trainSystem.currentLineIdx ||
+			this.builtForDirection !== direction ||
+			this.builtForMap !== trainSystem.mapGeneration
+		) {
 			this.builtAt = this.worldNow();
 			// The line's own speed profile, so the schedule is keepable at the
 			// speeds the line actually permits rather than a flat guess.
@@ -96,6 +101,7 @@ export default class ServiceSystem extends System {
 			);
 			this.builtForLine = trainSystem.currentLineIdx;
 			this.builtForDirection = direction;
+			this.builtForMap = trainSystem.mapGeneration;
 			this.actuals.clear();
 			this.lastRecordedIdx = -1;
 		}
