@@ -964,7 +964,45 @@ export default class TrainRenderingSystem extends System {
 		return result.size > 0 ? result : null;
 	}
 
+	/**
+	 * Load a texture, tolerating a folder whose case does not match the model.
+	 *
+	 * Models reference their textures with whatever casing the authoring tool
+	 * wrote — one of ours asks for `Textures/colormap.png` while the file ships
+	 * as `textures/colormap.png`. macOS does not care and it worked in
+	 * development for months; Linux does, and production served the lead
+	 * locomotive with no texture at all.
+	 *
+	 * It never looked like a missing file, either: the static host answers an
+	 * unknown path with the app's own index.html at **HTTP 200, text/html**, so
+	 * the request "succeeds" and only fails later when the bytes turn out not
+	 * to be an image. Checking the status code would have said everything was
+	 * fine.
+	 */
 	private async fetchTexturePixels(url: string): Promise<{data: Uint8ClampedArray; width: number; height: number} | null> {
+		const first = await this.tryFetchTexturePixels(url);
+
+		if (first) return first;
+
+		const lowercased = url.replace(/\/([^/]+)\/([^/]+)$/, (all, dir: string, file: string) =>
+			dir === dir.toLowerCase() ? all : `/${dir.toLowerCase()}/${file}`);
+
+		if (lowercased === url) {
+			console.error(`[TrainRenderingSystem] Image load failed: ${url}`);
+
+			return null;
+		}
+
+		const second = await this.tryFetchTexturePixels(lowercased);
+
+		if (!second) {
+			console.error(`[TrainRenderingSystem] Image load failed: ${url} (also tried ${lowercased})`);
+		}
+
+		return second;
+	}
+
+	private async tryFetchTexturePixels(url: string): Promise<{data: Uint8ClampedArray; width: number; height: number} | null> {
 		return new Promise((resolve) => {
 			const img = new Image();
 
@@ -998,7 +1036,8 @@ export default class TrainRenderingSystem extends System {
 				resolve({data: imageData.data, width: img.width, height: img.height});
 			};
 			img.onerror = (): void => {
-				console.error(`[TrainRenderingSystem] Image load failed: ${url}`);
+				// Quiet: the caller retries with different folder casing and
+				// only reports if that fails too.
 				resolve(null);
 			};
 			img.src = url;
