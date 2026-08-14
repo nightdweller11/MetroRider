@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.7.0',
+		codename: 'The 08:06',
+		date: '2026-08-14',
+		emblem: '🕗🚉',
+		summary: 'You are running a real service now: every stop is due at a time, and the board tells you whether you are early, on time or late.',
+		changes: [
+			'A TIMETABLE — Every station on your line has a time it is due. The board above the route strip shows the next one — "NEXT STOP · DUE 08:06 · ON TIME" — and updates as you drive.',
+			'THE WHOLE SCHEDULE is in the menu under Timetable: what time each stop is due, what time you actually got there, and how you did. Stops you have made turn green, or pink if you were late.',
+			'The times are worked out from the real distances between YOUR line\'s stations, not a flat few minutes each — one line in the game has a 1.3 km hop and a 15 km run on the same route, and a schedule that ignored that would be nonsense at both ends.',
+			'The service runs on the same clock as the time of day, so an evening drive is an evening service.',
+		],
+	},
+	{
 		version: '2.6.0',
 		codename: 'Know Your Line',
 		date: '2026-08-14',

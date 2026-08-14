@@ -8,6 +8,8 @@ import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem, {GameCameraMode} from './GameCameraSystem';
 import UISystem from '../systems/UISystem';
+import ServiceSystem from './service/ServiceSystem';
+import {clockFace, describeLateness, latenessSeconds} from './service/ServiceTimetable';
 import AudioSystem from './audio/AudioSystem';
 import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
@@ -659,6 +661,14 @@ export default class GameUISystem extends System {
 			// that strip without rehoming them would have removed two real
 			// features rather than tidying the screen.
 			{
+				badge: 'TIME',
+				badgeColor: '#4fd996',
+				title: 'Timetable',
+				subtitle: 'When each stop is due, and how you are doing',
+				keepOpen: true,
+				onSelect: (): void => this.openTimetableSheet(),
+			},
+			{
 				badge: 'INFO',
 				badgeColor: '#4fb6ef',
 				title: 'About this line',
@@ -750,6 +760,51 @@ export default class GameUISystem extends System {
 				},
 			},
 		];
+	}
+
+	/** "NEXT STOP · DUE 09:14 · 2 MIN LATE" — state, schedule, standing. */
+	private stationMetaLine(doorsOpen: boolean | undefined, arriving: boolean | undefined): string {
+		const state = doorsOpen ? 'DOORS OPEN' : arriving ? 'ARRIVING' : 'NEXT STOP';
+		const service = this.systemManager.getSystem(ServiceSystem);
+		const due = service?.dueAtNext();
+
+		if (due === null || due === undefined) return state;
+
+		const late = service?.currentLateness() ?? null;
+		const standing = describeLateness(late);
+
+		return `${state} · DUE ${clockFace(due)}${standing ? ` · ${standing.toUpperCase()}` : ''}`;
+	}
+
+	/** The whole working timetable, due against actual. */
+	private openTimetableSheet(): void {
+		const service = this.systemManager.getSystem(ServiceSystem);
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const ls = trainSystem?.getCurrentLine();
+		const stops = service?.timetable() ?? [];
+
+		if (!ls || !this.cabSheet || stops.length === 0) return;
+
+		const rows: SheetRow[] = stops.map(stop => {
+			const actual = service?.actualFor(stop.stationIndex);
+			const late = actual === undefined ? null : latenessSeconds(stop, actual);
+			const name = ls.parsed.stations[stop.stationIndex]?.name ?? '—';
+
+			return {
+				badge: clockFace(stop.dueAt),
+				badgeColor: actual === undefined
+					? '#5d6f81'
+					: late !== null && late >= 45 ? '#ef7b9c' : '#4fd996',
+				title: name,
+				subtitle: actual === undefined
+					? 'Still to come'
+					: `Arrived ${clockFace(actual)} — ${describeLateness(late)}`,
+				readOnly: true,
+				onSelect: (): void => undefined,
+			};
+		});
+
+		this.cabSheet.show('Timetable', rows);
 	}
 
 	/**
@@ -1070,7 +1125,10 @@ export default class GameUISystem extends System {
 			limitKmh: limit,
 			dialMax: Math.max(120, Math.ceil((limit || 100) * 1.6 / 20) * 20),
 			stationName: name,
-			stationMeta: physics?.doorsOpen ? 'DOORS OPEN' : ss?.arriving ? 'ARRIVING' : 'NEXT STOP',
+			// The board says what the stop IS, then when it is due. Two separate
+			// facts in one line, in that order, because the name is what you
+			// look for and the time is what you check.
+			stationMeta: this.stationMetaLine(physics?.doorsOpen, ss?.arriving),
 			waiting: waiting === null || waiting === undefined ? null : waiting,
 			progress,
 			stopCount: stops,
