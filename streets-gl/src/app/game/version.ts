@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.16.0',
+		codename: 'The Bus Arrives',
+		date: '2026-08-14',
+		emblem: '🚌',
+		summary: 'Bus routes run an actual bus now — red roof and all.',
+		changes: [
+			'A BUS ROUTE RUNS A BUS — If you have not picked a train of your own, a bus line now gives you a proper town bus instead of a train. It was meant to in the last release, but the bus came out as a black box and shipping that would have been worse than shipping nothing.',
+			'The reason was worth finding: the bus is built from twenty different materials and two pictures, the game keeps only one picture per vehicle, and the one it kept was almost entirely black. Every part of the bus that had no picture of its own was painting itself from a transparent corner of it.',
+			'Fixing that also means any vehicle built out of many parts now shows its real colours.',
+		],
+	},
+	{
 		version: '2.15.0',
 		codename: 'Light and Heavy',
 		date: '2026-08-14',

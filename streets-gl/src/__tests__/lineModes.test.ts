@@ -75,15 +75,15 @@ describe('lineModeInfo', () => {
 		expect(lineModeInfo('regional').consist.length).toBeGreaterThan(1);
 	});
 
-	it('states no opinion where there is no vehicle worth putting on screen', () => {
+	it('states no opinion where the catalog has no suitable vehicle', () => {
 		// No boat and no aircraft model exist, and putting a train on the water
-		// is worse than leaving the configured one alone. The bus is a
-		// different case with the same answer: the model exists but renders
-		// almost black in game, so a bus route keeps bus speeds and the bus
-		// label without a black slab standing in for the vehicle.
+		// is worse than leaving the configured one alone.
 		expect(lineModeInfo('ferry').consist).toEqual([]);
 		expect(lineModeInfo('air').consist).toEqual([]);
-		expect(lineModeInfo('bus').consist).toEqual([]);
+	});
+
+	it('gives a bus ONE vehicle — a three-car bus would be a road train', () => {
+		expect(lineModeInfo('bus').consist).toEqual(['generic-town-bus']);
 	});
 
 	it('only names models that are actually in the shipped catalog', () => {

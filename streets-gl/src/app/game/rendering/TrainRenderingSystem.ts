@@ -306,6 +306,10 @@ export default class TrainRenderingSystem extends System {
 				color: new Float32Array(buf.color),
 				indices: new Uint32Array(buf.indices),
 				uv: buf.uv ? new Float32Array(buf.uv) : undefined,
+				// Without this the per-vertex gate never reaches the GPU and
+				// every part of a multi-material model samples the one kept
+				// image again — the defect it exists to prevent.
+				texFlag: buf.texFlag ? new Float32Array(buf.texFlag) : undefined,
 			}, hasAnim);
 			mesh.texture = buf.baseColorImage ?? null;
 			mesh.tint = TrainRenderingSystem.tintBuffer(tint);
@@ -366,6 +370,7 @@ export default class TrainRenderingSystem extends System {
 				color: new Float32Array(buf.color),
 				indices: new Uint32Array(buf.indices),
 				uv: buf.uv ? new Float32Array(buf.uv) : undefined,
+				texFlag: buf.texFlag ? new Float32Array(buf.texFlag) : undefined,
 			}, false);
 
 			sceneSystem.objects.wrapper.add(mesh);

@@ -3,9 +3,9 @@
 > STATUS: PART SHIPPED · **Line modes 2.12.0 "Bus, Tram, Train"** · **livery
 > tint 2.13.0 "Your Colours"** · **mode consists + a texture double-apply fix
 > 2.14.0 "The Right Vehicle"** · **per-mode accel/brake feel 2.15.0 "Light and
-> Heavy"** · TTS announcements 2.5.0. Still planned: per-MODEL physics
-> profiles, terrain grade, ferry water routes, cab overlay, flange squeal +
-> sustained horn, and a bus model that renders. Foundation for F3 and F7.
+> Heavy"** · **the bus 2.16.0 "The Bus Arrives"** · TTS announcements 2.5.0.
+> Still planned: per-MODEL physics profiles, terrain grade, ferry water routes,
+> cab overlay, flange squeal + sustained horn. Foundation for F3 and F7.
 >
 > ### What shipped in 2.13.0 — livery tint
 >
@@ -108,13 +108,17 @@
 > materials: the untextured parts were sampling that one image at their
 > filled-in uv of (0, 0).
 >
-> **The bus is still not shipped as a default, and that is deliberate.**
-> `generic-town-bus` has 20 materials and 2 images across 34 primitives; both
-> fixes above helped it (its shape and windows now read) but it still comes out
-> near-black in game while its own preview is correct — the single-texture
-> merge cannot represent it. A bus route therefore gets bus speeds, bus dwell,
-> the bus label and the bus icon, and keeps the player's train. Shipping a
-> black slab labelled "bus" would be worse than not shipping a bus.
+> **The bus shipped one release later (2.16.0), and the delay was the point.**
+> 2.14.0 went out with NO default vehicle for a bus route because
+> `generic-town-bus` rendered as a black slab; shipping that and calling it a
+> bus would have been worse than shipping nothing. What finally fixed it was
+> measurement rather than another hypothesis: reading the live mesh showed
+> **0 of 72,469 vertices carried `texFlag`** — the per-vertex gate written in
+> 2.14.0 to stop exactly this was never passed at the car-mesh construction
+> site, so it could not do its job. The same read showed the kept image is a
+> near-black 1024x128 strip with a fully transparent pixel at (0, 0), which is
+> what every untextured part of the bus was painting itself from. Passing
+> `texFlag` through made the bus red and white.
 > Screenshots — including the bus rendering black beside two models that render
 > correctly under the same sun — in
 > `docs/features/_artifacts/mode-consists-2026-08-14/`.

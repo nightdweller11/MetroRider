@@ -80,19 +80,19 @@ const TRAM_SET = ['train-tram-modern', 'train-tram-modern'];
 
 const MODES: Record<LineMode, LineModeInfo> = {
 	/*
-	 * No default vehicle for a bus route yet, deliberately.
+	 * ONE vehicle — a three-car bus would be a road train.
 	 *
-	 * The catalog has `generic-town-bus` and it is the obvious choice, but it
-	 * renders almost black in game while looking correct in its own preview:
-	 * the model carries 20 materials and 2 images across 34 primitives, and the
-	 * loader merges a mesh down to ONE base-colour map. Fixing the worst of
-	 * that (the map was being applied twice) helped every other model and was
-	 * not enough for this one. Shipping a black slab and calling it a bus is
-	 * worse than leaving the player's train alone, so a bus route still gets
-	 * bus speeds, bus stop times, the bus label and the bus icon — just not a
-	 * bus-shaped hole in the picture.
+	 * This model spent a release with no default because it rendered as a black
+	 * slab in game while looking correct in its own preview. It carries 20
+	 * materials and 2 images across 34 primitives, and a merged mesh keeps only
+	 * ONE base-colour map — a near-black 1024x128 strip, as it turned out, with
+	 * a transparent pixel at (0, 0). Every untextured part was sampling that
+	 * corner. The per-vertex `texFlag` was written to stop exactly that and was
+	 * never passed through to the mesh, so it could not: measured on the live
+	 * model, 0 of 72,469 vertices carried it. Wiring it through is what made
+	 * the bus red and white.
 	 */
-	bus:      {label: 'Bus',              icon: '🚌', topKmh: 50,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  accelScale: 1.20, brakeScale: 1.20, consist: []},
+	bus:      {label: 'Bus',              icon: '🚌', topKmh: 50,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  accelScale: 1.20, brakeScale: 1.20, consist: ['generic-town-bus']},
 	tram:     {label: 'Tram',             icon: '🚋', topKmh: 60,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  accelScale: 1.15, brakeScale: 1.15, consist: TRAM_SET},
 	light:    {label: 'Light rail',       icon: '🚈', topKmh: 80,  floorKmh: 25, dwellSec: 25, sign: 'light-rail', onTrack: true,  accelScale: 1.05, brakeScale: 1.05, consist: ['train-tram-round', 'train-tram-round', 'train-tram-round']},
 	rapid:    {label: 'Metro',            icon: '🚇', topKmh: 90,  floorKmh: 30, dwellSec: 25, sign: 'metro',      onTrack: true,  accelScale: 1.00, brakeScale: 1.00, consist: METRO_SET},
