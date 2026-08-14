@@ -12,7 +12,7 @@
 
 ## Progress (2026-08-14)
 
-**Live on metrorider.net: v2.19.0 "Lean On It"** — 40 releases. Every row
+**Live on metrorider.net: v2.20.0 "Local Noon"** — 41 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 | Feature | State |
@@ -25,7 +25,7 @@ below reflects what is DEPLOYED, not what is merged.
 | **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, livery tint v2.13.0, mode consists + texture fixes v2.14.0/v2.16.0, per-mode accel/brake feel v2.15.0, TTS announcements v2.5.0. Per-MODEL physics, terrain grade, ferry water, cab overlay, flange squeal outstanding |
 | **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI, dispatch spacing and SPAD outstanding |
 | **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo mode saves the photo v2.10.0, Simple/Advanced driving v2.2.0. Walk mode outstanding |
-| **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0. Weather and seasons deliberately deferred: overcast is a change to the atmosphere LUT chain and its UBO layout, not a setting |
+| **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, corrected to the map's own local solar time v2.20.0. Weather and seasons deliberately deferred: overcast is a change to the atmosphere LUT chain and its UBO layout, not a setting |
 | **F10 City & discovery** | **PART SHIPPED** — world tour / drive any map from inside the game v2.8.0, line facts v2.6.0. Landmarks, discovery toasts and share links outstanding |
 
 The interface was rebuilt in v2.1.0–v2.3.0 (`docs/features/ui-2.1/`), which is

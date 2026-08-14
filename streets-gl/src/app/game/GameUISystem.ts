@@ -8,6 +8,7 @@ import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem, {GameCameraMode} from './GameCameraSystem';
 import UISystem from '../systems/UISystem';
+import ControlsSystem from '../systems/ControlsSystem';
 import RenderSystem from '../systems/RenderSystem';
 import ServiceSystem from './service/ServiceSystem';
 import {clockFace, describeLateness, latenessSeconds} from './service/ServiceTimetable';
@@ -1114,12 +1115,25 @@ export default class GameUISystem extends System {
 
 		if (hour === undefined) return;
 
-		// Today at that hour, local time — so the sun sits where the player
-		// expects for the city they are driving in.
+		/*
+		 * That hour where the MAP is, not where the player is sitting.
+		 *
+		 * `setHours` works in the browser's own timezone, so choosing Midday
+		 * from Israel asked for 13:00 UTC+3 — which is 02:00 in California.
+		 * Every American and Pacific map therefore loaded in the dark while the
+		 * setting said "Midday", and the sun is computed from the map's real
+		 * latitude and longitude, so it was genuinely night there.
+		 *
+		 * Solar time runs 15° to the hour, so the map's offset from UTC is its
+		 * longitude over 15. Close enough for a sun: political timezones bend
+		 * around borders, the sun does not.
+		 */
+		const lon = this.systemManager.getSystem(ControlsSystem)?.getLatLon()?.lon ?? 0;
+		const utcHour = hour - lon / 15;
 		const when = new Date();
 
-		when.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0);
-		ui.setMapTime(when.getTime());
+		when.setUTCHours(0, 0, 0, 0);
+		ui.setMapTime(when.getTime() + utcHour * 3600_000);
 	}
 
 	private settingsSheetRows(): SheetRow[] {

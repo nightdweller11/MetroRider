@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.20.0',
+		codename: 'Local Noon',
+		date: '2026-08-14',
+		emblem: '☀️🌍',
+		summary: 'Midday means midday where the map is — so cities across the world stop loading in the dark.',
+		changes: [
+			'THE SUN IS IN THE RIGHT PLACE — Choosing Midday now means midday in the city you are driving in, not midday where you happen to be sitting. Before this, loading a map in America or the Pacific gave you the middle of the night while the setting said Midday.',
+			'The sun is worked out from the map\'s real position on the Earth, so it was genuinely night there — the setting was asking for the wrong moment.',
+			'Morning, Evening and Night all follow the same rule.',
+		],
+	},
+	{
 		version: '2.19.0',
 		codename: 'Lean On It',
 		date: '2026-08-14',
