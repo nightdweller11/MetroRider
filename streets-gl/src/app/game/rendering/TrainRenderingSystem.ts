@@ -8,7 +8,7 @@ import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
 import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
-import {parseSlot} from '~/app/game/assets/SlotSpec';
+import {parseSlot, tintToRgb} from '~/app/game/assets/SlotSpec';
 import {debugLog} from '~/app/game/debug';
 import {
 	parseAnimations,
@@ -60,6 +60,26 @@ function isCrossOrigin(url: string): boolean {
 }
 
 export default class TrainRenderingSystem extends System {
+	/**
+	 * How strongly a chosen livery covers the model's own colours.
+	 *
+	 * Not 1.0 on purpose. At full strength every panel line, logo and shading
+	 * detail collapses into one flat colour and the carriage stops looking
+	 * like a carriage; a little of the original showing through keeps the
+	 * model's form while the paint still reads unmistakably as the colour the
+	 * player chose.
+	 */
+	private static readonly TintStrength: number = 0.82;
+
+	/** Slot tint → the shader's `[r, g, b, strength]`, or null for no paint. */
+	private static tintBuffer(tint: string | null): Float32Array | null {
+		const rgb = tintToRgb(tint);
+
+		if (!rgb) return null;
+
+		return new Float32Array([rgb[0], rgb[1], rgb[2], TrainRenderingSystem.TintStrength]);
+	}
+
 	public carMeshes: TrainMeshObject[] = [];
 	/** Cars belonging to other services running on the network. */
 	public ambientMeshes: TrainMeshObject[] = [];
@@ -231,7 +251,7 @@ export default class TrainRenderingSystem extends System {
 
 		const carLengths: number[] = [];
 		for (let i = 0; i < slots.length; i++) {
-			const {modelId, flipped} = parseSlot(slots[i]);
+			const {modelId, flipped, tint} = parseSlot(slots[i]);
 			this.carFlipped.push(flipped);
 			let buf: GeometryBuffers;
 			if (modelId === 'procedural-default') {
@@ -248,6 +268,7 @@ export default class TrainRenderingSystem extends System {
 				uv: buf.uv ? new Float32Array(buf.uv) : undefined,
 			}, hasAnim);
 			mesh.texture = buf.baseColorImage ?? null;
+			mesh.tint = TrainRenderingSystem.tintBuffer(tint);
 			sceneSystem.objects.wrapper.add(mesh);
 			this.carMeshes.push(mesh);
 			carLengths.push(this.getCarLength(buf));

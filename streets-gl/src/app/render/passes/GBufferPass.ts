@@ -711,6 +711,20 @@ export default class GBufferPass extends Pass<{
 			const meshTexture = (meshObj as {gpuTexture?: unknown}).gpuTexture ?? null;
 
 			(this.trainMaterial.getUniform('hasTexture', 'MainBlock').value as Float32Array)[0] = meshTexture ? 1 : 0;
+
+			// Livery paint, per mesh — each car in a consist can carry its own.
+			// Cleared explicitly rather than only set when present: the uniform
+			// block persists between draws, so one painted car would otherwise
+			// paint every mesh drawn after it.
+			const tint = this.trainMaterial.getUniform('tintColor', 'MainBlock').value as Float32Array;
+			const meshTint = (meshObj as {tint?: Float32Array | null}).tint;
+
+			if (meshTint) {
+				tint.set(meshTint);
+			} else {
+				tint[3] = 0;
+			}
+
 			this.trainMaterial.updateUniformBlock('MainBlock');
 
 			if (meshTexture) {

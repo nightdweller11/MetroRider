@@ -65,6 +65,15 @@ export default class TrainMaterialContainer extends MaterialContainer {
 					value: new Float32Array(1)
 				},
 				{
+					// Livery paint: rgb + strength. Strength 0 leaves the model
+					// exactly as its author made it, which is the default for
+					// every mesh that is not a player's car.
+					name: 'tintColor',
+					block: 'MainBlock',
+					type: RendererTypes.UniformType.Float4,
+					value: new Float32Array(4)
+				},
+				{
 					name: 'tDiffuse',
 					block: null,
 					type: RendererTypes.UniformType.Texture2D,

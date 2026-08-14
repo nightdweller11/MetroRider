@@ -1,6 +1,29 @@
 import React, {useState, useCallback, useMemo} from 'react';
 import ModelPreview from './ModelPreview';
-import {parseSlot, toggleSlotFlip, withSlotModel, isSlotFlipped} from '~/app/game/assets/SlotSpec';
+import {parseSlot, toggleSlotFlip, withSlotModel, withSlotTint, isSlotFlipped} from '~/app/game/assets/SlotSpec';
+
+/**
+ * The livery palette.
+ *
+ * A fixed set rather than a colour wheel: a child picking a colour wants to
+ * point at the red one, and every colour here is one a real train is painted.
+ * "Original" is first because it is the way out — a player who paints a
+ * carriage they liked needs to be able to get it back.
+ */
+const LIVERY_COLOURS: {name: string; tint: string | null}[] = [
+	{name: 'Original', tint: null},
+	{name: 'Red', tint: 'd62828'},
+	{name: 'Orange', tint: 'f77f00'},
+	{name: 'Yellow', tint: 'ffd23f'},
+	{name: 'Green', tint: '2a9d5c'},
+	{name: 'Blue', tint: '1d70c4'},
+	{name: 'Navy', tint: '1b3a6b'},
+	{name: 'Purple', tint: '7b52d6'},
+	{name: 'Pink', tint: 'ef7b9c'},
+	{name: 'Silver', tint: 'c9d2da'},
+	{name: 'White', tint: 'f2f5f7'},
+	{name: 'Black', tint: '2a2f36'},
+];
 
 interface AssetEntry {
 	id: string;
@@ -75,6 +98,17 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 		onSlotsChange(next);
 	}, [slots, onSlotsChange]);
 
+	const handleTint = useCallback((idx: number, tint: string | null): void => {
+		if (idx < 0 || idx >= slots.length) return;
+		const next = [...slots];
+		next[idx] = withSlotTint(next[idx], tint);
+		onSlotsChange(next);
+	}, [slots, onSlotsChange]);
+
+	const handlePaintAll = useCallback((tint: string | null): void => {
+		onSlotsChange(slots.map(s => withSlotTint(s, tint)));
+	}, [slots, onSlotsChange]);
+
 	const filterLower = filter.toLowerCase().trim();
 	const filteredModels = filterLower
 		? trainModels.filter(e => e.name.toLowerCase().includes(filterLower) || e.source.toLowerCase().includes(filterLower))
@@ -87,7 +121,7 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 				<p className="tc-section-desc">Click a slot to select it, then choose a model below. Each slot is an independent car.</p>
 				<div className="tc-slot-strip">
 					{slots.map((slot, i) => {
-						const {modelId, flipped} = parseSlot(slot);
+						const {modelId, flipped, tint} = parseSlot(slot);
 						return (
 							<div
 								key={i}
@@ -106,6 +140,13 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 								</div>
 								<div className="tc-slot-name">{getModelName(slot)}</div>
 								{flipped && <div className="tc-slot-flip-badge">Reversed</div>}
+								{tint && (
+									<div
+										className="tc-slot-tint-badge"
+										style={{background: `#${tint}`}}
+										title={`Painted #${tint}`}
+									/>
+								)}
 								<button
 									className={`tc-slot-flip ${flipped ? 'tc-slot-flip-active' : ''}`}
 									onClick={(ev): void => { ev.stopPropagation(); handleToggleFlip(i); }}
@@ -126,6 +167,33 @@ export default function TrainComposer({slots, trainModels, onSlotsChange, onDele
 							+
 						</button>
 					)}
+				</div>
+
+				<div className="tc-livery">
+					<div className="tc-livery-head">
+						<span className="tc-livery-title">Paint car #{selectedSlot + 1}</span>
+						<button
+							className="tc-livery-all"
+							onClick={(): void => handlePaintAll(parseSlot(slots[selectedSlot] ?? '').tint)}
+							title="Give every car the colour this one has"
+						>Paint the whole train</button>
+					</div>
+					<div className="tc-livery-swatches">
+						{LIVERY_COLOURS.map(colour => {
+							const active = (parseSlot(slots[selectedSlot] ?? '').tint ?? null) === colour.tint;
+
+							return (
+								<button
+									key={colour.name}
+									className={`tc-swatch ${active ? 'tc-swatch-on' : ''} ${colour.tint ? '' : 'tc-swatch-none'}`}
+									style={colour.tint ? {background: `#${colour.tint}`} : undefined}
+									onClick={(): void => handleTint(selectedSlot, colour.tint)}
+									title={colour.name}
+									aria-label={colour.name}
+								>{colour.tint ? '' : '✕'}</button>
+							);
+						})}
+					</div>
 				</div>
 			</div>
 

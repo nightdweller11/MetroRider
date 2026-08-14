@@ -58,6 +58,16 @@ export default class TrainMeshObject extends RenderableObject3D {
 	public texture: TrainMeshTexture | null = null;
 	public gpuTexture: AbstractTexture2D | null = null;
 
+	/**
+	 * Livery paint for this mesh: `[r, g, b, strength]` in 0..1.
+	 *
+	 * Null — the default, and what every mesh that is not a player's car keeps
+	 * — means "leave the model as its author made it". The draw loop reads it
+	 * per mesh, the same way it reads the base-colour map, because each car in
+	 * a consist can be painted differently.
+	 */
+	public tint: Float32Array | null = null;
+
 	public storePrevFrameMatrix(): void {
 		this.matrixWorldPrevFrame.set(this.matrixWorld.values);
 		this.hasPrevFrame = true;

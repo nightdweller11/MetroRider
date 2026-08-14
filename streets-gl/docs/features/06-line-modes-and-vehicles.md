@@ -1,9 +1,45 @@
 # F6 — Line Modes, Vehicle Classes & Feel (buses, trams, boats, cab, sound, liveries)
 
-> STATUS: PART SHIPPED · **Line modes shipped in 2.12.0 "Bus, Tram, Train"**
-> and TTS announcements in 2.5.0. Still planned: per-model physics profiles,
-> terrain grade, ferry water routes, cab overlay, flange squeal + sustained
-> horn, livery tinting. Foundation for F3 (mode base limits) and F7.
+> STATUS: PART SHIPPED · **Line modes in 2.12.0 "Bus, Tram, Train"**, **livery
+> tint in 2.13.0 "Your Colours"**, TTS announcements in 2.5.0. Still planned:
+> per-model physics profiles, terrain grade, ferry water routes, cab overlay,
+> flange squeal + sustained horn. Foundation for F3 (mode base limits) and F7.
+>
+> ### What shipped in 2.13.0 — livery tint
+>
+> | Piece | Where |
+> |---|---|
+> | `#tint=rrggbb` token, order-tolerant in, canonical out | `src/app/game/assets/SlotSpec.ts` |
+> | Per-mesh paint | `TrainMeshObject.tint` ← `TrainRenderingSystem.tintBuffer` |
+> | Uniform + shader | `TrainMaterialContainer` `tintColor`, `train.frag` **and `train.vert`** |
+> | Palette UI | `src/settings/TrainComposer.tsx` (`LIVERY_COLOURS`) + `settings.css` |
+> | Tests | `src/__tests__/slotSpec.test.ts` (14) |
+>
+> **Not a multiply.** Multiplying the model's colour by the tint carries the
+> original with it — the same red reads as dark mush on a grey carriage and as
+> pure red on a white one. The shader keeps each pixel's BRIGHTNESS and
+> replaces its colour, so a lit panel becomes the full livery colour, a shaded
+> one a darker version of it, and a window or wheel stays dark. Strength is
+> 0.82, not 1.0: at full strength every panel line and logo collapses into one
+> flat colour and the carriage stops looking like a carriage.
+>
+> **The trap that cost the most time — and it was already labelled.** A GLSL
+> uniform block must be declared identically in EVERY stage. `tintColor` went
+> into `train.frag` only, so the program failed to link with *"Field numbers of
+> uniform block 'MainBlock' differ between VERTEX and FRAGMENT shaders"*, the
+> material had no `MainBlock` at all, and the train rendered as flat untextured
+> boxes. `train.vert` already carried a comment about this exact failure from a
+> previous addition (`hasTexture`); the comment now says so in stronger terms.
+> Compounding it, the first browser check was reading a CACHED bundle and
+> showed the *previous* build's symptoms — always force a fresh load when
+> validating a rebuild.
+>
+> **Validation.** Painted whole-train green (shading, grille and windows all
+> survive); then red / green / **untinted** / yellow across four cars — the
+> untinted third car is the proof that no paint leaks from one draw to the
+> next, since the uniform block persists between them and is cleared
+> explicitly. Track, stations and passing trains stay unpainted. Screenshots in
+> `docs/features/_artifacts/livery-tint-2026-08-14/`.
 >
 > ### What shipped in 2.12.0 — and what the real data turned out to be
 >

@@ -20,16 +20,24 @@ uniform MainBlock {
 	mat4 viewMatrix;
 	mat4 modelViewMatrixPrev;
 	float objectMotion;
-	// Declared in BOTH stages even though only the fragment shader reads it:
-	// GLSL requires a uniform block to be declared identically everywhere it
-	// appears, and omitting it here failed the link with "Field numbers of
-	// uniform block 'MainBlock' differ between VERTEX and FRAGMENT shaders",
-	// which left the material with no MainBlock at all.
+	// EVERY field below is declared in BOTH stages even though only the
+	// fragment shader reads them. GLSL requires a uniform block to be declared
+	// identically everywhere it appears, and omitting one fails the link with
+	// "Field numbers of uniform block 'MainBlock' differ between VERTEX and
+	// FRAGMENT shaders" — which leaves the material with NO MainBlock at all,
+	// so the train renders as untextured flat geometry and the console fills
+	// with "program not valid".
+	//
+	// This has now caught two separate additions (hasTexture, then tintColor).
+	// If you add a field to train.frag's MainBlock, add it here in the same
+	// position, or nothing about the train draws correctly.
 	float hasTexture;
 	// Distance fade for fine geometric detail — see TRACK_BLEND_COLOR.
 	vec4 trackBlendColor;
 	float detailFadeStart;
 	float detailFadeEnd;
+	// Livery paint: .rgb is the colour, .a how much of it to apply.
+	vec4 tintColor;
 };
 
 void main() {

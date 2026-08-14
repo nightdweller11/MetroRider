@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.13.0',
+		codename: 'Your Colours',
+		date: '2026-08-14',
+		emblem: '🎨🚆',
+		summary: 'Paint your train whatever colour you like — a car at a time, or all of it.',
+		changes: [
+			'PAINT YOUR TRAIN — In Trains & sounds there is a row of colours under your carriages. Pick a car, pick a colour. There is a button to paint the whole train at once, and an "Original" swatch to put a car back the way it was.',
+			'Every car can be different, so you can run a red engine with yellow carriages if you want to.',
+			'The paint keeps the shape of the train: windows stay dark, the grille and the panel lines still show, and the shading still works. It is paint, not a flat colour sprayed over everything.',
+			'Your colours are saved with the rest of your train, so they are still there next time.',
+		],
+	},
+	{
 		version: '2.12.0',
 		codename: 'Bus, Tram, Train',
 		date: '2026-08-14',

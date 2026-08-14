@@ -21,6 +21,8 @@ uniform MainBlock {
 	vec4 trackBlendColor;
 	float detailFadeStart;
 	float detailFadeEnd;
+	// Livery paint: .rgb is the colour, .a how much of it to apply.
+	vec4 tintColor;
 };
 
 uniform sampler2D tDiffuse;
@@ -39,6 +41,24 @@ void main() {
 
 	if (hasTexture > 0.5) {
 		base = texture(tDiffuse, vUv).rgb * vColor;
+	}
+
+	// Livery paint.
+	//
+	// NOT a plain multiply by the tint. Multiplying takes the model's own
+	// colour with it, so a red livery on a dark grey carriage gives dark red
+	// mush and on a white one gives pure red — the same paint reading as two
+	// different colours depending on what it went over.
+	//
+	// Instead the pixel's BRIGHTNESS is kept and the colour replaced: a lit
+	// body panel becomes the full livery colour, a shaded one becomes a darker
+	// version of the same colour, and a window or a wheel — dark to begin with
+	// — stays dark. That is how paint behaves, and it means the shading, the
+	// panel lines and the glass all survive being repainted.
+	if (tintColor.a > 0.001) {
+		float lum = dot(base, vec3(0.2126, 0.7152, 0.0722));
+
+		base = mix(base, tintColor.rgb * lum, tintColor.a);
 	}
 
 	// Rail LOD.
