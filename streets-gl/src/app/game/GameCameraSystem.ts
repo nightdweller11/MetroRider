@@ -9,6 +9,12 @@ export enum GameCameraMode {
 	Chase = 'chase',
 	Cab = 'cab',
 	Orbit = 'orbit',
+	/** A seat by the window, inside the train. */
+	Ride = 'ride',
+	/** Standing beside the line, watching your own train go past. */
+	Trackside = 'trackside',
+	/** Free look with the interface out of the way, for a clean picture. */
+	Photo = 'photo',
 	Free = 'free',
 }
 
@@ -20,6 +26,41 @@ const ORBIT_DISTANCE = 80;
 const ORBIT_HEIGHT = 40;
 const ORBIT_SPEED = 0.15;
 const SMOOTH_FACTOR = 4.0;
+
+/**
+ * Two cars back, at the window, at sitting eye height — and just OUTSIDE the
+ * body rather than inside it. There is no carriage interior to sit in, so a
+ * seat position renders as a camera floating over open ground with no train in
+ * frame. At the window line, angled forward, the train's own flank leads the
+ * shot and the city sweeps past it: the view reads as riding.
+ */
+const RIDE_BACK = 30;
+/**
+ * Negative puts the window on the side that sends the train down the LEFT of
+ * the frame. On the right it ran straight into the driving console; the left
+ * only meets the much smaller map corner.
+ */
+const RIDE_SIDE = -3.4;
+const RIDE_HEIGHT = 3.4;
+/**
+ * How far the gaze turns OUT from straight ahead, in radians. Cars are placed
+ * behind the reference point, so from a seat 30 m back the leading cars sit
+ * about 10 degrees off forward — and the camera is a 40 degree lens, so an
+ * angle chosen by eye missed them entirely. A small outward turn keeps the
+ * train down one side of the frame with the city filling the rest.
+ */
+const RIDE_LOOK_OUT = -0.26;
+
+/**
+ * Trackside stands still and lets the train come past — that is the whole
+ * point of the view, so the camera is planted in the world rather than
+ * carried by the train. It re-plants ahead once the train has gone by and
+ * become too small to enjoy.
+ */
+const TRACKSIDE_OFFSET = 18;
+const TRACKSIDE_AHEAD = 130;
+const TRACKSIDE_HEIGHT = 2.4;
+const TRACKSIDE_REPLANT_DISTANCE = 260;
 
 const MIN_DISTANCE = 15;
 const MAX_DISTANCE = 300;
@@ -45,6 +86,11 @@ export default class GameCameraSystem extends System {
 	private lastMouseY: number = 0;
 	private inputListenersAdded: boolean = false;
 	private pendingSnap: boolean = false;
+
+	/** Where Trackside is standing, in world space, until it re-plants. */
+	private tracksideX: number = 0;
+	private tracksideY: number = 0;
+	private tracksideZ: number = 0;
 
 	public isActive(): boolean {
 		return this.active;
@@ -166,10 +212,31 @@ export default class GameCameraSystem extends System {
 	}
 
 	public cycleMode(): void {
-		const modes = [GameCameraMode.Chase, GameCameraMode.Cab, GameCameraMode.Orbit];
+		const modes = this.selectableModes();
 		const idx = modes.indexOf(this.mode);
-		this.mode = modes[(idx + 1) % modes.length];
-		console.log(`[GameCamera] Mode: ${this.mode}`);
+
+		this.setMode(modes[(idx + 1) % modes.length]);
+	}
+
+	/** The views the C key and the camera sheet walk through, in order. */
+	public selectableModes(): GameCameraMode[] {
+		return [
+			GameCameraMode.Chase,
+			GameCameraMode.Cab,
+			GameCameraMode.Orbit,
+			GameCameraMode.Ride,
+			GameCameraMode.Trackside,
+			GameCameraMode.Photo,
+		];
+	}
+
+	public setMode(mode: GameCameraMode): void {
+		this.mode = mode;
+
+		// Trackside plants where the train is NOW, not where it was when you
+		// last used the view — otherwise switching to it drops you at a spot
+		// the train left several stations ago.
+		if (mode === GameCameraMode.Trackside) this.plantTrackside();
 	}
 
 	public getModeLabel(): string {
@@ -177,8 +244,16 @@ export default class GameCameraSystem extends System {
 			case GameCameraMode.Chase: return 'Chase';
 			case GameCameraMode.Cab: return 'Cab';
 			case GameCameraMode.Orbit: return 'Orbit';
+			case GameCameraMode.Ride: return 'Ride';
+			case GameCameraMode.Trackside: return 'Trackside';
+			case GameCameraMode.Photo: return 'Photo';
 			case GameCameraMode.Free: return 'Free';
 		}
+	}
+
+	/** Photo hides the interface, so the rest of the UI needs to know. */
+	public isPhotoMode(): boolean {
+		return this.mode === GameCameraMode.Photo;
 	}
 
 	public update(deltaTime: number): void {
@@ -234,7 +309,95 @@ export default class GameCameraSystem extends System {
 			case GameCameraMode.Orbit:
 				this.updateOrbit(deltaTime);
 				break;
+			case GameCameraMode.Ride:
+				this.updateRide();
+				break;
+			case GameCameraMode.Trackside:
+				this.updateTrackside();
+				break;
+			case GameCameraMode.Photo:
+				this.updatePhoto();
+				break;
 		}
+	}
+
+	/**
+	 * A passenger seat. The window is at your shoulder, so the view is mostly
+	 * sideways with a little forward lean — looking straight ahead from inside
+	 * a train shows you the back of the next seat, not the city.
+	 */
+	private updateRide(): void {
+		const heading = this.smoothHeading;
+		const side = heading + Math.PI / 2;
+
+		const x = this.smoothX - Math.sin(heading) * RIDE_BACK + Math.sin(side) * RIDE_SIDE;
+		const z = this.smoothZ - Math.cos(heading) * RIDE_BACK + Math.cos(side) * RIDE_SIDE;
+		const y = this.smoothY + RIDE_HEIGHT;
+
+		this.camera.position.set(x, y, z);
+
+		// Drag steers where the passenger is looking; by default out of the
+		// window with a forward bias, the way you actually watch a city go by.
+		const look = heading + RIDE_LOOK_OUT + this.userYawOffset;
+		const lookDist = 120;
+
+		this.camera.lookAt(
+			new Vec3(
+				x + Math.sin(look) * lookDist,
+				y - (this.userPitchOffset - 0.4) * lookDist * 0.5,
+				z + Math.cos(look) * lookDist,
+			),
+			false,
+		);
+	}
+
+	private plantTrackside(): void {
+		const train = this.systemManager.getSystem(TrainSystem);
+		const pos = train?.trainPosition;
+
+		if (!pos) return;
+
+		// Stand ahead of the train and off to one side, so it arrives, passes,
+		// and recedes rather than appearing already on top of you.
+		const ahead = pos.heading;
+		const side = ahead + Math.PI / 2;
+
+		this.tracksideX = pos.x + Math.sin(ahead) * TRACKSIDE_AHEAD + Math.sin(side) * TRACKSIDE_OFFSET;
+		this.tracksideZ = pos.y + Math.cos(ahead) * TRACKSIDE_AHEAD + Math.cos(side) * TRACKSIDE_OFFSET;
+		this.tracksideY = pos.height + TRACKSIDE_HEIGHT;
+	}
+
+	private updateTrackside(): void {
+		const dx = this.smoothX - this.tracksideX;
+		const dz = this.smoothZ - this.tracksideZ;
+
+		// Once it is a speck, go and stand further up the line.
+		if (Math.hypot(dx, dz) > TRACKSIDE_REPLANT_DISTANCE) {
+			this.plantTrackside();
+		}
+
+		this.camera.position.set(this.tracksideX, this.tracksideY, this.tracksideZ);
+		this.camera.lookAt(new Vec3(this.smoothX, this.smoothY + 2, this.smoothZ), false);
+	}
+
+	/**
+	 * Photo is Orbit that holds still: no drift, so the shot you framed is the
+	 * shot you get. The interface hiding is the UI's business, not the camera's.
+	 */
+	private updatePhoto(): void {
+		const angle = this.orbitAngle + this.userYawOffset;
+		const dist = this.userDistance;
+		const pitch = this.userPitchOffset;
+
+		const horizontalDist = dist * Math.cos(pitch);
+		const verticalDist = dist * Math.sin(pitch);
+
+		this.camera.position.set(
+			this.smoothX + Math.cos(angle) * horizontalDist,
+			this.smoothY + verticalDist,
+			this.smoothZ + Math.sin(angle) * horizontalDist,
+		);
+		this.camera.lookAt(new Vec3(this.smoothX, this.smoothY + 2, this.smoothZ), false);
 	}
 
 	private updateChase(): void {

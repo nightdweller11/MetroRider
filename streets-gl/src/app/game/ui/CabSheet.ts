@@ -50,10 +50,9 @@ const CSS = `
 /* the console steps aside rather than being covered */
 .cab.sheet-open[data-o="land"] .cab-con{right:calc(20px + min(400px,35%) + 12px)}
 .cab.sheet-open[data-o="land"] .cab-util{right:calc(20px + min(400px,35%) + 12px)}
-/* With the sheet open the ribbon cannot share the top row with the
-   destination board — it drops below it rather than running underneath. */
-.cab.sheet-open[data-o="land"] .cab-rib{left:20px;top:76px;transform:none;
-  width:calc(100% - 40px - min(400px,35%) - 12px)}
+/* The ribbon already sits under the board; with the sheet open it just has
+   less room to run in. */
+.cab.sheet-open[data-o="land"] .cab-rib{width:min(460px,calc(100% - 40px - min(400px,35%) - 12px))}
 .cab.sheet-open[data-o="port"] .cab-con,
 .cab.sheet-open[data-o="phone"] .cab-con{display:none}
 .cab.sheet-open[data-o="port"] .cab-mini,

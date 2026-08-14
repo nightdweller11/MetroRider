@@ -6,7 +6,7 @@ import ScoringSystem from '~/app/game/scoring/ScoringSystem';
 import SpeedLimitSystem from '~/app/game/limits/SpeedLimitSystem';
 import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
-import GameCameraSystem from './GameCameraSystem';
+import GameCameraSystem, {GameCameraMode} from './GameCameraSystem';
 import AudioSystem from './audio/AudioSystem';
 import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
@@ -44,6 +44,8 @@ export default class GameUISystem extends System {
 	private lineListExpanded: boolean = true;
 	private cabHud: CabHud | null = null;
 	private cabSheet: CabSheet | null = null;
+	/** What photo mode the interface is currently dressed for. */
+	private photoModeApplied: boolean = false;
 	private stationPanelEl: HTMLElement | null = null;
 	private debugEl: HTMLElement | null = null;
 	private debugVisible: boolean = false;
@@ -636,11 +638,17 @@ export default class GameUISystem extends System {
 
 		return [
 			{badge: 'CAB', badgeColor: '#4fb6ef', title: 'Cab', subtitle: 'From the driver\'s seat',
-				onSelect: (): void => this.setCameraMode('Cab')},
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Cab)},
 			{badge: 'CHA', badgeColor: '#4fd996', title: 'Chase', subtitle: 'Behind the train',
-				onSelect: (): void => this.setCameraMode('Chase')},
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Chase)},
 			{badge: 'ORB', badgeColor: '#f0a63f', title: 'Orbit', subtitle: 'Look around from outside',
-				onSelect: (): void => this.setCameraMode('Orbit')},
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Orbit)},
+			{badge: 'RIDE', badgeColor: '#8b7bef', title: 'Ride', subtitle: 'A seat by the window, watching the city go by',
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Ride)},
+			{badge: 'SIDE', badgeColor: '#ef7b9c', title: 'Trackside', subtitle: 'Stand by the line and watch your train go past',
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Trackside)},
+			{badge: 'PHO', badgeColor: '#dfe6ee', title: 'Photo', subtitle: 'Free look with the controls out of the way',
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Photo)},
 			{
 				badge: simple ? 'SIM' : 'ADV',
 				badgeColor: simple ? '#4fd996' : '#f0a63f',
@@ -658,14 +666,48 @@ export default class GameUISystem extends System {
 	}
 
 	/** Cycle until the named mode comes up; the camera owns its own order. */
-	private setCameraMode(target: string): void {
+	private setCameraMode(target: GameCameraMode): void {
 		const cam = this.systemManager.getSystem(GameCameraSystem);
 
 		if (!cam) return;
 
-		for (let i = 0; i < 6 && cam.getModeLabel() !== target; i++) {
-			cam.cycleMode();
+		cam.setMode(target);
+		this.applyPhotoMode();
+	}
+
+	/**
+	 * Photo mode's whole purpose is a clean frame, so the interface goes away
+	 * — but a control that hides every control has to leave a way back, or the
+	 * only exit is reloading the page.
+	 */
+	private applyPhotoMode(): void {
+		const photo = this.systemManager.getSystem(GameCameraSystem)?.isPhotoMode() ?? false;
+
+		// Called every frame from the HUD update, so do nothing unless it moved.
+		if (photo === this.photoModeApplied) return;
+
+		this.photoModeApplied = photo;
+		this.cabHud?.setVisible(!photo);
+
+		if (!photo) {
+			document.getElementById('photo-exit')?.remove();
+			return;
 		}
+
+		if (document.getElementById('photo-exit')) return;
+
+		const exit = document.createElement('button');
+
+		exit.id = 'photo-exit';
+		exit.textContent = 'Leave photo mode';
+		exit.style.cssText =
+			'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;' +
+			'padding:12px 20px;border:0;border-radius:999px;cursor:pointer;' +
+			'font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;font-weight:800;font-size:14px;' +
+			'color:#08141d;background:linear-gradient(180deg,#f2f7fb,#c9d6e2);' +
+			'box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 6px 18px rgba(0,0,0,.45)';
+		exit.addEventListener('click', () => this.setCameraMode(GameCameraMode.Chase));
+		document.body.appendChild(exit);
 	}
 
 	/**
@@ -699,6 +741,10 @@ export default class GameUISystem extends System {
 	/** Feed the cab instruments from real game state. */
 	private updateCabHud(trainSystem: TrainSystem, deltaTime: number): void {
 		if (!this.cabHud) return;
+
+		// The C key cycles views without going through the sheet, so photo mode
+		// is reconciled here rather than only where it is chosen.
+		this.applyPhotoMode();
 
 		const limits = this.systemManager.getSystem(SpeedLimitSystem);
 		const passengers = this.systemManager.getSystem(PassengerSystem);

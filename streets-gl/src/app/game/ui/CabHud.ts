@@ -142,7 +142,11 @@ const CSS = `
 
 /* ---- landscape: console bottom-right, minimap bottom-left ---- */
 .cab[data-o="land"] .cab-dest{left:20px;top:20px}
-.cab[data-o="land"] .cab-rib{left:50%;transform:translateX(-50%);top:20px;width:min(460px,36%)}
+/* Under the destination board, not beside it. The board's width follows the
+   station name, so a centred ribbon collided with long names — measured
+   covering the waiting-passenger count at 1180px on a Hebrew/English stop.
+   Portrait and phone already stack them; landscape was the odd one out. */
+.cab[data-o="land"] .cab-rib{left:20px;top:76px;width:min(460px,36%)}
 .cab[data-o="land"] .cab-util{right:20px;top:20px}
 .cab[data-o="land"] .cab-con{right:20px;bottom:20px}
 .cab[data-o="land"] .cab-mini{left:20px;bottom:20px;width:200px;height:172px}

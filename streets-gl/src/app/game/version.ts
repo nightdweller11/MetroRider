@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.2.0',
+		codename: 'Six Ways to Watch',
+		date: '2026-08-14',
+		emblem: '📷🚆',
+		summary: 'Three new ways to watch your train: from a window seat, from the side of the line, and with the controls out of the way.',
+		changes: [
+			'RIDE — Take a seat by the window two cars back. The train\'s side runs away down the frame and the city sweeps past it, the way it looks when you lean on the glass.',
+			'TRACKSIDE — Stand beside the line and let your own train come past you, the way you would watch a real one. The camera stays put while the train arrives and recedes, then goes and stands further up the line when it has gone.',
+			'PHOTO — Free look with the whole interface out of the way, for a clean picture. One button brings the controls back.',
+			'Views are chosen by name now instead of pressing a button until you land on the one you wanted, and the route strip no longer runs underneath the station name on a wide screen.',
+		],
+	},
+	{
 		version: '2.1.0',
 		codename: 'Cab',
 		date: '2026-08-14',
