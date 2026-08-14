@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.3.0',
+		codename: 'Mind the Doors',
+		date: '2026-08-14',
+		emblem: '📢🚉',
+		summary: 'Your stations are announced out loud, the way they are on a real train.',
+		changes: [
+			'STATIONS ARE ANNOUNCED — As you come up to a stop, a voice names it: "Now approaching Raanana." Pull away and it tells you what is next: "The next station is Hod hasharon." The last stop on the line says so, and the doors are called as they open and close.',
+			'The announcer says the station name and nothing else — no platform codes, no letters spelled out one at a time. All 84 stations on the map were checked.',
+			'SETTINGS, IN THE GAME — Driving, announcements, sound, graphics and the frame rate limit now have a Settings screen you can actually reach, from the menu button. Until now the settings screen only existed on the old interface, so once you started driving there was no way in.',
+			'The menu button opens a menu — pick a line, turn the train around, change city, choose your trains and sounds, change the camera, or open settings — rather than going straight to the line list.',
+			'TIDIED UP — The old row of emoji buttons left over from the previous interface is gone from the screen. Everything they did has a proper home in the menu, including turning the train around at the end of the line, which had no other way to do it.',
+		],
+	},
+	{
 		version: '2.2.0',
 		codename: 'Six Ways to Watch',
 		date: '2026-08-14',

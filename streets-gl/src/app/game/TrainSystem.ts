@@ -25,8 +25,12 @@ import {InputHandler} from './physics/InputHandler';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
 import AudioSystem from './audio/AudioSystem';
+import AnnouncementSystem from './audio/AnnouncementSystem';
 import GameCameraSystem from './GameCameraSystem';
 import {debugLog} from './debug';
+
+/** How far ahead of a station the approach is announced, metres. */
+const APPROACH_ANNOUNCE_DIST = 600;
 
 export interface TrainWorldPosition {
 	x: number;
@@ -263,6 +267,9 @@ export default class TrainSystem extends System {
 					audioSystem.playDoorClose();
 				}
 			}
+
+			this.systemManager.getSystem(AnnouncementSystem)
+				?.announceDoors(this.physicsState.doorsOpen);
 		}
 	}
 
@@ -441,6 +448,8 @@ export default class TrainSystem extends System {
 	}
 
 	private lastStationChimeIdx: number = -1;
+	/** The station whose approach has already been announced. */
+	private lastApproachIdx: number = -1;
 
 	private updateStationState(ls: LineState): void {
 		this.stationState = this.stationManager.update(
@@ -470,7 +479,65 @@ export default class TrainSystem extends System {
 				);
 			}
 		} else {
+			// The moment the arriving flag drops is departure — the one point
+			// where naming the stop ahead is useful rather than noise.
+			if (this.lastStationChimeIdx !== -1) {
+				const nextIdx = this.stationState.nextStationIdx;
+				const next = ls.parsed.stations[nextIdx];
+
+				if (next) {
+					this.systemManager.getSystem(AnnouncementSystem)
+						?.announceNext(this.stationState.stationName || next.name);
+				}
+			}
+
 			this.lastStationChimeIdx = -1;
+			this.updateApproachAnnouncement(ls);
 		}
+	}
+
+	/**
+	 * "Now approaching X", while the station is still ahead of you.
+	 *
+	 * This cannot hang off `stationState.arriving`: that flag is
+	 * `distance < STATION_STOP_DIST && speed < 2 m/s`, which is the train
+	 * standing AT the platform. Announcing there is announcing a station the
+	 * passenger is already looking at, and it never fires at all for a train
+	 * running through.
+	 */
+	private updateApproachAnnouncement(ls: LineState): void {
+		const ss = this.stationState;
+
+		if (!ss) return;
+
+		const distance = ss.nextStationDist;
+
+		// Re-arm once well clear, so the next station gets its own call.
+		if (distance > APPROACH_ANNOUNCE_DIST * 1.6) {
+			this.lastApproachIdx = -1;
+			return;
+		}
+
+		if (
+			distance > APPROACH_ANNOUNCE_DIST ||
+			this.physicsState.trainSpeed < 2 ||
+			this.lastApproachIdx === ss.nextStationIdx
+		) {
+			return;
+		}
+
+		const idx = ss.nextStationIdx;
+		const station = ls.parsed.stations[idx];
+
+		if (!station) return;
+
+		this.lastApproachIdx = idx;
+
+		const last = ls.parsed.stations.length - 1;
+
+		this.systemManager.getSystem(AnnouncementSystem)?.announceApproach(
+			station.name,
+			!ls.track.isLoop && (idx === 0 || idx === last),
+		);
 	}
 }

@@ -52,6 +52,11 @@ export default class GameUISystem extends System {
 	private initialized: boolean = false;
 	private mobile: boolean = false;
 	private mobileTopBtns: HTMLElement[] = [];
+	private mobileTopStripEl: HTMLElement | null = null;
+	/** The legacy train-customisation button, now a row in the menu sheet. */
+	private trainCustomiseEl: HTMLElement | null = null;
+	/** The old emoji control cluster, superseded by the cab console. */
+	private legacyControlsEl: HTMLElement | null = null;
 	private infoPanelEl: HTMLElement | null = null;
 	private timeEl: HTMLElement | null = null;
 	private paxEl: HTMLElement | null = null;
@@ -267,6 +272,7 @@ export default class GameUISystem extends System {
 			strip.appendChild(btn);
 		}
 		this.container.appendChild(strip);
+		this.mobileTopStripEl = strip;
 	}
 
 	private createSpeedometer(): void {
@@ -530,6 +536,7 @@ export default class GameUISystem extends System {
 		}
 
 		this.container.appendChild(controlsWrap);
+		this.legacyControlsEl = controlsWrap;
 	}
 
 	private createLineSelector(trainSystem: TrainSystem): void {
@@ -600,8 +607,78 @@ export default class GameUISystem extends System {
 			return;
 		}
 
-		// Menu: the line picker, summoned rather than permanent.
-		this.openLinePicker();
+		// Menu: what you can go and do, summoned rather than permanent.
+		this.openMenuSheet();
+	}
+
+	/**
+	 * The menu used to BE the line picker, which left settings with no door
+	 * into them at all once the game had started.
+	 */
+	private openMenuSheet(): void {
+		if (!this.cabSheet) return;
+
+		if (this.cabSheet.isOpen()) {
+			this.cabSheet.close();
+			return;
+		}
+
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const lineCount = trainSystem?.lines.length ?? 0;
+
+		this.cabSheet.show('Menu', [
+			// keepOpen, because these REPLACE the menu with the next sheet. The
+			// toggle guard on the openers would read the still-open menu as
+			// "already showing" and close it instead of drilling in.
+			{
+				badge: 'LINE',
+				badgeColor: '#4fb6ef',
+				title: 'Pick a line',
+				subtitle: `${lineCount} routes across the country`,
+				keepOpen: true,
+				onSelect: (): void => this.showLinePicker(),
+			},
+			{
+				badge: 'VIEW',
+				badgeColor: '#8b7bef',
+				title: 'Camera',
+				subtitle: 'Cab, chase, orbit, ride, trackside, photo',
+				keepOpen: true,
+				onSelect: (): void => this.showCameraSheet(),
+			},
+			{
+				badge: 'SET',
+				badgeColor: '#f0a63f',
+				title: 'Settings',
+				subtitle: 'Driving, announcements, sound, graphics',
+				keepOpen: true,
+				onSelect: (): void => this.openSettingsSheet(),
+			},
+			// These two were only reachable from the old emoji strip. Hiding
+			// that strip without rehoming them would have removed two real
+			// features rather than tidying the screen.
+			{
+				badge: 'REV',
+				badgeColor: '#8b7bef',
+				title: 'Turn the train around',
+				subtitle: 'Drive the line back the other way',
+				onSelect: (): void => this.systemManager.getSystem(TrainSystem)?.reverseDirection(),
+			},
+			{
+				badge: 'CITY',
+				badgeColor: '#ef7b9c',
+				title: 'Change map',
+				subtitle: 'Drive a different city',
+				onSelect: (): void => document.getElementById('game-map-select-btn')?.click(),
+			},
+			{
+				badge: 'TRN',
+				badgeColor: '#4fd996',
+				title: 'Trains & sounds',
+				subtitle: 'Pick the models and horns your train uses',
+				onSelect: (): void => this.trainCustomiseEl?.click(),
+			},
+		]);
 	}
 
 	/**
@@ -612,9 +689,6 @@ export default class GameUISystem extends System {
 	 * it is the same decision — how much the game is doing for you.
 	 */
 	private openCameraSheet(): void {
-		const cam = this.systemManager.getSystem(GameCameraSystem);
-		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
-
 		if (!this.cabSheet) return;
 
 		if (this.cabSheet.isOpen()) {
@@ -622,9 +696,13 @@ export default class GameUISystem extends System {
 			return;
 		}
 
-		const current = cam?.getModeLabel?.() ?? '';
+		this.showCameraSheet();
+	}
 
-		this.cabSheet.show(`View — now ${current}`, this.cameraSheetRows());
+	private showCameraSheet(): void {
+		const current = this.systemManager.getSystem(GameCameraSystem)?.getModeLabel?.() ?? '';
+
+		this.cabSheet?.show(`View — now ${current}`, this.cameraSheetRows());
 	}
 
 	/**
@@ -663,6 +741,85 @@ export default class GameUISystem extends System {
 				},
 			},
 		];
+	}
+
+	/**
+	 * Settings, in the game.
+	 *
+	 * The React settings modal is only reachable from the legacy nav panel,
+	 * which the driving interface does not mount — so once the game started,
+	 * EVERY setting was unreachable, including ones added for the player
+	 * (driving mode, announcements). A setting nobody can change is not a
+	 * setting. These are the five worth a player's attention; the rest stay
+	 * developer surface.
+	 */
+	private openSettingsSheet(): void {
+		if (!this.cabSheet) return;
+
+		this.cabSheet.show('Settings', this.settingsSheetRows());
+	}
+
+	private settingsSheetRows(): SheetRow[] {
+		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
+		const audio = this.systemManager.getSystem(AudioSystem);
+		const rows: SheetRow[] = [];
+
+		// One generic row per status setting: show where it is, tap to advance.
+		const cycler = (key: string, title: string, badges: Record<string, string>): SheetRow | null => {
+			const setting = settings?.get(key);
+			const config = (Config.SettingsSchema as Record<string, {
+				status?: string[];
+				statusLabels?: string[];
+			}>)[key];
+
+			if (!setting || !config?.status) return null;
+
+			const values = config.status;
+			const at = Math.max(0, values.indexOf(setting.statusValue));
+			const label = config.statusLabels?.[at] ?? values[at];
+
+			return {
+				badge: badges[values[at]] ?? values[at].toUpperCase().slice(0, 4),
+				badgeColor: values[at] === 'off' ? '#7a8899' : '#4fd996',
+				title,
+				subtitle: `${label} — tap to change`,
+				keepOpen: true,
+				onSelect: (): void => {
+					settings?.update(key, {statusValue: values[(at + 1) % values.length]});
+					this.cabSheet?.setRows(this.settingsSheetRows());
+				},
+			};
+		};
+
+		const driving = cycler('driveMode', 'Driving', {simple: 'SIM', advanced: 'ADV'});
+		const announce = cycler('announcements', 'Station announcements', {on: 'ON', off: 'OFF'});
+
+		if (driving) rows.push(driving);
+		if (announce) rows.push(announce);
+
+		// Sound is the audio system's own state rather than a stored setting,
+		// so it cannot go through the same cycler.
+		rows.push({
+			badge: audio?.isMuted() ? 'OFF' : 'ON',
+			badgeColor: audio?.isMuted() ? '#7a8899' : '#4fd996',
+			title: 'Sound',
+			subtitle: audio?.isMuted() ? 'Muted — tap to turn on' : 'On — tap to mute',
+			keepOpen: true,
+			onSelect: (): void => {
+				audio?.toggleMute();
+				this.cabSheet?.setRows(this.settingsSheetRows());
+			},
+		});
+
+		const graphics = cycler('performanceMode', 'Graphics', {
+			low: 'LOW', medium: 'MED', high: 'HIGH', auto: 'AUTO', custom: 'CUST',
+		});
+		const fps = cycler('fpsLimit', 'Frame rate limit', {off: 'MAX', '30': '30', '60': '60'});
+
+		if (graphics) rows.push(graphics);
+		if (fps) rows.push(fps);
+
+		return rows;
 	}
 
 	/** Cycle until the named mode comes up; the camera owns its own order. */
@@ -717,14 +874,20 @@ export default class GameUISystem extends System {
 	 * the same list, opened when you want it and dismissed when you are done.
 	 */
 	private openLinePicker(): void {
-		const trainSystem = this.systemManager.getSystem(TrainSystem);
-
-		if (!trainSystem || !this.cabSheet) return;
+		if (!this.cabSheet) return;
 
 		if (this.cabSheet.isOpen()) {
 			this.cabSheet.close();
 			return;
 		}
+
+		this.showLinePicker();
+	}
+
+	private showLinePicker(): void {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (!trainSystem || !this.cabSheet) return;
 
 		this.cabSheet.show('Pick a line', trainSystem.lines.map((ls, idx) => ({
 			// The line CODE, which is the leading token of the name ("A1 - A2
@@ -1489,6 +1652,7 @@ export default class GameUISystem extends System {
 		}
 		btn.textContent = '\ud83d\ude86';
 		btn.title = 'Customize your train (models & sounds)';
+		this.trainCustomiseEl = btn;
 		btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(255,255,255,0.2)'; });
 		btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(0,0,0,0.65)'; });
 		btn.addEventListener('click', () => {
@@ -1853,6 +2017,27 @@ export default class GameUISystem extends System {
 		// menu button. Keeping it hidden rather than deleting the builder so
 		// the station panel it opens keeps working unchanged.
 		if (this.lineListWrap) this.lineListWrap.style.display = 'none';
+
+		// The old emoji strip (🚆 🗺 🏠) duplicated the utility rail and used
+		// emoji as navigation icons, which is not the icon set. Hidden rather
+		// than deleted: the metro-map overlay and the map picker are still
+		// opened by clicking these elements, and `click()` works on a hidden
+		// element. Their functions are reachable from the menu sheet.
+		for (const id of ['game-metro-map-btn', 'game-map-select-btn']) {
+			const el = document.getElementById(id);
+
+			if (el) el.style.display = 'none';
+		}
+
+		if (this.mobileTopStripEl) this.mobileTopStripEl.style.display = 'none';
+		if (this.trainCustomiseEl) this.trainCustomiseEl.style.display = 'none';
+
+		// The old control cluster (accelerate / brake / horn / reverse / doors /
+		// camera) is entirely superseded by the cab console — except REVERSE,
+		// which the console has no equivalent for, so that one is rehomed to
+		// the menu rather than lost with the cluster.
+		if (this.legacyControlsEl) this.legacyControlsEl.style.display = 'none';
+
 		this.cabHud?.setVisible(true);
 	}
 

@@ -235,6 +235,15 @@ export default class AudioSystem extends System {
 		return this.muted;
 	}
 
+	/**
+	 * Spoken announcements go through the browser's voice rather than this
+	 * context's gain, so they have to ask whether the game is muted instead of
+	 * inheriting it.
+	 */
+	public isMuted(): boolean {
+		return this.muted;
+	}
+
 	public update(deltaTime: number): void {
 		if (!this.ctx || !this.masterGain) return;
 

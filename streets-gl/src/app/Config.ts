@@ -145,6 +145,13 @@ const Config = {
 			statusDefault: 'simple',
 			category: 'general'
 		},
+		announcements: {
+			label: 'Station announcements',
+			status: ['on', 'off'],
+			statusLabels: ['On — stations are announced aloud', 'Off'],
+			statusDefault: 'on',
+			category: 'general'
+		},
 		performanceMode: {
 			label: 'Graphics tier',
 			status: ['low', 'medium', 'high', 'auto', 'custom'],

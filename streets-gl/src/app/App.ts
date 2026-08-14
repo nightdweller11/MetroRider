@@ -27,6 +27,7 @@ import TrackSignRenderingSystem from '~/app/game/limits/TrackSignRenderingSystem
 import PassengerRenderingSystem from '~/app/game/passengers/PassengerRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
+import AnnouncementSystem from "~/app/game/audio/AnnouncementSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
 import AutoQualitySystem from "~/app/systems/AutoQualitySystem";
 
@@ -80,6 +81,7 @@ class App {
 				SpeedLimitSystem,
 				TrackSignRenderingSystem,
 				AudioSystem,
+				AnnouncementSystem,
 				GameCameraSystem,
 				RenderSystem,
 				TileLoadingSystem,
