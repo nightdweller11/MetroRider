@@ -13,6 +13,7 @@ import TerrainSystem from '../systems/TerrainSystem';
 import MapWorkerSystem from '../systems/MapWorkerSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 import CabHud from './ui/CabHud';
+import CabSheet from './ui/CabSheet';
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -41,6 +42,7 @@ export default class GameUISystem extends System {
 	private lineListToggle: HTMLElement | null = null;
 	private lineListExpanded: boolean = true;
 	private cabHud: CabHud | null = null;
+	private cabSheet: CabSheet | null = null;
 	private stationPanelEl: HTMLElement | null = null;
 	private debugEl: HTMLElement | null = null;
 	private debugVisible: boolean = false;
@@ -313,6 +315,7 @@ export default class GameUISystem extends System {
 		this.container.appendChild(this.infoPanelEl);
 
 		this.cabHud = new CabHud(this.container, action => this.onCabAction(action));
+		this.cabSheet = new CabSheet(this.container);
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
@@ -594,9 +597,36 @@ export default class GameUISystem extends System {
 			return;
 		}
 
-		// Menu: the line picker, which is now summoned rather than permanent.
-		this.lineListExpanded = !this.lineListExpanded;
-		this.applyLineListVisibility();
+		// Menu: the line picker, summoned rather than permanent.
+		this.openLinePicker();
+	}
+
+	/**
+	 * The line picker.
+	 *
+	 * This was a 24-row wall standing open over the right of the screen. It is
+	 * the same list, opened when you want it and dismissed when you are done.
+	 */
+	private openLinePicker(): void {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (!trainSystem || !this.cabSheet) return;
+
+		if (this.cabSheet.isOpen()) {
+			this.cabSheet.close();
+			return;
+		}
+
+		this.cabSheet.show('Pick a line', trainSystem.lines.map((ls, idx) => ({
+			// The line CODE, which is the leading token of the name ("A1 - A2
+			// Sharon Local"). parsed.id is a numeric index and means nothing
+			// to a player.
+			badge: (ls.parsed.name.match(/^([A-Z]{1,2}\d{1,2})/)?.[1]) ?? String(idx + 1),
+			badgeColor: ls.parsed.color,
+			title: ls.parsed.isLoop ? `${ls.parsed.name} ⟳` : ls.parsed.name,
+			subtitle: `${ls.parsed.stations.length} stops`,
+			onSelect: () => this.showStationPanel(trainSystem, idx),
+		})));
 	}
 
 	/** Feed the cab instruments from real game state. */
@@ -1704,9 +1734,11 @@ export default class GameUISystem extends System {
 		// here is what put the old panel back on screen over the new one.
 		if (this.infoPanelEl) this.infoPanelEl.style.display = 'none';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'none';
-		if (this.lineListWrap) this.lineListWrap.style.display = 'flex';
+		// The wall is gone: the same list is now the summoned picker on the
+		// menu button. Keeping it hidden rather than deleting the builder so
+		// the station panel it opens keeps working unchanged.
+		if (this.lineListWrap) this.lineListWrap.style.display = 'none';
 		this.cabHud?.setVisible(true);
-		this.applyLineListVisibility();
 	}
 
 	private debugFrameCounter: number = 0;
