@@ -8,6 +8,7 @@ import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem, {GameCameraMode} from './GameCameraSystem';
 import UISystem from '../systems/UISystem';
+import RenderSystem from '../systems/RenderSystem';
 import ServiceSystem from './service/ServiceSystem';
 import {clockFace, describeLateness, latenessSeconds} from './service/ServiceTimetable';
 import AudioSystem from './audio/AudioSystem';
@@ -1171,6 +1172,8 @@ export default class GameUISystem extends System {
 
 		if (!photo) {
 			document.getElementById('photo-exit')?.remove();
+			document.getElementById('photo-save')?.remove();
+
 			return;
 		}
 
@@ -1187,7 +1190,62 @@ export default class GameUISystem extends System {
 			'color:#08141d;background:linear-gradient(180deg,#f2f7fb,#c9d6e2);' +
 			'box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 6px 18px rgba(0,0,0,.45)';
 		exit.addEventListener('click', () => this.setCameraMode(GameCameraMode.Chase));
+
+		const save = document.createElement('button');
+
+		save.id = 'photo-save';
+		save.textContent = 'Save picture';
+		save.style.cssText = exit.style.cssText
+			.replace('left:50%', 'left:calc(50% - 130px)')
+			.replace('transform:translateX(-50%);', '')
+			.replace('linear-gradient(180deg,#f2f7fb,#c9d6e2)', 'linear-gradient(180deg,#5cc8ff,#2b8fd0)')
+			+ ';color:#04202f';
+		save.addEventListener('click', () => void this.savePhoto(save));
+
+		document.body.appendChild(save);
 		document.body.appendChild(exit);
+	}
+
+	/**
+	 * Keep the picture.
+	 *
+	 * Photo mode without this is just a view with the controls hidden — the
+	 * point of pointing a camera at something is coming away with the picture.
+	 */
+	private async savePhoto(button: HTMLButtonElement): Promise<void> {
+		const render = this.systemManager.getSystem(RenderSystem);
+		const original = button.textContent;
+
+		if (!render) return;
+
+		button.textContent = 'Saving…';
+		button.disabled = true;
+
+		try {
+			const dataUrl = await render.captureNextFrame();
+			const link = document.createElement('a');
+			const train = this.systemManager.getSystem(TrainSystem);
+			const where = (train?.stationState?.stationName ?? train?.mapName ?? 'metrorider')
+				.replace(/[^A-Za-z0-9]+/g, '-')
+				.replace(/^-+|-+$/g, '')
+				.slice(0, 40) || 'metrorider';
+
+			link.href = dataUrl;
+			link.download = `metrorider-${where}.png`;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+
+			button.textContent = 'Saved';
+		} catch (err) {
+			console.error('[GameUI] Could not save the picture:', err);
+			button.textContent = 'Could not save';
+		} finally {
+			button.disabled = false;
+			setTimeout(() => {
+				if (button.isConnected) button.textContent = original;
+			}, 1800);
+		}
 	}
 
 	/**

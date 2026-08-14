@@ -59,9 +59,13 @@ export default class RenderSystem extends System {
 	 * cannot tell it under vsync or a frame limiter.
 	 */
 	public gpuFrameTimer: GpuFrameTimer | null = null;
+	private canvasEl: HTMLCanvasElement | null = null;
+	private pendingCapture: {resolve: (url: string) => void; reject: (err: Error) => void} | null = null;
 
 	public postInit(): void {
 		const canvas = <HTMLCanvasElement>document.getElementById('canvas');
+
+		this.canvasEl = canvas;
 
 		const gl = canvas.getContext('webgl2', {powerPreference: "high-performance"});
 		if (!gl) {
@@ -186,6 +190,40 @@ export default class RenderSystem extends System {
 		}
 	}
 
+	/** Resolves the next rendered frame as a PNG data URL. */
+	public captureNextFrame(): Promise<string> {
+		return new Promise<string>((resolve, reject) => {
+			this.pendingCapture = {resolve, reject};
+		});
+	}
+
+	/**
+	 * Read the canvas back, in the same task as the draw that filled it.
+	 *
+	 * The context is created without `preserveDrawingBuffer`, so the drawing
+	 * buffer is cleared once the browser composites the frame — `toDataURL`
+	 * from a click handler returns a blank image. Enabling that flag would cost
+	 * a buffer copy on EVERY frame to serve a button pressed once in a while,
+	 * and this frame is fill-rate bound. Reading here, immediately after
+	 * `renderGraph.render()` and before the task yields, costs nothing until
+	 * somebody actually asks for a picture.
+	 */
+	private captureIfRequested(): void {
+		if (!this.pendingCapture) return;
+
+		const pending = this.pendingCapture;
+
+		this.pendingCapture = null;
+
+		try {
+			if (!this.canvasEl) throw new Error('No canvas to capture');
+
+			pending.resolve(this.canvasEl.toDataURL('image/png'));
+		} catch (err) {
+			pending.reject(err instanceof Error ? err : new Error(String(err)));
+		}
+	}
+
 	public update(deltaTime: number): void {
 		const controlsSystem = this.systemManager.getSystem(ControlsSystem);
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
@@ -224,6 +262,8 @@ export default class RenderSystem extends System {
 		this.renderGraph.render();
 
 		this.gpuFrameTimer?.end();
+
+		this.captureIfRequested();
 
 		this.pickObjectId();
 

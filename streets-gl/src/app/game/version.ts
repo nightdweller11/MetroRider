@@ -20,6 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.10.0',
+		codename: 'Keep the Picture',
+		date: '2026-08-14',
+		emblem: '📸🚉',
+		summary: 'Photo mode can save the picture now.',
+		changes: [
+			'SAVE PICTURE — In Photo mode there is a button that saves what you are looking at as a picture, named after the station you are at. Line up your train, take the photo, keep it.',
+			'Photo mode without it was just a view with the controls hidden — the point of pointing a camera at something is coming away with the picture.',
+		],
+	},
+	{
 		version: '2.9.0',
 		codename: 'Notch by Notch',
 		date: '2026-08-14',
