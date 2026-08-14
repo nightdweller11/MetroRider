@@ -28,43 +28,62 @@ service link; the API always works with the project token).
 Note: a separate project token for the `sing.events` Railway project lives in
 `~/Projects/live-karaoke/.env` — it does **not** grant access to MetroRider.
 
-## ⚠️ Data persistence — read before deploying
+## Data persistence — VOLUME ATTACHED AND VERIFIED (2026-08-14)
 
-> **This got MORE important in v1.1.7.** `DATA_DIR` now also holds
-> `metrorider.db` — the SQLite file with every player profile and every saved
-> best run. Without a volume, a deploy deletes the players' accounts, not just
-> uploaded assets. Attach a Railway volume at `/data` and set `DATA_DIR=/data`
-> BEFORE inviting anyone to create a profile on the live site.
->
-> Verification after attaching: create a profile, post a score, redeploy, and
-> check the profile still signs in (`POST /api/profiles/login`) and the board
-> still lists the run (`GET /api/profiles/scores?...`).
+> **This section said "the service has NO persistent volume" long after that
+> stopped being true.** It is corrected here because the stale warning was still
+> being acted on: sessions were treating every deploy as data-destroying and
+> telling the operator that attaching a volume was outstanding work.
 
-**The Railway service has NO persistent volume.** `DATA_DIR` lives on the container's
-ephemeral disk, so **everything uploaded or saved on the live site since the last
-deploy is wiped by the next deploy or restart**: Sketchfab/Freesound imports, direct
-uploads, admin "server default" config — all of it.
+**A Railway volume IS attached and IS in use:**
 
-On boot, `seed-data.js` copies `data-seed/` → `DATA_DIR` (only files that don't
-already exist), so the repo's `data-seed/` is the only durable copy of the live data.
+| | |
+|---|---|
+| Volume | `metrorider-volume` (id `5c1864b6-…`), state `READY` |
+| Mount path | `/data` |
+| `DATA_DIR` | `/data` — set in the service variables, so the server and `seed-data.js` both use it |
+| Size | 50 GB allocated, ~1.1 GB used |
 
-**Before every deploy, sync the live state back into the repo:**
+`DATA_DIR` holds both the uploaded assets and `metrorider.db`, the SQLite file
+with every player profile and saved best run. Both now survive deploys.
+
+**Verified end-to-end on 2026-08-14** (the check this doc had been asking for):
+
+1. Created profile `PersistCheck185052` on the live site and posted a score.
+2. Forced a redeploy through the Railway API (`serviceInstanceRedeploy`).
+3. **Waited for the new deployment to reach `SUCCESS` and the old one `REMOVED`** —
+   the first attempt "passed" after 20 s while the new deployment was still
+   `BUILDING`, i.e. it was still talking to the old container and proved nothing.
+4. Against the genuinely new container: the profile signs in with the same `id`
+   and the same `createdAt` (1786722652554), and the score is still on the board
+   with its original `createdAt`. Same rows, not recreated.
+
+A leftover test profile `PersistCheck185052` and a score on the fake `mapId`
+`persist-check` remain in the live DB. They are inert — that map id appears on no
+real board — but delete them if a profile-delete route is ever added.
+
+### `seed-data.js` and the volume
+
+On boot, `seed-data.js` copies `data-seed/` → `DATA_DIR`, **skipping files that
+already exist**. That is what makes the volume safe: an empty volume is filled on
+first boot, and afterwards live edits are never overwritten by the seed copies.
+
+`scripts/sync-live-data.mjs` is therefore no longer mandatory pre-deploy hygiene.
+It is still useful for pulling live-authored content back into the repo so a
+*fresh* environment seeds with it:
 
 ```bash
 cd streets-gl
-node scripts/sync-live-data.mjs   # pulls live catalog.json, config.json and any missing asset files into data-seed/
+node scripts/sync-live-data.mjs
 git add data-seed && git commit -m "Sync live server data"
 ```
-
-The long-term fix is attaching a Railway volume mounted at the data dir and pointing
-`DATA_DIR` at it — until then, the sync script is mandatory pre-deploy hygiene.
 
 ## Server env vars (Railway → Variables)
 
 | Var | Purpose |
 |---|---|
-| `ADMIN_TOKEN` | Admin token for uploads/config/deletes (also printed to boot logs if unset — ephemeral) |
-| `DATA_DIR` | Asset/config directory (ephemeral without a volume) |
+| `ADMIN_TOKEN` | Admin token for uploads/config/deletes (also printed to boot logs if unset) |
+| `DATA_DIR` | Asset/config/database directory. Set to `/data`, the mounted volume — persistent |
 | `SKETCHFAB_API_TOKEN` | Sketchfab model search/import |
 | `FREESOUND_API_KEY` | Freesound sound search/import |
 | `PORT` | Set by Railway automatically |
