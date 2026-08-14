@@ -1,4 +1,5 @@
 import type { MetroMapData, LineData } from './RouteParser';
+import { parseLineMode } from './LineModes';
 
 const CORS_PROXIES = [
   (url: string): string => `/api/metrodreamin/view/${extractMapId(url)}`,
@@ -227,6 +228,7 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
       name: line.name || `Line ${lines.length + 1}`,
       color: line.color || '#888888',
       stationIds: validStationIds,
+      mode: parseLineMode(line.mode),
     });
   }
 

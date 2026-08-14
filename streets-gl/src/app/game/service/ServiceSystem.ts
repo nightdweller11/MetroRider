@@ -3,6 +3,7 @@ import UISystem from '../../systems/UISystem';
 import TrainSystem from '../TrainSystem';
 import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import {buildTimetable, latenessSeconds, stopFor, type ServiceStop} from './ServiceTimetable';
+import {lineModeInfo} from '../data/LineModes';
 
 /**
  * The service you are running.
@@ -94,10 +95,15 @@ export default class ServiceSystem extends System {
 			this.builtAt = this.worldNow();
 			// The line's own speed profile, so the schedule is keepable at the
 			// speeds the line actually permits rather than a flat guess.
-			const segments = this.systemManager.getSystem(SpeedLimitSystem)?.getSegments() ?? [];
+			const limits = this.systemManager.getSystem(SpeedLimitSystem);
+			const segments = limits?.getSegments() ?? [];
+			// A bus stop is not a ferry berth. The schedule stands or falls on
+			// this: a 90-second ferry dwell scheduled at a train's 45 makes
+			// every crossing look late through no fault of the driver.
+			const dwellS = lineModeInfo(limits?.lineMode).dwellSec;
 
 			this.stops = buildTimetable(
-				ls.realStationDists, this.builtAt, direction, trainSystem.physicsState.trainDist, segments,
+				ls.realStationDists, this.builtAt, direction, trainSystem.physicsState.trainDist, segments, dwellS,
 			);
 			this.builtForLine = trainSystem.currentLineIdx;
 			this.builtForDirection = direction;

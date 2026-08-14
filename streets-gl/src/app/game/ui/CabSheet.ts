@@ -46,6 +46,7 @@ const CSS = `
      lines keeps every row the same shape and the list scannable. */
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cab-sheet .row-item .s{color:#5d6f81;font-size:11.5px;font-weight:600}
+.cab-sheet .row-item .s .ic{font-size:15px;line-height:1;opacity:1;margin-right:4px;vertical-align:-2px}
 .cab-sheet .row-item .go{margin-left:auto;color:#5d6f81;font-size:17px}
 
 /* landscape: docked right, full height */
@@ -72,6 +73,15 @@ export interface SheetRow {
 	badgeColor?: string;
 	title: string;
 	subtitle?: string;
+	/**
+	 * A glyph placed in front of the subtitle, at a readable size.
+	 *
+	 * Inline in the subtitle string it inherits 11.5 px muted grey and reads as
+	 * a smudge — measured on the line picker, three different mode icons were
+	 * indistinguishable from each other at that size. It gets its own span so
+	 * it can be bigger and fully opaque while the words stay quiet.
+	 */
+	subtitleIcon?: string;
 	/**
 	 * Leave the sheet up after the tap. Choosing a view is a departure — the
 	 * sheet has done its job and gets out of the way. Flipping a switch is not:
@@ -159,11 +169,23 @@ export default class CabSheet {
 			title.textContent = row.title;
 			text.appendChild(title);
 
-			if (row.subtitle) {
+			if (row.subtitle || row.subtitleIcon) {
 				const sub = document.createElement('span');
 
 				sub.className = 's';
-				sub.textContent = row.subtitle;
+
+				if (row.subtitleIcon) {
+					const ic = document.createElement('span');
+
+					ic.className = 'ic';
+					ic.textContent = row.subtitleIcon;
+					sub.appendChild(ic);
+				}
+
+				if (row.subtitle) {
+					sub.appendChild(document.createTextNode(row.subtitle));
+				}
+
 				text.appendChild(document.createElement('br'));
 				text.appendChild(sub);
 			}

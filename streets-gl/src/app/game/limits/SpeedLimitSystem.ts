@@ -8,26 +8,7 @@ import {
 	buildSpeedProfile, limitAt, nextChange, speedState,
 	SpeedSegment, SpeedState, NextChange, SERIOUS_OVERSPEED, toSignKmh,
 } from './SpeedProfile';
-
-/**
- * What kind of railway this is, from what the line looks like.
- *
- * MetroDreamin does carry a mode per line, but it is not threaded through the
- * importer yet (that is F6), and the signage has to be right today. Station
- * spacing is a good proxy in the meantime: metros stop every few hundred
- * metres, trams more often still, and main lines run kilometres between stops.
- */
-function inferMode(lineName: string, totalLength: number, stationCount: number): TransportMode {
-	const name = lineName.toLowerCase();
-	if (name.includes('tram')) return 'tram';
-	if (name.includes('metro') || name.includes('subway') || name.includes('underground')) return 'metro';
-	if (name.includes('light rail') || name.includes('lrt')) return 'light-rail';
-
-	const spacing = stationCount > 1 ? totalLength / (stationCount - 1) : totalLength;
-	if (spacing < 600) return 'tram';
-	if (spacing < 1800) return 'metro';
-	return 'rail';
-}
+import {inferLineMode, lineModeInfo, type LineMode} from '../data/LineModes';
 
 /**
  * Speed limits, in force.
@@ -45,6 +26,10 @@ export default class SpeedLimitSystem extends System {
 	public sign: SignStyle = signStyleFor('rail', 'XX');
 	public countryCode = 'XX';
 	public mode: TransportMode = 'rail';
+	/** What kind of service the line runs — from the map, or read off the line. */
+	public lineMode: LineMode = 'rapid';
+	/** The fastest anything may go on this line, m/s (mode cap ∩ rolling stock). */
+	public lineCeiling = 0;
 	public state: SpeedState = 'ok';
 	public change: NextChange | null = null;
 	/** Seconds spent above the limit this run — the score reads this. */
@@ -64,6 +49,23 @@ export default class SpeedLimitSystem extends System {
 		const key = `${trainSystem.mapName}::${ls.parsed.id}`;
 		if (key !== this.lineKey) {
 			this.lineKey = key;
+
+			// What kind of service this is has to be settled BEFORE the profile
+			// is built: it sets the ceiling and the floor. A bus route through a
+			// town centre has metro-like station spacing, so guessing from the
+			// track alone signed it 90 km/h and drove it like a metro.
+			const stations = ls.parsed.stations;
+
+			this.lineMode = ls.parsed.mode
+				?? inferLineMode(ls.parsed.name, ls.track.totalLength, stations.length);
+
+			const modeInfo = lineModeInfo(this.lineMode);
+			// The rolling stock is still a ceiling of its own — a mode cannot
+			// make a model go faster than it can.
+			const ceiling = Math.min(modeInfo.topKmh, trainSystem.getMaxSpeedKmH());
+
+			this.lineCeiling = ceiling / 3.6;
+
 			this.segments = buildSpeedProfile(
 				// The spline stores [lng, lat] DEGREES. Curvature has to be
 				// measured in metres or every curve looks like a straight line:
@@ -76,19 +78,25 @@ export default class SpeedLimitSystem extends System {
 				}),
 				ls.track.cumDist,
 				ls.track.isLoop,
-				{lineMax: trainSystem.getMaxSpeedKmH() / 3.6},
+				{
+					lineMax: ceiling / 3.6,
+					// The floor has to move with the ceiling. It defaults to
+					// 40 km/h, which is ABOVE a bus route's top speed — left
+					// alone, every bus stop would be posted faster than the
+					// line's own maximum.
+					floor: Math.min(modeInfo.floorKmh, ceiling) / 3.6,
+				},
 			);
 			this.overspeedSeconds = 0;
 			this.seriousOverspeedSeconds = 0;
 
 			// Signage belongs to the railway, so it is resolved from where the
 			// line actually is and what kind of service it runs.
-			const stations = ls.parsed.stations;
 			const mid = stations[Math.floor(stations.length / 2)] ?? stations[0];
 			if (mid) {
 				this.countryCode = countryForLocation(mid.lat, mid.lng);
 			}
-			this.mode = inferMode(ls.parsed.name, ls.track.totalLength, stations.length);
+			this.mode = modeInfo.sign;
 			this.sign = signStyleFor(this.mode, this.countryCode);
 		}
 
@@ -97,7 +105,7 @@ export default class SpeedLimitSystem extends System {
 		const dist = trainSystem.physicsState.trainDist;
 		const speed = trainSystem.physicsState.trainSpeed;
 
-		this.limit = limitAt(this.segments, dist, trainSystem.getMaxSpeedKmH() / 3.6);
+		this.limit = limitAt(this.segments, dist, this.lineCeiling || trainSystem.getMaxSpeedKmH() / 3.6);
 		this.state = speedState(speed, this.limit);
 		this.change = nextChange(
 			this.segments, dist, trainSystem.physicsState.direction,

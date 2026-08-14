@@ -19,6 +19,7 @@ import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
+import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -968,7 +969,19 @@ export default class GameUISystem extends System {
 		const waiting = this.systemManager.getSystem(PassengerSystem)?.getTotalWaiting() ?? 0;
 		const name = (i: number): string => ls.parsed.stations[i]?.name ?? '—';
 
+		const limits = this.systemManager.getSystem(SpeedLimitSystem);
+		const mode = lineModeInfo(limits?.lineMode);
+		const topKmh = limits && limits.lineCeiling > 0
+			? Math.round(limits.lineCeiling * 3.6)
+			: mode.topKmh;
+
 		const rows: SheetRow[] = [
+			{
+				badge: mode.icon, badgeColor: ls.parsed.color,
+				title: mode.label,
+				subtitle: `Runs up to ${topKmh} km/h on this line`,
+				readOnly: true, onSelect: (): void => undefined,
+			},
 			{badge: 'LEN', badgeColor: '#4fb6ef', title: km(length), subtitle: 'End to end', readOnly: true, onSelect: (): void => undefined},
 			{badge: 'STOP', badgeColor: '#4fd996', title: `${stops} stations`, subtitle:
 				gaps.length ? `About ${km(length / gaps.length)} between stops` : 'A single stop', readOnly: true, onSelect: (): void => undefined},
@@ -1270,16 +1283,28 @@ export default class GameUISystem extends System {
 
 		if (!trainSystem || !this.cabSheet) return;
 
-		this.cabSheet.show('Pick a line', trainSystem.lines.map((ls, idx) => ({
-			// The line CODE, which is the leading token of the name ("A1 - A2
-			// Sharon Local"). parsed.id is a numeric index and means nothing
-			// to a player.
-			badge: (ls.parsed.name.match(/^([A-Z]{1,2}\d{1,2})/)?.[1]) ?? String(idx + 1),
-			badgeColor: ls.parsed.color,
-			title: ls.parsed.isLoop ? `${ls.parsed.name} ⟳` : ls.parsed.name,
-			subtitle: `${ls.parsed.stations.length} stops`,
-			onSelect: () => this.showStationPanel(trainSystem, idx),
-		})));
+		this.cabSheet.show('Pick a line', trainSystem.lines.map((ls, idx) => {
+			// The map usually says what kind of service a line runs; when it
+			// does not, the line itself is read. Either way the player should
+			// know they are about to drive a bus before they pick it.
+			const mode = lineModeInfo(
+				ls.parsed.mode ?? inferLineMode(
+					ls.parsed.name, ls.track.totalLength, ls.parsed.stations.length,
+				),
+			);
+
+			return {
+				// The line CODE, which is the leading token of the name ("A1 - A2
+				// Sharon Local"). parsed.id is a numeric index and means nothing
+				// to a player.
+				badge: (ls.parsed.name.match(/^([A-Z]{1,2}\d{1,2})/)?.[1]) ?? String(idx + 1),
+				badgeColor: ls.parsed.color,
+				title: ls.parsed.isLoop ? `${ls.parsed.name} ⟳` : ls.parsed.name,
+				subtitleIcon: mode.icon,
+				subtitle: `${mode.label} · ${ls.parsed.stations.length} stops`,
+				onSelect: () => this.showStationPanel(trainSystem, idx),
+			};
+		}));
 	}
 
 	/** Feed the cab instruments from real game state. */

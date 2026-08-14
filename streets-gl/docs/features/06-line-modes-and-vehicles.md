@@ -1,8 +1,46 @@
 # F6 — Line Modes, Vehicle Classes & Feel (buses, trams, boats, cab, sound, liveries)
 
-> STATUS: PLANNED · Foundation for F3 (mode base limits) and F7 (AI vehicle
-> types). Unifies: line modes, per-model physics, buses/trams, ferries,
-> cab overlay, sound depth, horn variations, livery tinting.
+> STATUS: PART SHIPPED · **Line modes shipped in 2.12.0 "Bus, Tram, Train"**
+> and TTS announcements in 2.5.0. Still planned: per-model physics profiles,
+> terrain grade, ferry water routes, cab overlay, flange squeal + sustained
+> horn, livery tinting. Foundation for F3 (mode base limits) and F7.
+>
+> ### What shipped in 2.12.0 — and what the real data turned out to be
+>
+> The mode keys were **read off three published maps before the module was
+> written**, not assumed: `BUS` `TRAM` `LIGHT` `RAPID` `REGIONAL` `HSR`
+> `FERRY` `GONDOLA` `AIR`, with the field **absent** on many lines (30 of
+> London Underground's 56). Absent means rapid transit — on that map the
+> mode-less lines are the Underground lines themselves.
+>
+> | Piece | Where |
+> |---|---|
+> | Mode table (label, icon, top speed, floor, dwell, signage) | `src/app/game/data/LineModes.ts` |
+> | `parseLineMode` / `lineModeInfo` / `inferLineMode` | same file |
+> | Threading | `MetroDreaminImporter` → `LineData.mode` → `ParsedLine.mode` |
+> | Speed ceiling + floor per mode | `SpeedLimitSystem.update` (before the profile is built) |
+> | Dwell per mode | `ServiceSystem` → `buildTimetable(..., dwellS)` |
+> | Picker + line facts | `GameUISystem.showLinePicker` / `openLineFactsSheet` |
+> | Tests | `src/__tests__/lineModes.test.ts` (19) |
+>
+> **Two things the build corrected.** (1) The profile's default floor is
+> 40 km/h, which is *above* a bus route's ceiling and well above a cable car's
+> — left alone every stop would have been posted faster than the line's own
+> maximum, so the floor moves with the ceiling. (2) The mode icon inline in
+> the subtitle inherited 11.5 px muted grey and three different modes were
+> indistinguishable; it gets its own larger span (`SheetRow.subtitleIcon`).
+>
+> **Validation (local browser, SEPTA Regional Rail map).** The raw map data
+> was probed independently first — 13 `REGIONAL`, 4 `RAPID`, 1 `LIGHT` — and
+> the picker then showed exactly 13 Regional train / 4 Metro / 1 Light rail.
+> Driving the light-rail line posted `LIMIT 50` with the dial topping out at
+> 120; the regional lines posted `LIMIT 100` with a 160 dial. Screenshots in
+> `docs/features/_artifacts/line-modes-2026-08-14/`.
+>
+> **Known gap:** `AIR` and `GONDOLA` lines are labelled honestly but still
+> driven as track. A ferry follows its route on the water surface only as
+> well as the terrain height happens to allow — real water-following is the
+> unshipped ferry item below.
 
 ## 1. Product definition
 

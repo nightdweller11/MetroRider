@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.12.0',
+		codename: 'Bus, Tram, Train',
+		date: '2026-08-14',
+		emblem: '🚌🚋🚆',
+		summary: 'The game knows what kind of line you picked, and drives it like one.',
+		changes: [
+			'EVERY LINE SAYS WHAT IT IS — Pick a line and it tells you: bus, tram, light rail, metro, regional train, high-speed train, ferry, cable car. The map already knew; the game was throwing it away and treating every line as the same railway.',
+			'AND IT DRIVES LIKE ONE — A bus route tops out at 50, a tram at 60, a metro at 90, a regional train at 160, a high-speed line at 300. The speedometer changes with it, so a bus has a bus\'s dial.',
+			'Stops last the right time too: a bus stop is quick, a ferry berth is slow, and the timetable is worked out from that instead of from a train\'s figure for everything.',
+			'This makes hundreds of maps playable the way the person who drew them meant. On one map alone the lines are now correctly a mix of regional trains, metros and a light railway, each with its own speeds.',
+		],
+	},
+	{
 		version: '2.11.0',
 		codename: 'Red and Green',
 		date: '2026-08-14',

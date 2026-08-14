@@ -72,7 +72,12 @@ export function legRunSeconds(
 
 	return seconds;
 }
-/** Seconds lost to slowing, standing and getting away again, per stop. */
+/**
+ * Seconds lost to slowing, standing and getting away again, per stop.
+ *
+ * The default suits a train. A bus stop is quicker and a ferry berth is much
+ * slower, so the caller passes the line's own figure when it knows it.
+ */
 const DWELL_S = 45;
 /** Slack per stop so a competent run is on time rather than permanently late. */
 const RECOVERY_S = 20;
@@ -94,6 +99,7 @@ export function buildTimetable(
 	direction: number = 1,
 	fromDist: number = -Infinity,
 	segments: SpeedLimitSegment[] = [],
+	dwellS: number = DWELL_S,
 ): ServiceStop[] {
 	// Travel order from WHERE THE TRAIN IS, not index order from the end of the
 	// line. Two things go wrong otherwise. Driving the line the other way
@@ -115,7 +121,7 @@ export function buildTimetable(
 	for (const stop of ahead) {
 		const runS = legRunSeconds(segments, previous, stop.d);
 
-		when += (runS + DWELL_S + RECOVERY_S) * 1000;
+		when += (runS + dwellS + RECOVERY_S) * 1000;
 		previous = stop.d;
 
 		stops.push({stationIndex: stop.i, dueAt: when});

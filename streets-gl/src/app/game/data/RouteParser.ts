@@ -1,4 +1,5 @@
 import { haversine } from './CoordinateSystem';
+import type { LineMode } from './LineModes';
 
 export interface StationData {
   id: string;
@@ -17,6 +18,8 @@ export interface LineData {
   name: string;
   color: string;
   stationIds: string[];
+  /** What kind of service this is, when the source map says. */
+  mode?: LineMode;
 }
 
 export interface MetroMapData {
@@ -36,6 +39,8 @@ export interface ParsedLine {
   id: string;
   name: string;
   color: string;
+  /** What kind of service this is, when the source map says. */
+  mode?: LineMode;
   stations: StationData[];
   allPoints: StationData[];
   /** True when the line closes back on its first station (circle/loop service). */
@@ -112,6 +117,7 @@ export function parseMetroMap(data: MetroMapData): ParsedLine[] {
       id: line.id,
       name: line.name,
       color: line.color,
+      mode: line.mode,
       stations,
       allPoints,
       isLoop,
