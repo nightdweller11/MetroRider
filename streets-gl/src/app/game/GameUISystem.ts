@@ -342,7 +342,16 @@ export default class GameUISystem extends System {
 		this.infoPanelEl.style.display = 'none';
 		this.container.appendChild(this.infoPanelEl);
 
-		this.cabHud = new CabHud(this.container, action => this.onCabAction(action));
+		this.cabHud = new CabHud(
+			this.container,
+			action => this.onCabAction(action),
+			down => {
+				const audio = this.systemManager.getSystem(AudioSystem);
+
+				if (down) audio?.hornDown();
+				else audio?.hornUp();
+			},
+		);
 		this.cabSheet = new CabSheet(this.container);
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
@@ -490,15 +499,22 @@ export default class GameUISystem extends System {
 
 		const hornBtn = createBtn('\uD83D\uDD0A', 'Horn');
 		const reverseBtn = createBtn('\u21BA', 'Reverse');
-		hornBtn.addEventListener('mousedown', () => {
-			const audioSystem = this.systemManager.getSystem(AudioSystem);
-			if (audioSystem) audioSystem.playHorn();
-		});
-		hornBtn.addEventListener('touchstart', (e) => {
-			e.preventDefault();
-			const audioSystem = this.systemManager.getSystem(AudioSystem);
-			if (audioSystem) audioSystem.playHorn();
-		});
+		// Hold to sound, release to stop. `mouseleave` and `touchcancel` matter
+		// as much as the release itself: a finger sliding off the button, or a
+		// call arriving mid-blast, must not leave the horn stuck on.
+		const hornDown = (e?: Event): void => {
+			e?.preventDefault();
+			this.systemManager.getSystem(AudioSystem)?.hornDown();
+		};
+		const hornUp = (): void => this.systemManager.getSystem(AudioSystem)?.hornUp();
+
+		hornBtn.addEventListener('mousedown', hornDown);
+		hornBtn.addEventListener('mouseup', hornUp);
+		hornBtn.addEventListener('mouseleave', hornUp);
+		hornBtn.addEventListener('touchstart', hornDown);
+		hornBtn.addEventListener('touchend', (e) => { e.preventDefault(); hornUp(); });
+		hornBtn.addEventListener('touchcancel', hornUp);
+		window.addEventListener('blur', hornUp);
 		reverseBtn.addEventListener('click', () => trainSystem.reverseDirection());
 
 		const doorsBtn = createBtn('\u229F', 'Doors');

@@ -12,7 +12,7 @@
 
 ## Progress (2026-08-14)
 
-**Live on metrorider.net: v2.18.0 "Stop Here"** — 39 releases. Every row
+**Live on metrorider.net: v2.19.0 "Lean On It"** — 40 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 | Feature | State |
@@ -75,7 +75,9 @@ where most of the per-feature UI actually landed.
       lamps) shipped in v2.1.0 — but as the permanent HUD in EVERY view, not a
       Cab-only overlay. The windscreen framing that would make Cab view feel
       like a cab is NOT built
-- [ ] Sound: flange squeal by curvature×speed; hold-to-sustain horn
+- [~] Hold-to-sustain horn SHIPPED (2.19.0) — press/release on the cab button
+      AND the H key, which was mapped but had never been consumed by anything.
+      Flange squeal by curvature x speed is NOT built
 - [x] TTS station announcements (SpeechSynthesis, voice by locale, settings toggle)
 - [x] Livery tint: SlotSpec `#tint=RRGGBB` token + material uniform + composer palette UI
 - [~] Unit tests — SlotSpec tint tokens (14) and mode resolution (19) done;

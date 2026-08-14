@@ -118,22 +118,116 @@ export default class AudioSystem extends System {
 		}
 	}
 
-	public playHorn(): void {
-		if (!this.ctx || !this.masterGain) return;
+	/*
+	 * The horn sounds for as long as the button is held.
+	 *
+	 * A fixed two-second blast is the one thing a child will find within a
+	 * minute and then use for the next ten, so it has to behave like a horn:
+	 * lean on it and it keeps going, let go and it stops. A tap still gets a
+	 * proper short pip rather than a click, because releasing after 40 ms
+	 * should not cut the attack off mid-ramp.
+	 */
+	private hornNodes: {sources: AudioScheduledSourceNode[]; gain: GainNode} | null = null;
+	private hornStartedAt: number = 0;
+	private hornStopTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Ramp on, ramp off — a hard start or stop on a loud tone clicks. */
+	private static readonly HornAttackS: number = 0.06;
+	private static readonly HornReleaseS: number = 0.18;
+	/** A tap still gets this much horn. */
+	private static readonly HornMinS: number = 0.35;
+	/** A stuck button, or a tab that loses the pointer-up, cannot blare forever. */
+	private static readonly HornMaxS: number = 8;
+
+	public hornDown(): void {
+		if (!this.ctx || !this.masterGain || this.hornNodes) return;
+
+		const t = this.ctx.currentTime;
+		const gain = this.ctx.createGain();
+
+		gain.gain.setValueAtTime(0, t);
+		gain.gain.linearRampToValueAtTime(0.7, t + AudioSystem.HornAttackS);
+		gain.connect(this.masterGain);
+
+		const sources: AudioScheduledSourceNode[] = [];
 
 		if (this.samples.horn) {
 			const src = this.ctx.createBufferSource();
+
 			src.buffer = this.samples.horn;
-			const gain = this.ctx.createGain();
-			gain.gain.value = 0.7;
+			// Looped so holding the button sustains rather than stopping dead
+			// at the end of the recording.
+			src.loop = true;
 			src.connect(gain);
-			gain.connect(this.masterGain);
 			src.start();
+			sources.push(src);
 		} else {
-			this.playProceduralHorn();
+			// A chord rather than a tone: a two-note horn is what a train has.
+			for (const freq of [220, 277, 330]) {
+				const osc = this.ctx.createOscillator();
+
+				osc.type = 'sawtooth';
+				osc.frequency.value = freq;
+
+				const filter = this.ctx.createBiquadFilter();
+
+				filter.type = 'lowpass';
+				filter.frequency.value = 600;
+
+				osc.connect(filter);
+				filter.connect(gain);
+				osc.start(t);
+				sources.push(osc);
+			}
+		}
+
+		this.hornNodes = {sources, gain};
+		this.hornStartedAt = t;
+
+		if (this.hornStopTimer) clearTimeout(this.hornStopTimer);
+		this.hornStopTimer = setTimeout((): void => this.hornUp(), AudioSystem.HornMaxS * 1000);
+	}
+
+	public hornUp(): void {
+		if (!this.ctx || !this.hornNodes) return;
+
+		const nodes = this.hornNodes;
+
+		// Claimed immediately: the release is scheduled ahead in audio time, and
+		// a second press arriving during it must start a NEW horn rather than
+		// find this one still parked here and do nothing.
+		this.hornNodes = null;
+
+		if (this.hornStopTimer) {
+			clearTimeout(this.hornStopTimer);
+			this.hornStopTimer = null;
+		}
+
+		const held = this.ctx.currentTime - this.hornStartedAt;
+		const startRelease = this.hornStartedAt + Math.max(held, AudioSystem.HornMinS);
+		const end = startRelease + AudioSystem.HornReleaseS;
+
+		nodes.gain.gain.cancelScheduledValues(startRelease);
+		nodes.gain.gain.setValueAtTime(0.7, startRelease);
+		nodes.gain.gain.linearRampToValueAtTime(0.0001, end);
+
+		for (const src of nodes.sources) {
+			try {
+				src.stop(end);
+			} catch {
+				// Already stopped — nothing to do.
+			}
 		}
 	}
 
+	/** A short press, for callers that have no press/release to give. */
+	public playHorn(): void {
+		this.hornDown();
+		setTimeout((): void => this.hornUp(), AudioSystem.HornMinS * 1000);
+	}
+
+	/** @deprecated Superseded by the sustained horn; kept for reference. */
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	private playProceduralHorn(): void {
 		if (!this.ctx || !this.masterGain) return;
 		const t = this.ctx.currentTime;

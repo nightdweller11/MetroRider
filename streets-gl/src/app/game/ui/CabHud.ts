@@ -225,6 +225,8 @@ export default class CabHud {
 	public constructor(
 		private readonly parent: HTMLElement,
 		private readonly onAction: (action: 'map' | 'camera' | 'menu' | 'doors' | 'horn') => void,
+		/** Held down or released — the horn sounds for as long as it is held. */
+		private readonly onHorn: (down: boolean) => void,
 	) {
 		this.mount();
 	}
@@ -283,8 +285,27 @@ export default class CabHud {
 		root.addEventListener('click', (e) => {
 			const btn = (e.target as HTMLElement).closest('[data-a]') as HTMLElement | null;
 
-			if (btn) this.onAction(btn.dataset.a as never);
+			// The horn is held, not clicked — it runs on press/release below.
+			if (btn && btn.dataset.a !== 'horn') this.onAction(btn.dataset.a as never);
 		});
+
+		// Press-and-hold for the horn. `mouseleave` and `touchcancel` are not
+		// optional: a finger sliding off the button, or a call arriving
+		// mid-blast, must not leave it stuck on.
+		const hornEl = root.querySelector('[data-a="horn"]');
+
+		if (hornEl) {
+			const down = (e: Event): void => { e.preventDefault(); this.onHorn(true); };
+			const up = (): void => this.onHorn(false);
+
+			hornEl.addEventListener('mousedown', down);
+			hornEl.addEventListener('mouseup', up);
+			hornEl.addEventListener('mouseleave', up);
+			hornEl.addEventListener('touchstart', down);
+			hornEl.addEventListener('touchend', (e) => { e.preventDefault(); up(); });
+			hornEl.addEventListener('touchcancel', up);
+			window.addEventListener('blur', up);
+		}
 
 		this.parent.appendChild(root);
 		this.root = root;

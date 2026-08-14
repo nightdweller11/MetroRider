@@ -380,6 +380,20 @@ export default class TrainSystem extends System {
 			this.reverseDirection();
 		}
 
+		// The H key was mapped to 'horn' and nothing had ever consumed it, so
+		// the keyboard horn simply did not exist. Held, not tapped: the same
+		// press-and-release the cab button gives.
+		const hornHeld = this.input.isHeld('horn');
+
+		if (hornHeld !== this.hornWasHeld) {
+			const audio = this.systemManager.getSystem(AudioSystem);
+
+			if (hornHeld) audio?.hornDown();
+			else audio?.hornUp();
+
+			this.hornWasHeld = hornHeld;
+		}
+
 		updateTrainPhysics(this.physicsState, trainInput, ls.track, deltaTime);
 
 		this.updateTrainPosition(ls);
@@ -517,6 +531,8 @@ export default class TrainSystem extends System {
 	private lastStationChimeIdx: number = -1;
 	/** The station whose approach has already been announced. */
 	private lastApproachIdx: number = -1;
+	/** Edge-detects the horn key, so held means held rather than re-triggering. */
+	private hornWasHeld: boolean = false;
 
 	private updateStationState(ls: LineState): void {
 		this.stationState = this.stationManager.update(

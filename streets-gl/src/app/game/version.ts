@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.19.0',
+		codename: 'Lean On It',
+		date: '2026-08-14',
+		emblem: '📣🚆',
+		summary: 'Hold the horn and it keeps sounding. Let go and it stops.',
+		changes: [
+			'HOLD THE HORN — The horn sounds for as long as you hold the button, instead of the same two-second blast every time. A quick tap still gets a proper short pip.',
+			'THE H KEY WORKS — It was on the keyboard map all along and nothing was listening to it. Hold H and you get the horn.',
+			'It cannot get stuck on: sliding your finger off the button, switching away from the game, or holding it for a very long time all stop it.',
+		],
+	},
+	{
 		version: '2.18.0',
 		codename: 'Stop Here',
 		date: '2026-08-14',
