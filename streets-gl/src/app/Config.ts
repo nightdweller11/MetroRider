@@ -145,6 +145,13 @@ const Config = {
 			statusDefault: 'simple',
 			category: 'general'
 		},
+		ambientTrains: {
+			label: 'Other trains',
+			status: ['on', 'off'],
+			statusLabels: ['On — other trains run on the line', 'Off'],
+			statusDefault: 'on',
+			category: 'general'
+		},
 		timeOfDay: {
 			label: 'Time of day',
 			status: ['now', 'morning', 'midday', 'evening', 'night'],

@@ -42,6 +42,8 @@ interface CarAnimState {
 
 export default class TrainRenderingSystem extends System {
 	public carMeshes: TrainMeshObject[] = [];
+	/** Cars belonging to other services running on the network. */
+	public ambientMeshes: TrainMeshObject[] = [];
 	public trackMesh: TrainMeshObject | null = null;
 	public stationMeshes: TrainMeshObject[] = [];
 
@@ -259,6 +261,58 @@ export default class TrainRenderingSystem extends System {
 		}
 
 		debugLog(`[TrainRenderingSystem] Built ${slots.length} car meshes, offsets=[${this.carOffsets.map(o => o.toFixed(1)).join(', ')}]`);
+	}
+
+	/**
+	 * Cars for OTHER trains on the network.
+	 *
+	 * Always the procedural body rather than a loaded model: passing traffic is
+	 * seen for a couple of seconds from tens of metres away, and it is not
+	 * worth a second set of GLB loads, textures and skinned poses to pass a
+	 * train. It also lets each service wear its own line's colour.
+	 */
+	public buildAmbientCars(count: number, color: string): TrainMeshObject[] {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+
+		if (!sceneSystem) return [];
+
+		const buf = this.extractSingleProceduralCar(buildTrainCarGeometry(color));
+		const made: TrainMeshObject[] = [];
+
+		for (let i = 0; i < count; i++) {
+			const mesh = new TrainMeshObject({
+				position: new Float32Array(buf.position),
+				normal: new Float32Array(buf.normal),
+				color: new Float32Array(buf.color),
+				indices: new Uint32Array(buf.indices),
+				uv: buf.uv ? new Float32Array(buf.uv) : undefined,
+			}, false);
+
+			sceneSystem.objects.wrapper.add(mesh);
+			this.ambientMeshes.push(mesh);
+			made.push(mesh);
+		}
+
+		return made;
+	}
+
+	/** The procedural car's length, so other traffic can space its cars. */
+	public ambientCarLength(): number {
+		return this.getCarLength(this.extractSingleProceduralCar(buildTrainCarGeometry('#888888')));
+	}
+
+	public clearAmbientCars(): void {
+		const sceneSystem = this.systemManager.getSystem(SceneSystem);
+
+		for (const mesh of this.ambientMeshes) {
+			// A mesh dropped without releasing its buffers is exactly the leak
+			// that used to grow all session — respawning traffic would rebuild
+			// these repeatedly.
+			mesh.dispose();
+			sceneSystem?.objects.wrapper.remove(mesh);
+		}
+
+		this.ambientMeshes.length = 0;
 	}
 
 	private extractSingleProceduralCar(fullBuf: GeometryBuffers): GeometryBuffers {

@@ -447,6 +447,54 @@ export default class TrainSystem extends System {
 		};
 	}
 
+	/**
+	 * Where something sits on any line, not just the one being driven.
+	 *
+	 * The same maths as `getCarPosition`, opened up so other traffic can run on
+	 * the network: pick the line, the distance along it, the direction it
+	 * faces, and how far to one side. The lateral offset is what puts an
+	 * oncoming train on the track BESIDE you rather than head-on down the
+	 * middle of your own rails.
+	 */
+	public getPositionOnLine(
+		lineIdx: number,
+		dist: number,
+		direction: number,
+		lateralOffset: number = 0,
+	): TrainWorldPosition | null {
+		const ls = this.lines[lineIdx];
+
+		if (!ls) return null;
+
+		const at = wrapTrackDistance(dist, ls.track);
+		const pos: PositionOnTrack = getPositionAtDistance(ls.track.spline.points, ls.track.cumDist, at);
+		const nextPos = getPositionAtDistance(
+			ls.track.spline.points, ls.track.cumDist, wrapTrackDistance(at + 5 * direction, ls.track),
+		);
+
+		const carBearing = bearing(pos.lat, pos.lng, nextPos.lat, nextPos.lng);
+		const meterPos: Vec2 = MathUtils.degrees2meters(pos.lat, pos.lng);
+		const heading = Math.PI / 2 - MathUtils.toRad(carBearing);
+
+		// Perpendicular to travel, in world metres.
+		const side = heading + Math.PI / 2;
+		const x = meterPos.x + Math.sin(side) * lateralOffset;
+		const y = meterPos.y + Math.cos(side) * lateralOffset;
+
+		const terrainSystem = this.systemManager.getSystem(TerrainSystem);
+		let height = 0;
+
+		if (terrainSystem && terrainSystem.terrainHeightProvider) {
+			const terrainHeight = terrainSystem.terrainHeightProvider.getHeightGlobalInterpolated(x, y, true);
+
+			if (terrainHeight !== null) {
+				height = terrainHeight;
+			}
+		}
+
+		return {x, y, height: height + 0.4, heading, lat: pos.lat, lon: pos.lng};
+	}
+
 	private lastStationChimeIdx: number = -1;
 	/** The station whose approach has already been announced. */
 	private lastApproachIdx: number = -1;

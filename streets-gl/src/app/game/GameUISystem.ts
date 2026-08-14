@@ -851,6 +851,10 @@ export default class GameUISystem extends System {
 		}
 		if (announce) rows.push(announce);
 
+		const traffic = cycler('ambientTrains', 'Other trains', {on: 'ON', off: 'OFF'});
+
+		if (traffic) rows.push(traffic);
+
 		// Sound is the audio system's own state rather than a stored setting,
 		// so it cannot go through the same cycler.
 		rows.push({

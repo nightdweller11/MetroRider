@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.5.0',
+		codename: 'Traffic',
+		date: '2026-08-14',
+		emblem: '🚂🚃',
+		summary: 'You are not the only train on the railway any more — other services come the other way and go past your window.',
+		changes: [
+			'OTHER TRAINS — Services run towards you on the line and pass on the track alongside, in the colour of the line you are driving. Watch for them out of the cab window, or switch to Trackside and let one go past you.',
+			'They run on the track BESIDE you rather than down the middle of your own rails, so a train coming the other way passes you properly instead of going through you.',
+			'It costs nothing: the game runs exactly as fast with other trains on the line as without them.',
+			'Turn them off in Settings if you would rather have the railway to yourself.',
+		],
+	},
+	{
 		version: '2.4.0',
 		codename: 'Golden Hour',
 		date: '2026-08-14',

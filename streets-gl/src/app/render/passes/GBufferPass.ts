@@ -612,6 +612,8 @@ export default class GBufferPass extends Pass<{
 		const passengerRendering = this.manager.systemManager.getSystem(PassengerRenderingSystem);
 		const allMeshes = [
 			...trainRenderingSystem.carMeshes,
+			// Other services on the network — same material, same culling.
+			...trainRenderingSystem.ambientMeshes,
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
 			// Platform crowds: static world geometry like the stations, so they

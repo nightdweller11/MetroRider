@@ -369,6 +369,9 @@ export default class ShadowMappingPass extends Pass<{
 
 		const allMeshes = [
 			...trainRenderingSystem.carMeshes,
+			// Passing services cast shadows like anything else; the same
+			// cull-and-two-cascades rule below keeps them from costing much.
+			...trainRenderingSystem.ambientMeshes,
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
 		].filter(Boolean);
