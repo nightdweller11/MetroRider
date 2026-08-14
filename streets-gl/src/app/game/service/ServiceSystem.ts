@@ -1,7 +1,7 @@
 import System from '../../System';
 import UISystem from '../../systems/UISystem';
 import TrainSystem from '../TrainSystem';
-import {buildTimetable, latenessSeconds, type ServiceStop} from './ServiceTimetable';
+import {buildTimetable, latenessSeconds, stopFor, type ServiceStop} from './ServiceTimetable';
 
 /**
  * The service you are running.
@@ -22,6 +22,7 @@ export default class ServiceSystem extends System {
 	/** Actual arrival time per station index, once it happens. */
 	private actuals: Map<number, number> = new Map();
 	private lastRecordedIdx: number = -1;
+	private builtForDirection: number = 0;
 
 	public postInit(): void {
 		// The line and its stations are not loaded yet.
@@ -47,7 +48,7 @@ export default class ServiceSystem extends System {
 		if (!ss || this.stops.length === 0) return null;
 
 		const idx = ss.arriving ? ss.nearestStationIdx : ss.nextStationIdx;
-		const stop = this.stops[idx];
+		const stop = stopFor(this.stops, idx);
 
 		if (!stop) return null;
 
@@ -62,7 +63,7 @@ export default class ServiceSystem extends System {
 
 		const idx = ss.arriving ? ss.nearestStationIdx : ss.nextStationIdx;
 
-		return this.stops[idx]?.dueAt ?? null;
+		return stopFor(this.stops, idx)?.dueAt ?? null;
 	}
 
 	private worldNow(): number {
@@ -78,10 +79,18 @@ export default class ServiceSystem extends System {
 
 		if (!ls) return;
 
-		if (this.builtForLine !== trainSystem.currentLineIdx) {
+		// Turning the train around starts a new service: the stops ahead are
+		// different ones, in the other order. Keeping the old schedule would
+		// give them times already gone by.
+		const direction = trainSystem.physicsState.direction || 1;
+
+		if (this.builtForLine !== trainSystem.currentLineIdx || this.builtForDirection !== direction) {
 			this.builtAt = this.worldNow();
-			this.stops = buildTimetable(ls.realStationDists, this.builtAt);
+			this.stops = buildTimetable(
+				ls.realStationDists, this.builtAt, direction, trainSystem.physicsState.trainDist,
+			);
 			this.builtForLine = trainSystem.currentLineIdx;
+			this.builtForDirection = direction;
 			this.actuals.clear();
 			this.lastRecordedIdx = -1;
 		}

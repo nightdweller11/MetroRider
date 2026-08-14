@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.7.1',
+		codename: 'Right Way Round',
+		date: '2026-08-14',
+		emblem: '🔁🕗',
+		summary: 'The timetable now follows you when you turn the train around, and stops claiming you are early before you have arrived.',
+		changes: [
+			'TURN AROUND AND THE TIMETABLE TURNS WITH YOU — Driving back the other way gives you a new service for the stops actually ahead of you. Before this, reversing left you running the old schedule backwards, with every stop ahead due at a time that had already gone.',
+			'The service starts from where your train IS, not from the end of the line, so the first stop is the next one you will reach.',
+			'The board no longer says "6 MIN EARLY" while you are still driving towards a stop — you cannot be early until you get there. It shows the due time on the way, and how you did once you arrive. Running late still shows straight away, because that part is already true.',
+		],
+	},
+	{
 		version: '2.7.0',
 		codename: 'The 08:06',
 		date: '2026-08-14',

@@ -29,22 +29,44 @@ export interface ServiceStop {
  *
  * `stationDists` are metres along the track, in order.
  */
-export function buildTimetable(stationDists: number[], departAt: number): ServiceStop[] {
+export function buildTimetable(
+	stationDists: number[],
+	departAt: number,
+	direction: number = 1,
+	fromDist: number = -Infinity,
+): ServiceStop[] {
+	// Travel order from WHERE THE TRAIN IS, not index order from the end of the
+	// line. Two things go wrong otherwise. Driving the line the other way
+	// visits the stations in reverse, so an index-ordered schedule gives the
+	// stops ahead times already gone by. And scheduling from the far end means
+	// a service that starts at a station the driver is nowhere near: measured
+	// after turning around at the first stop, the next stop read 96 minutes
+	// early because its due time came from the far end of a reversed list.
+	const ahead = stationDists
+		.map((d, i) => ({d, i}))
+		.filter(s => (direction < 0 ? s.d < fromDist : s.d > fromDist));
+
+	ahead.sort((a, b) => (direction < 0 ? b.d - a.d : a.d - b.d));
+
 	const stops: ServiceStop[] = [];
 	let when = departAt;
+	let previous = Number.isFinite(fromDist) ? fromDist : ahead[0]?.d ?? 0;
 
-	for (let i = 0; i < stationDists.length; i++) {
-		if (i > 0) {
-			const leg = Math.max(0, stationDists[i] - stationDists[i - 1]);
-			const runS = leg / (CRUISE_KMH / 3.6);
+	for (const stop of ahead) {
+		const runS = Math.abs(stop.d - previous) / (CRUISE_KMH / 3.6);
 
-			when += (runS + DWELL_S + RECOVERY_S) * 1000;
-		}
+		when += (runS + DWELL_S + RECOVERY_S) * 1000;
+		previous = stop.d;
 
-		stops.push({stationIndex: i, dueAt: when});
+		stops.push({stationIndex: stop.i, dueAt: when});
 	}
 
 	return stops;
+}
+
+/** The scheduled stop for a station, wherever it sits in the running order. */
+export function stopFor(stops: ServiceStop[], stationIndex: number): ServiceStop | undefined {
+	return stops.find(s => s.stationIndex === stationIndex);
 }
 
 /**

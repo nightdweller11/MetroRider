@@ -771,7 +771,14 @@ export default class GameUISystem extends System {
 		if (due === null || due === undefined) return state;
 
 		const late = service?.currentLateness() ?? null;
-		const standing = describeLateness(late);
+		const there = doorsOpen || arriving;
+
+		// You cannot be EARLY until you have arrived — before that you have
+		// simply not got there yet, and a board reading "6 MIN EARLY" halfway
+		// down a leg is telling the driver something untrue. Running late IS
+		// worth knowing while moving, because it is already the case.
+		const show = there || (late !== null && late >= 45);
+		const standing = show ? describeLateness(late) : '';
 
 		return `${state} · DUE ${clockFace(due)}${standing ? ` · ${standing.toUpperCase()}` : ''}`;
 	}
