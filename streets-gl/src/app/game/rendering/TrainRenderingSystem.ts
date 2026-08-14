@@ -9,6 +9,7 @@ import {bearing} from '~/app/game/data/CoordinateSystem';
 import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
 import {parseSlot, tintToRgb} from '~/app/game/assets/SlotSpec';
+import {inferLineMode, lineModeInfo} from '~/app/game/data/LineModes';
 import {debugLog} from '~/app/game/debug';
 import {
 	parseAnimations,
@@ -58,6 +59,9 @@ function isCrossOrigin(url: string): boolean {
 		return false;
 	}
 }
+
+/** What runs when nothing — not the player, not the line — has an opinion. */
+const DEFAULT_CONSIST: string[] = ['procedural-default', 'procedural-default', 'procedural-default'];
 
 export default class TrainRenderingSystem extends System {
 	/**
@@ -112,6 +116,43 @@ export default class TrainRenderingSystem extends System {
 		}
 	}
 
+	/**
+	 * The cars to run on the line the player is driving right now.
+	 *
+	 * A player's own choice always wins. When they have never picked a train,
+	 * the LINE decides: a bus route runs a bus, a tram line runs trams, a
+	 * high-speed line runs a bullet set. Driving a bus route in a diesel
+	 * locomotive was the most visible thing the mode data could fix, and it is
+	 * what the mode data is for.
+	 *
+	 * The mode is derived from the line here rather than read off
+	 * `SpeedLimitSystem`, so this does not depend on which system updated first
+	 * on the frame the line changed.
+	 */
+	private slotsForCurrentLine(): string[] {
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const configured = assetConfig?.getConfig().trainSlots ?? [...DEFAULT_CONSIST];
+
+		if (!assetConfig || assetConfig.hasUserTrainChoice()) return configured;
+
+		const ls = this.systemManager.getSystem(TrainSystem)?.getCurrentLine();
+
+		if (!ls) return configured;
+
+		const mode = ls.parsed.mode ?? inferLineMode(
+			ls.parsed.name, ls.track.totalLength, ls.parsed.stations.length,
+		);
+		const consist = lineModeInfo(mode).consist;
+
+		// The catalog is admin-editable, so a mode could name a model that is
+		// no longer there. Falling back beats rendering a line of grey boxes.
+		if (consist.length === 0 || !consist.every(id => assetConfig.hasTrainModel(id))) {
+			return configured;
+		}
+
+		return consist;
+	}
+
 	private onConfigChanged(): void {
 		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
 		if (!assetConfig) return;
@@ -119,12 +160,13 @@ export default class TrainRenderingSystem extends System {
 		const config = assetConfig.getConfig();
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 		const ls = trainSystem?.getCurrentLine();
+		const slots = this.slotsForCurrentLine();
 
-		const slotsHash = JSON.stringify(config.trainSlots);
+		const slotsHash = JSON.stringify(slots);
 		if (slotsHash !== this.lastSlotsHash) {
 			debugLog(`[TrainRenderingSystem] Config changed: slots updated`);
 			if (ls) {
-				this.rebuildTrainFromSlots(config.trainSlots, ls.parsed.color);
+				this.rebuildTrainFromSlots(slots, ls.parsed.color);
 			}
 		}
 
@@ -143,9 +185,7 @@ export default class TrainRenderingSystem extends System {
 		const ls = trainSystem.getCurrentLine();
 		if (!ls) return;
 
-		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
-		const slots = assetConfig?.getConfig().trainSlots || ['procedural-default', 'procedural-default', 'procedural-default'];
-		this.rebuildTrainFromSlots(slots, ls.parsed.color);
+		this.rebuildTrainFromSlots(this.slotsForCurrentLine(), ls.parsed.color);
 		this.rebuildTrack(trainSystem);
 		this.rebuildStations(trainSystem);
 	}
@@ -493,6 +533,20 @@ export default class TrainRenderingSystem extends System {
 		// model whose map cannot be uploaded keeps exactly its old appearance,
 		// but a real map now also reaches the GPU and is sampled per fragment.
 		const allUvs: number[] = [];
+		/*
+		 * Per-vertex "this vertex belongs to a part that actually uses the kept
+		 * texture", 1 or 0.
+		 *
+		 * A merged mesh gets ONE base-colour image — the first one found — but a
+		 * model can have many materials, only some of them textured. The town
+		 * bus has 20 materials across 34 primitives; with a single per-MESH
+		 * `hasTexture` flag, all 34 sampled that one image, and the ~30 that
+		 * carry no texture sampled it at their filled-in uv of (0, 0). Whatever
+		 * sits in that corner of the image then painted the whole vehicle: the
+		 * bus rendered as a black silhouette while its own material colours were
+		 * sitting unused in the vertex colours.
+		 */
+		const allTexFlags: number[] = [];
 		let baseColorImage: {data: Uint8ClampedArray; width: number; height: number} | null = null;
 		const allIndices: number[] = [];
 		const animatedNodesInfo: AnimatedNodeInfo[] = [];
@@ -578,6 +632,7 @@ export default class TrainRenderingSystem extends System {
 
 				if (!colorsApplied) {
 					let texColors: number[] | null = null;
+					let pixelsForThisPrim: {data: Uint8ClampedArray; width: number; height: number} | null = null;
 
 					if (pbr?.baseColorTexture !== undefined && texturePixels) {
 						const texIdx = pbr.baseColorTexture.index;
@@ -598,7 +653,17 @@ export default class TrainRenderingSystem extends System {
 									for (let v = 0; v < vertCount; v++) {
 										allUvs.push(uvData[v * stride], uvData[v * stride + 1]);
 									}
+									pixelsForThisPrim = pixels;
 									if (!baseColorImage) baseColorImage = pixels;
+
+									// Only the parts that use the KEPT image may
+									// sample it. A second texture in the same
+									// model is still baked into vertex colours;
+									// letting it sample the first image would
+									// paint it with someone else's picture.
+									if (baseColorImage === pixels) {
+										for (let v = 0; v < vertCount; v++) allTexFlags.push(1);
+									}
 								}
 							}
 						}
@@ -610,8 +675,25 @@ export default class TrainRenderingSystem extends System {
 					const fb = factor ? factor[2] : 1;
 
 					if (texColors) {
+						// A part that will sample the map per fragment must NOT
+						// also carry the map baked into its vertex colours: the
+						// shader multiplies the two, so the texture is applied
+						// TWICE and every colour is squared. A mid-dark body
+						// panel at 0.3 comes out at 0.09 — which is why the town
+						// bus rendered as a black silhouette in full sun while
+						// its own preview looked correct.
+						//
+						// Parts that will not sample it (a second texture in the
+						// same model) keep the baked colours, which is the only
+						// way their image reaches the screen at all.
+						const willSample = baseColorImage === pixelsForThisPrim;
+
 						for (let v = 0; v < vertCount; v++) {
-							allColors.push(texColors[v * 3] * fr, texColors[v * 3 + 1] * fg, texColors[v * 3 + 2] * fb);
+							if (willSample) {
+								allColors.push(fr, fg, fb);
+							} else {
+								allColors.push(texColors[v * 3] * fr, texColors[v * 3 + 1] * fg, texColors[v * 3 + 2] * fb);
+							}
 						}
 						colorsApplied = true;
 					} else if (factor) {
@@ -624,6 +706,13 @@ export default class TrainRenderingSystem extends System {
 
 				while (allUvs.length < (allPositions.length / 3) * 2) {
 					allUvs.push(0, 0);
+				}
+
+				// Everything that did not opt in above is untextured. Padding
+				// here (rather than per branch) covers every path out of the
+				// primitive, including the ones that bail early.
+				while (allTexFlags.length < allPositions.length / 3) {
+					allTexFlags.push(0);
 				}
 
 				if (!colorsApplied) {
@@ -724,6 +813,7 @@ export default class TrainRenderingSystem extends System {
 
 		return {
 			uv: new Float32Array(allUvs),
+			texFlag: new Float32Array(allTexFlags),
 			position: new Float32Array(allPositions),
 			normal: new Float32Array(allNormals),
 			color: new Float32Array(allColors),
@@ -1474,8 +1564,7 @@ export default class TrainRenderingSystem extends System {
 				console.log('[TrainRenderingSystem] Catalog now available, rebuilding model');
 				const ls = trainSystem.getCurrentLine();
 				if (ls) {
-					const slots = assetConfig.getConfig().trainSlots || ['procedural-default'];
-					this.rebuildTrainFromSlots(slots, ls.parsed.color);
+					this.rebuildTrainFromSlots(this.slotsForCurrentLine(), ls.parsed.color);
 				}
 			}
 		}
@@ -1698,12 +1787,15 @@ export default class TrainRenderingSystem extends System {
 		if (!assetConfig) return;
 
 		const config = assetConfig.getConfig();
-		const slotsHash = JSON.stringify(config.trainSlots);
+		// Reads the mode-aware slots, so switching to a line of a different
+		// kind swaps the vehicle here as well as a config edit does.
+		const slots = this.slotsForCurrentLine();
+		const slotsHash = JSON.stringify(slots);
 		if (slotsHash !== this.lastSlotsHash) {
 			debugLog('[TrainRenderingSystem] Poll detected slots change');
 			const ls = trainSystem.getCurrentLine();
 			if (ls) {
-				this.rebuildTrainFromSlots(config.trainSlots, ls.parsed.color);
+				this.rebuildTrainFromSlots(slots, ls.parsed.color);
 			}
 		}
 

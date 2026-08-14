@@ -47,6 +47,15 @@ export interface GeometryBuffers {
 	/** Texture coordinates, when the source model carries a base-colour map. */
 	uv?: Float32Array;
 	/**
+	 * Per-vertex 1/0: does this vertex belong to a part that actually uses the
+	 * mesh's kept base-colour map?
+	 *
+	 * A merged mesh keeps only ONE image, but a model can have many materials
+	 * with only some of them textured. Absent means "all of it" — which is what
+	 * every single-material model wants, and preserves their appearance exactly.
+	 */
+	texFlag?: Float32Array;
+	/**
 	 * Per-vertex "how much fine detail is this" — 1 for rails, lower for
 	 * sleepers, 0 for ballast and everything else. Drives the distance fade.
 	 */

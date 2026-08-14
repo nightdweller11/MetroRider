@@ -4,6 +4,7 @@
 in vec3 vColor;
 in vec2 vUv;
 in float vDetail;
+in float vTexFlag;
 in vec3 vNormal;
 in vec3 vPosition;
 in vec4 vClipPos;
@@ -39,7 +40,13 @@ void main() {
 	// a livery stripe, a window or a logo into a smear.
 	vec3 base = vColor;
 
-	if (hasTexture > 0.5) {
+	// The map is sampled only by the parts that actually use it. A merged mesh
+	// keeps ONE image, but a model can have many materials with only some of
+	// them textured — the town bus has 20 materials across 34 primitives. With
+	// a per-MESH flag alone, the untextured parts sampled that image at their
+	// filled-in uv of (0, 0) and whatever sits in that corner painted the whole
+	// vehicle black, burying the material colours already in vColor.
+	if (hasTexture > 0.5 && vTexFlag > 0.5) {
 		base = texture(tDiffuse, vUv).rgb * vColor;
 	}
 

@@ -14,6 +14,13 @@ interface TrainMeshBuffers {
 	uv?: Float32Array;
 	/** Fine-detail weight per vertex, driving the distance fade on track. */
 	detail?: Float32Array;
+	/**
+	 * Per-vertex 1/0: may this vertex sample the mesh's base-colour map?
+	 *
+	 * Absent means "all of it", which is right for every single-material model
+	 * and keeps their appearance byte-identical.
+	 */
+	texFlag?: Float32Array;
 }
 
 /** Decoded base-colour image from the source GLB. */
@@ -198,6 +205,11 @@ export default class TrainMeshObject extends RenderableObject3D {
 		const detail = this.buffers.detail && this.buffers.detail.length >= vertexCount
 			? this.buffers.detail
 			: new Float32Array(vertexCount);
+		// Absent → every vertex may sample the map, which is what a
+		// single-material model has always done.
+		const texFlag = this.buffers.texFlag && this.buffers.texFlag.length >= vertexCount
+			? this.buffers.texFlag
+			: new Float32Array(vertexCount).fill(1);
 
 		if (this.texture && !this.gpuTexture) {
 			this.gpuTexture = renderer.createTexture2D({
@@ -230,6 +242,14 @@ export default class TrainMeshObject extends RenderableObject3D {
 					format: RendererTypes.AttributeFormat.Float,
 					normalized: false,
 					buffer: renderer.createAttributeBuffer({data: detail, usage}),
+				}),
+				renderer.createAttribute({
+					name: 'texFlag',
+					size: 1,
+					type: RendererTypes.AttributeType.Float32,
+					format: RendererTypes.AttributeFormat.Float,
+					normalized: false,
+					buffer: renderer.createAttributeBuffer({data: texFlag, usage}),
 				}),
 				renderer.createAttribute({
 					name: 'uv',

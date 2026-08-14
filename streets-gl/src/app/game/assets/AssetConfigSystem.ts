@@ -173,6 +173,26 @@ export default class AssetConfigSystem extends System {
 		return this.catalog;
 	}
 
+	/**
+	 * Has this player picked their own train?
+	 *
+	 * The signal is whether the LOCAL overrides carry a consist at all — the
+	 * same thing `rebuildMergedConfig` uses to decide whether the user's slots
+	 * beat the server's. It is what lets the line choose the vehicle for a
+	 * player who has never opened the composer, while never overriding one who
+	 * has: a chosen train is a choice.
+	 */
+	public hasUserTrainChoice(): boolean {
+		return migrateToSlots(this.userOverrides) !== null;
+	}
+
+	/** Is this model id actually in the catalog? */
+	public hasTrainModel(id: string): boolean {
+		if (id === 'procedural-default') return true;
+
+		return !!this.catalog?.models?.trains?.some((e: {id: string}) => e.id === id);
+	}
+
 	public isLoaded(): boolean {
 		return this.loaded;
 	}

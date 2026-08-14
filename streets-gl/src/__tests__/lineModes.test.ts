@@ -67,6 +67,40 @@ describe('lineModeInfo', () => {
 	it('falls back rather than returning undefined for a missing mode', () => {
 		expect(lineModeInfo(undefined).label).toBe('Metro');
 	});
+
+	it('gives a rail service a SET of cars rather than one', () => {
+		expect(lineModeInfo('rapid').consist.length).toBeGreaterThan(1);
+		expect(lineModeInfo('hsr').consist.length).toBeGreaterThan(1);
+		expect(lineModeInfo('regional').consist.length).toBeGreaterThan(1);
+	});
+
+	it('states no opinion where there is no vehicle worth putting on screen', () => {
+		// No boat and no aircraft model exist, and putting a train on the water
+		// is worse than leaving the configured one alone. The bus is a
+		// different case with the same answer: the model exists but renders
+		// almost black in game, so a bus route keeps bus speeds and the bus
+		// label without a black slab standing in for the vehicle.
+		expect(lineModeInfo('ferry').consist).toEqual([]);
+		expect(lineModeInfo('air').consist).toEqual([]);
+		expect(lineModeInfo('bus').consist).toEqual([]);
+	});
+
+	it('only names models that are actually in the shipped catalog', () => {
+		// A mode naming a model that does not exist would render grey boxes.
+		const catalog: {models: {trains: {id: string}[]}} =
+			// eslint-disable-next-line @typescript-eslint/no-var-requires
+			require('../../data-seed/assets/catalog.json');
+		const known = new Set(catalog.models.trains.map(e => e.id));
+		const modes: LineMode[] = [
+			'bus', 'tram', 'light', 'rapid', 'regional', 'hsr', 'ferry', 'gondola', 'air',
+		];
+
+		for (const mode of modes) {
+			for (const id of lineModeInfo(mode).consist) {
+				expect(known.has(id)).toBe(true);
+			}
+		}
+	});
 });
 
 describe('inferLineMode — the fallback for maps with no modes', () => {

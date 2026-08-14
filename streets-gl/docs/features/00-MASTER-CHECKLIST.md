@@ -12,7 +12,7 @@
 
 ## Progress (2026-08-14)
 
-**Live on metrorider.net: v2.13.0 "Your Colours"** — 34 releases. Every row
+**Live on metrorider.net: v2.14.0 "The Right Vehicle"** — 35 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 | Feature | State |
@@ -22,7 +22,7 @@ below reflects what is DEPLOYED, not what is merged.
 | **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside speed boards, country-correct signage |
 | **F4 Timetables** | **SHIPPED v2.7.0 "The 08:06"** — due times from the line's real speed profile, punctuality read, follows a reversal |
 | **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms |
-| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, livery tint v2.13.0, TTS announcements v2.5.0. Physics profiles, grade, ferry water, cab overlay, flange squeal outstanding |
+| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, livery tint v2.13.0, mode consists + a texture double-apply fix v2.14.0, TTS announcements v2.5.0. Physics profiles, grade, ferry water, cab overlay, flange squeal outstanding |
 | **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI, dispatch spacing and SPAD outstanding |
 | **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo mode saves the photo v2.10.0, Simple/Advanced driving v2.2.0. Walk mode outstanding |
 | **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0. Weather and seasons deliberately deferred: overcast is a change to the atmosphere LUT chain and its UBO layout, not a setting |
@@ -62,7 +62,9 @@ where most of the per-feature UI actually landed.
 - [x] Thread `mode` through MetroDreaminImporter → LineData/ParsedLine
 - [x] `LineModes.ts` (mode → base limit, default consist, icon, dwell)
 - [x] Line list/picker icons per mode
-- [ ] Mode default consists in TrainRenderingSystem (when user is all-default)
+- [x] Mode default consists in TrainRenderingSystem (2.14.0) — used only when
+      the player has never picked a train. Bus deliberately has NO default:
+      the model renders near-black in game (see the feature doc)
 - [ ] `PhysicsProfile` per catalog model (+ `performance` metadata in
       catalog.json) replacing TrainPhysics constants; mode top-speed cap
 - [ ] Terrain-grade force in physics

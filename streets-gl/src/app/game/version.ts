@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.14.0',
+		codename: 'The Right Vehicle',
+		date: '2026-08-14',
+		emblem: '🚋🚄',
+		summary: 'A tram line runs trams. A high-speed line runs a bullet train.',
+		changes: [
+			'THE LINE PICKS THE VEHICLE — If you have not chosen a train of your own, the line does it for you: trams on a tram line, a light railway on a light rail line, a metro set underground, a proper train on a regional line, a bullet train on a high-speed line. Change to a different kind of line and the vehicle changes with it.',
+			'If you HAVE picked your own train, it stays. Choosing your train is a choice, and the game does not overrule it.',
+			'THE TRAINS LOOK BETTER — Every model with a picture painted on it was having that picture applied twice, which made all of them darker and muddier than they should be. Now they are the colours they were drawn in.',
+			'Bus routes still get bus speeds, bus stop times and the bus label, but keep your train for now: the bus model comes out almost black in the game and a black box is not a bus.',
+		],
+	},
+	{
 		version: '2.13.0',
 		codename: 'Your Colours',
 		date: '2026-08-14',

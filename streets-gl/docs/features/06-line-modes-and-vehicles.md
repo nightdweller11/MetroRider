@@ -77,6 +77,45 @@
 > driven as track. A ferry follows its route on the water surface only as
 > well as the terrain height happens to allow — real water-following is the
 > unshipped ferry item below.
+>
+> ### What shipped in 2.14.0 — mode default consists, and a texture bug
+>
+> `LineModeInfo.consist` names the vehicles a kind of line runs, and
+> `TrainRenderingSystem.slotsForCurrentLine()` uses it **only when the player
+> has never picked a train** (`AssetConfigSystem.hasUserTrainChoice()` — the
+> same signal `rebuildMergedConfig` already used to let user slots beat server
+> slots). A chosen consist is a choice and is never overridden. The mode is
+> derived from the line inside that method rather than read off
+> `SpeedLimitSystem`, so it does not depend on system update order on the frame
+> the line changes. All four slot-read sites go through it, including the
+> config poll — which is what makes the vehicle swap when you switch lines.
+>
+> A `lineModes.test.ts` case asserts every id in the table exists in the
+> shipped `catalog.json`; a mode naming a missing model would render grey
+> boxes, and the runtime guard (`hasTrainModel`) falls back rather than doing
+> that.
+>
+> **The texture bug this uncovered.** Chasing a black bus found that the loader
+> BAKED the base-colour map into vertex colours *and* the shader sampled the
+> same map per fragment — so every textured model had its texture applied
+> **twice** and its colours squared. A mid-dark panel at 0.3 came out at 0.09.
+> Fixed by pushing the material's factor (not the baked sample) for parts that
+> will sample the map per fragment; the before/after screenshots show every
+> model brighter and more detailed. A companion fix adds a per-vertex
+> `texFlag`, because a merged mesh keeps ONE image while a model can have many
+> materials: the untextured parts were sampling that one image at their
+> filled-in uv of (0, 0).
+>
+> **The bus is still not shipped as a default, and that is deliberate.**
+> `generic-town-bus` has 20 materials and 2 images across 34 primitives; both
+> fixes above helped it (its shape and windows now read) but it still comes out
+> near-black in game while its own preview is correct — the single-texture
+> merge cannot represent it. A bus route therefore gets bus speeds, bus dwell,
+> the bus label and the bus icon, and keeps the player's train. Shipping a
+> black slab labelled "bus" would be worse than not shipping a bus.
+> Screenshots — including the bus rendering black beside two models that render
+> correctly under the same sun — in
+> `docs/features/_artifacts/mode-consists-2026-08-14/`.
 
 ## 1. Product definition
 

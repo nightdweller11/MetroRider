@@ -5,12 +5,15 @@ in vec3 normal;
 in vec3 color;
 in vec2 uv;
 in float detail;
+// 1 when this vertex's part actually uses the mesh's base-colour map.
+in float texFlag;
 out vec4 vClipPos;
 out vec4 vClipPosPrev;
 
 out vec3 vColor;
 out vec2 vUv;
 out float vDetail;
+out float vTexFlag;
 out vec3 vNormal;
 out vec3 vPosition;
 
@@ -44,6 +47,7 @@ void main() {
 	vColor = color;
 	vUv = uv;
 	vDetail = detail;
+	vTexFlag = texFlag;
 
 	vec3 modelNormal = normalize((viewMatrix * modelMatrix * vec4(normal, 0)).xyz);
 	vNormal = modelNormal;

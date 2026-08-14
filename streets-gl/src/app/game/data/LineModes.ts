@@ -34,6 +34,15 @@ export interface LineModeInfo {
 	sign: TransportMode;
 	/** Runs on rails through streets and countryside — as opposed to water or air. */
 	onTrack: boolean;
+	/**
+	 * The vehicles this kind of line runs, when the player has not chosen their
+	 * own. Model ids from the asset catalog; empty means "no opinion, keep
+	 * whatever is configured".
+	 *
+	 * Only used for a player who has never picked a train. A chosen consist is
+	 * a choice and is never overridden.
+	 */
+	consist: string[];
 }
 
 /*
@@ -42,16 +51,45 @@ export interface LineModeInfo {
  * it, a metro by the distance between stops. These are the numbers that decide
  * whether driving a bus route FEELS like a bus route.
  */
+/*
+ * Default consists, from the shipped asset catalog.
+ *
+ * The `-a` / `-b` / `-c` models are front / middle / rear cars of the same
+ * family, so a set reads as one train rather than three unrelated vehicles.
+ * A bus is ONE vehicle — a three-car bus would be a road train.
+ *
+ * Ferry and air have no boat or aircraft model in the catalog, so they state
+ * no opinion rather than putting a train on the water: an honest default is
+ * better than a confident wrong one.
+ */
+const METRO_SET = ['train-electric-subway-a', 'train-electric-subway-b', 'train-electric-subway-c'];
+const CITY_SET = ['train-electric-city-a', 'train-electric-city-b', 'train-electric-city-c'];
+const BULLET_SET = ['train-electric-bullet-a', 'train-electric-bullet-b', 'train-electric-bullet-c'];
+const TRAM_SET = ['train-tram-modern', 'train-tram-modern'];
+
 const MODES: Record<LineMode, LineModeInfo> = {
-	bus:      {label: 'Bus',              icon: '🚌', topKmh: 50,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true},
-	tram:     {label: 'Tram',             icon: '🚋', topKmh: 60,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true},
-	light:    {label: 'Light rail',       icon: '🚈', topKmh: 80,  floorKmh: 25, dwellSec: 25, sign: 'light-rail', onTrack: true},
-	rapid:    {label: 'Metro',            icon: '🚇', topKmh: 90,  floorKmh: 30, dwellSec: 25, sign: 'metro',      onTrack: true},
-	regional: {label: 'Regional train',   icon: '🚆', topKmh: 160, floorKmh: 40, dwellSec: 40, sign: 'rail',       onTrack: true},
-	hsr:      {label: 'High-speed train', icon: '🚄', topKmh: 300, floorKmh: 60, dwellSec: 60, sign: 'rail',       onTrack: true},
-	ferry:    {label: 'Ferry',            icon: '⛴️', topKmh: 35,  floorKmh: 15, dwellSec: 90, sign: 'tram',       onTrack: false},
-	gondola:  {label: 'Cable car',        icon: '🚠', topKmh: 25,  floorKmh: 15, dwellSec: 20, sign: 'tram',       onTrack: false},
-	air:      {label: 'Air route',        icon: '✈️', topKmh: 300, floorKmh: 60, dwellSec: 60, sign: 'rail',       onTrack: false},
+	/*
+	 * No default vehicle for a bus route yet, deliberately.
+	 *
+	 * The catalog has `generic-town-bus` and it is the obvious choice, but it
+	 * renders almost black in game while looking correct in its own preview:
+	 * the model carries 20 materials and 2 images across 34 primitives, and the
+	 * loader merges a mesh down to ONE base-colour map. Fixing the worst of
+	 * that (the map was being applied twice) helped every other model and was
+	 * not enough for this one. Shipping a black slab and calling it a bus is
+	 * worse than leaving the player's train alone, so a bus route still gets
+	 * bus speeds, bus stop times, the bus label and the bus icon — just not a
+	 * bus-shaped hole in the picture.
+	 */
+	bus:      {label: 'Bus',              icon: '🚌', topKmh: 50,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  consist: []},
+	tram:     {label: 'Tram',             icon: '🚋', topKmh: 60,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  consist: TRAM_SET},
+	light:    {label: 'Light rail',       icon: '🚈', topKmh: 80,  floorKmh: 25, dwellSec: 25, sign: 'light-rail', onTrack: true,  consist: ['train-tram-round', 'train-tram-round', 'train-tram-round']},
+	rapid:    {label: 'Metro',            icon: '🚇', topKmh: 90,  floorKmh: 30, dwellSec: 25, sign: 'metro',      onTrack: true,  consist: METRO_SET},
+	regional: {label: 'Regional train',   icon: '🚆', topKmh: 160, floorKmh: 40, dwellSec: 40, sign: 'rail',       onTrack: true,  consist: CITY_SET},
+	hsr:      {label: 'High-speed train', icon: '🚄', topKmh: 300, floorKmh: 60, dwellSec: 60, sign: 'rail',       onTrack: true,  consist: BULLET_SET},
+	ferry:    {label: 'Ferry',            icon: '⛴️', topKmh: 35,  floorKmh: 15, dwellSec: 90, sign: 'tram',       onTrack: false, consist: []},
+	gondola:  {label: 'Cable car',        icon: '🚠', topKmh: 25,  floorKmh: 15, dwellSec: 20, sign: 'tram',       onTrack: false, consist: ['funicular']},
+	air:      {label: 'Air route',        icon: '✈️', topKmh: 300, floorKmh: 60, dwellSec: 60, sign: 'rail',       onTrack: false, consist: []},
 };
 
 /**
