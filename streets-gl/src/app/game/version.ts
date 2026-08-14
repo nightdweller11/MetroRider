@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.4.0',
+		codename: 'Golden Hour',
+		date: '2026-08-14',
+		emblem: '🌅🌃',
+		summary: 'Drive in the morning, at midday, in the golden light of evening, or at night with the city lit up.',
+		changes: [
+			'TIME OF DAY — Choose Morning, Midday, Evening or Night in Settings, or leave it on Now and drive at whatever time it really is. The sun is worked out from the actual position of the city you are driving in, so a low evening sun falls where it should and shadows stretch the right way.',
+			'AT NIGHT the sun is properly below the horizon and the windows of the city come on.',
+			'The light does not jump when you change it — it slides round to the new time over a few seconds.',
+		],
+	},
+	{
 		version: '2.3.0',
 		codename: 'Mind the Doors',
 		date: '2026-08-14',

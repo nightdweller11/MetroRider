@@ -161,6 +161,28 @@ export default class UISystem extends System {
 		return this.state.mapTime;
 	}
 
+	/**
+	 * Move the world clock. `MapTimeSystem` drives the sun from this through
+	 * SunCalc at the real latitude, and eases rather than snapping when the
+	 * jump is large — so setting it once is all a time-of-day control needs;
+	 * the clock keeps running forward from wherever it is put.
+	 */
+	public setMapTime(time: number): void {
+		this.ui.setStateFieldValue('mapTime', time);
+	}
+
+	/**
+	 * 0 = follow the clock; 1..4 = a fixed light direction.
+	 *
+	 * Setting the time alone does nothing while a fixed preset is selected —
+	 * `MapTimeSystem` never consults the clock in that state. The saved default
+	 * here is a preset, so a time-of-day control has to put the world back on
+	 * the clock as well as move it.
+	 */
+	public setMapTimeMode(mode: number): void {
+		this.ui.setStateFieldValue('mapTimeMode', mode);
+	}
+
 	private getRenderGraph(): RenderGraphSnapshot {
 		const renderSystem = this.systemManager.getSystem(RenderSystem);
 		const sourceGraph = renderSystem.getLastRenderGraph();

@@ -7,6 +7,7 @@ import SpeedLimitSystem from '~/app/game/limits/SpeedLimitSystem';
 import ScoreUI from '~/app/game/scoring/ScoreUI';
 import TrainSystem from './TrainSystem';
 import GameCameraSystem, {GameCameraMode} from './GameCameraSystem';
+import UISystem from '../systems/UISystem';
 import AudioSystem from './audio/AudioSystem';
 import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
@@ -759,6 +760,46 @@ export default class GameUISystem extends System {
 		this.cabSheet.show('Settings', this.settingsSheetRows());
 	}
 
+	/**
+	 * Move the world clock to the chosen part of the day.
+	 *
+	 * The engine already had all of this — `MapTimeSystem` computes the sun and
+	 * moon from a timestamp and the real latitude, eases between them, and
+	 * lights building windows after dark. It was simply unreachable, because
+	 * the only control that set the time lived on the React panel the driving
+	 * interface does not mount.
+	 */
+	private applyTimeOfDay(): void {
+		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
+		const choice = settings?.get('timeOfDay')?.statusValue ?? 'now';
+		const ui = this.systemManager.getSystem(UISystem);
+
+		if (!ui) return;
+
+		// Every choice here, including "now", wants a real sun worked out from
+		// the clock. Without this the world stays on whichever fixed light
+		// preset was saved, and moving the time changes nothing on screen —
+		// measured: the sun sat at exactly (-1,-1,-1) for 08:00 and 22:00 alike.
+		ui.setMapTimeMode(0);
+
+		if (choice === 'now') {
+			ui.setMapTime(Date.now());
+			return;
+		}
+
+		const hours: Record<string, number> = {morning: 8, midday: 13, evening: 18.5, night: 22};
+		const hour = hours[choice];
+
+		if (hour === undefined) return;
+
+		// Today at that hour, local time — so the sun sits where the player
+		// expects for the city they are driving in.
+		const when = new Date();
+
+		when.setHours(Math.floor(hour), Math.round((hour % 1) * 60), 0, 0);
+		ui.setMapTime(when.getTime());
+	}
+
 	private settingsSheetRows(): SheetRow[] {
 		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
 		const audio = this.systemManager.getSystem(AudioSystem);
@@ -793,8 +834,21 @@ export default class GameUISystem extends System {
 
 		const driving = cycler('driveMode', 'Driving', {simple: 'SIM', advanced: 'ADV'});
 		const announce = cycler('announcements', 'Station announcements', {on: 'ON', off: 'OFF'});
+		const time = cycler('timeOfDay', 'Time of day', {
+			now: 'NOW', morning: 'AM', midday: 'NOON', evening: 'DUSK', night: 'NIGHT',
+		});
 
 		if (driving) rows.push(driving);
+		if (time) {
+			// The cycler only stores the value; the world clock has to be moved.
+			const advance = time.onSelect;
+
+			time.onSelect = (): void => {
+				advance();
+				this.applyTimeOfDay();
+			};
+			rows.push(time);
+		}
 		if (announce) rows.push(announce);
 
 		// Sound is the audio system's own state rather than a stored setting,
@@ -2037,6 +2091,10 @@ export default class GameUISystem extends System {
 		// which the console has no equivalent for, so that one is rehomed to
 		// the menu rather than lost with the cluster.
 		if (this.legacyControlsEl) this.legacyControlsEl.style.display = 'none';
+
+		// Apply the saved time of day on entry, so a night drive stays a night
+		// drive across a reload rather than snapping back to real time.
+		this.applyTimeOfDay();
 
 		this.cabHud?.setVisible(true);
 	}

@@ -145,6 +145,19 @@ const Config = {
 			statusDefault: 'simple',
 			category: 'general'
 		},
+		timeOfDay: {
+			label: 'Time of day',
+			status: ['now', 'morning', 'midday', 'evening', 'night'],
+			statusLabels: [
+				'Now — whatever time it really is',
+				'Morning',
+				'Midday',
+				'Evening — golden light',
+				'Night — the city lit up',
+			],
+			statusDefault: 'now',
+			category: 'general'
+		},
 		announcements: {
 			label: 'Station announcements',
 			status: ['on', 'off'],
