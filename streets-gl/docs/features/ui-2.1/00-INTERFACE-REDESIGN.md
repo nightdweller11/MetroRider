@@ -39,6 +39,29 @@ Measured on the shipped 2.0.0 build at four form factors
    in a band across the bottom; the phone drops the ribbon to a single line and
    shrinks the speed readout rather than rescaling everything.
 
+## Direction: instruments, not readouts
+
+The first pass followed the layout rules and still read as a competent
+dark-glass **app**. A train sim should read as a **machine**. What actually
+moves it, in order of effect:
+
+1. **A real dial.** Swept arc, minor and major ticks with numbers, a needle,
+   and the line limit marked on the scale. The travelled arc runs accent-blue
+   up to the limit and **red only for the excess**, so margin against the limit
+   is a shape rather than two numbers to compare. (First attempt filled
+   everything above the limit with the same weight and turned the whole face
+   red — it said nothing.)
+2. **A console the controls are set INTO** — milled edge, panel seam, brushed
+   grain — rather than pills floating over the scene.
+3. **Cab tell-tales.** DOORS and LIMIT are lamps: dead when off, illuminated
+   with bloom when live.
+4. **A notched power lever** (P4…N…B2, knurled grip) with the brake as its own
+   gauge alongside — train controls, not a generic slider.
+5. **Technical type.** Condensed DIN/Bahnschrift for numerals and micro-labels,
+   not the rounded UI face. This is most of why the first pass read as an app.
+6. **Surface texture** — fine brushed grain and a specular sweep, so panels
+   catch light instead of being flat fills.
+
 ## Screens mocked
 
 | Screen | Covers |
