@@ -24,6 +24,7 @@ import VehicleSystem from "~/app/systems/VehicleSystem";
 import {AircraftPartType} from "~/app/vehicles/aircraft/Aircraft";
 import TrainDepthMaterialContainer from "~/app/render/materials/TrainDepthMaterialContainer";
 import SignalRenderingSystem from '~/app/game/limits/SignalRenderingSystem';
+import StopMarkRenderingSystem from '~/app/game/scoring/StopMarkRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 import Tile from "~/app/objects/Tile";
@@ -374,6 +375,9 @@ export default class ShadowMappingPass extends Pass<{
 			// cull-and-two-cascades rule below keeps them from costing much.
 			...trainRenderingSystem.ambientMeshes,
 			...(this.manager.systemManager.getSystem(SignalRenderingSystem)?.signalMeshes ?? []),
+			...(this.manager.systemManager.getSystem(StopMarkRenderingSystem)?.markMesh
+				? [this.manager.systemManager.getSystem(StopMarkRenderingSystem).markMesh]
+				: []),
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
 		].filter(Boolean);

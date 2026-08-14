@@ -20,6 +20,20 @@ import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
+
+/**
+ * When the countdown to the stop mark appears — as SECONDS of running, not
+ * metres.
+ *
+ * A fixed distance is wrong at both ends: 400 m is nine seconds to an express
+ * doing 160 and most of a minute to a tram, so the same number is too late for
+ * one and pointless furniture for the other. Twenty seconds is about where a
+ * driver starts thinking about the brake rather than the scenery, whatever
+ * they are driving. The floor covers standing still, where the time-based
+ * figure would collapse to nothing.
+ */
+const STOP_MARK_READOUT_S = 20;
+const STOP_MARK_READOUT_FLOOR_M = 250;
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -775,6 +789,19 @@ export default class GameUISystem extends System {
 	/** "NEXT STOP · DUE 09:14 · 2 MIN LATE" — state, schedule, standing. */
 	private stationMetaLine(doorsOpen: boolean | undefined, arriving: boolean | undefined): string {
 		const state = doorsOpen ? 'DOORS OPEN' : arriving ? 'ARRIVING' : 'NEXT STOP';
+
+		// Coming in, the one number that matters is how far to the mark. The
+		// due time can wait — it is not what you are doing with your hands.
+		if (!doorsOpen && !arriving) {
+			const trainSystem = this.systemManager.getSystem(TrainSystem);
+			const away = trainSystem?.stationState?.nextStationDist;
+			const speed = trainSystem?.physicsState?.trainSpeed ?? 0;
+			const within = Math.max(STOP_MARK_READOUT_FLOOR_M, speed * STOP_MARK_READOUT_S);
+
+			if (away !== undefined && away > 0 && away < within) {
+				return `STOP MARK IN ${Math.round(away)} m`;
+			}
+		}
 		const service = this.systemManager.getSystem(ServiceSystem);
 		const due = service?.dueAtNext();
 

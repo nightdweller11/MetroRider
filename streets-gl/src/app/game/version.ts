@@ -20,6 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.17.0',
+		codename: 'Where to Stop',
+		date: '2026-08-14',
+		emblem: '📏🚉',
+		summary: 'Coming into a station, the board counts down the metres to the stopping point.',
+		changes: [
+			'HOW FAR TO THE STOP — On the way in, the destination board tells you how many metres are left to the point you are meant to stop at. Your stop is scored on how close you get; until now nobody was telling you where it was.',
+			'It appears about twenty seconds out, so a fast train is warned earlier than a slow one — the same distance would be far too late at 160 and pointless furniture on a tram.',
+		],
+	},
+	{
 		version: '2.16.0',
 		codename: 'The Bus Arrives',
 		date: '2026-08-14',
