@@ -129,3 +129,45 @@ inside the 40 m zone (it brakes early and MetroRider's coasting drag stops it
 short), so the card was only exercised through unit tests and the run-card
 path. A human drive — brake into a station, open the doors — is the check that
 remains. The `finishRun()` path and everything downstream of it are confirmed.
+
+---
+
+## Stop marker + distance readout (2.17.0 / 2.18.0)
+
+`StopScorer` has always graded precision against a point on the track — within
+2 m perfect, within 12 m good — and until 2.17.0 that point was **invisible**.
+A child was being marked on how close they stopped to somewhere nobody had
+shown them.
+
+| Piece | Where |
+|---|---|
+| Distance readout on the destination board | `GameUISystem.stationMetaLine` |
+| Marker geometry | `game/scoring/StopMarkGeometry.ts` |
+| Placement (one marker, follows the next stop) | `game/scoring/StopMarkRenderingSystem.ts` |
+
+**The readout's window is TIME, not distance** — about 20 s of running, floored
+at 250 m. A fixed distance is wrong at both ends: 400 m is nine seconds to an
+express doing 160 and most of a minute to a tram. Measured on a real approach,
+it stayed hidden at 537 m / 81 km/h and appeared at 496 m / 104 km/h.
+
+**The marker shipped a release late, and the delay is the interesting part.**
+2.17.0 went out with the marker built but NOT registered, because it could not
+be picked out from the cab at three different stations — and a target the
+player cannot see is precisely the defect it exists to fix. Every measurement
+said the mesh was fine (right station, right point, right terrain height, GPU
+mesh uploaded), so the temptation was to call it good and ship.
+
+What settled it was an A/B: swap the known-visible block-signal geometry into
+the very same placement. The signal was picked out instantly at 120 m — so the
+**placement was never the problem**. The geometry was: a near-white board at
+1.9 on a grey post, standing in a sun-blasted white-and-sand landscape. It was
+"lit" and had no contrast with anything.
+
+The signals read because they are saturated red and green; the speed boards
+read because they carry a dark border and dark numerals. So the marker is now a
+DARK plate with a saturated orange bar pushed past 1.0 for bloom, on a dark
+post, moved out to 5.0 m (between the speed boards' 4.5 and the signals' 7.6)
+and clear of the platform furniture. Visible at 120 m, clearly readable at 45 m.
+
+Screenshots, including the probe that proved placement was fine, in
+`docs/features/_artifacts/stop-mark-2026-08-14/`.

@@ -12,13 +12,13 @@
 
 ## Progress (2026-08-14)
 
-**Live on metrorider.net: v2.17.0 "Where to Stop"** — 38 releases. Every row
+**Live on metrorider.net: v2.18.0 "Stop Here"** — 39 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 | Feature | State |
 |---|---|
 | **F1 Profiles & scores** | **SHIPPED** — and the Railway volume is attached with `DATA_DIR=/data`, persistence PROVEN across a real container replacement (an earlier doc claiming otherwise was stale) |
-| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance-to-mark readout v2.17.0. The 3D stop marker is built but held (see below) |
+| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance-to-mark readout v2.17.0, stop marker v2.18.0. Replay/ghost still outstanding |
 | **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside speed boards, country-correct signage |
 | **F4 Timetables** | **SHIPPED v2.7.0 "The 08:06"** — due times from the line's real speed profile, punctuality read, follows a reversal |
 | **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms |
@@ -86,12 +86,10 @@ where most of the per-feature UI actually landed.
 
 ## F2 — Driving score (`02-driving-score.md`)
 - [x] `StopScorer.ts` state machine (precision/smoothness/doors → points) + unit tests
-- [~] HUD distance-to-mark readout SHIPPED (2.17.0) — appears ~20 s out, so
-      the window scales with speed. The 3D stop marker is BUILT
-      (`scoring/StopMark{Geometry,RenderingSystem}.ts`) but deliberately NOT
-      registered: every measurement says the mesh is placed correctly, and
-      three attempts still could not pick it out from the cab. A target the
-      player cannot see is the problem it was meant to fix
+- [x] Stop marker + HUD distance-to-mark readout (2.17.0 readout, 2.18.0
+      marker). The readout's window is TIME (~20 s of running), not a fixed
+      distance. The marker was held for one release because it could not be
+      seen; the cause was CONTRAST, not placement — see the feature doc
 - [x] Stop card UI (verdict + points, 3 s) — unit-tested; wants a human drive
 - [x] `RunScorer.ts` (aggregate, terminus/lap finalize incl. loop lines) + unit tests
 - [x] Run card UI + personal-best callout

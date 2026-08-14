@@ -29,7 +29,6 @@ import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
 import AmbientTrainSystem from "~/app/game/AmbientTrainSystem";
 import SignalRenderingSystem from "~/app/game/limits/SignalRenderingSystem";
-// Imported but not registered — see the note in the systems list below.
 import StopMarkRenderingSystem from "~/app/game/scoring/StopMarkRenderingSystem";
 import ServiceSystem from "~/app/game/service/ServiceSystem";
 import AnnouncementSystem from "~/app/game/audio/AnnouncementSystem";
@@ -82,16 +81,7 @@ class App {
 				TrainRenderingSystem,
 				AmbientTrainSystem,
 				SignalRenderingSystem,
-				// StopMarkRenderingSystem — BUILT BUT NOT RUNNING, deliberately.
-				//
-				// The mesh is correct by every measure taken: right station, right
-				// point on the track, right terrain height, GPU mesh built and
-				// uploaded, moves with the target. What could NOT be confirmed is
-				// the only thing that matters about it — that a driver can SEE it
-				// from the cab on the approach. Three attempts at three stations
-				// failed to pick it out. A target the player cannot see is exactly
-				// the problem this was written to fix, so it stays off until
-				// someone has looked at it and can say it reads.
+				StopMarkRenderingSystem,
 				ServiceSystem,
 				PassengerSystem,
 				PassengerRenderingSystem,

@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.18.0',
+		codename: 'Stop Here',
+		date: '2026-08-14',
+		emblem: '🟠🚉',
+		summary: 'There is a marker on the platform now showing exactly where to stop.',
+		changes: [
+			'A MARKER TO AIM AT — A post with a bright orange bar stands at the point your train is meant to stop at, with a line across the ground at the exact spot. Pull up alongside it and you have made a perfect stop.',
+			'It moves to whichever station is next, so there is only ever one, standing where you are going.',
+			'The first attempt was a white board, which turned out to be completely invisible against the bright ground. Dark post, bright bar — you can see it from a long way off now.',
+		],
+	},
+	{
 		version: '2.17.0',
 		codename: 'Where to Stop',
 		date: '2026-08-14',

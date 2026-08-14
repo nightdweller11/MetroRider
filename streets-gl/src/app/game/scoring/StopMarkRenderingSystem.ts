@@ -19,8 +19,14 @@ import {buildStopMarkGeometry} from './StopMarkGeometry';
 
 /** Beyond this the mark is not placed — it would just be scenery. */
 const SHOW_WITHIN_M = 1200;
-/** Just clear of the running line, on the platform side. */
-const SIDE_OFFSET = 3.2;
+/**
+ * How far out from the running line the mark stands.
+ *
+ * Matched to the speed boards (4.5) and signals (7.6) rather than chosen: at
+ * the original 3.2 it sat among the platform furniture where there is already
+ * plenty to look at.
+ */
+const SIDE_OFFSET = 5.0;
 
 export default class StopMarkRenderingSystem extends System {
 	public markMesh: TrainMeshObject | null = null;
