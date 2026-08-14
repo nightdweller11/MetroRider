@@ -12,6 +12,7 @@ import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
 import MapWorkerSystem from '../systems/MapWorkerSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
+import CabHud from './ui/CabHud';
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -39,6 +40,7 @@ export default class GameUISystem extends System {
 	private lineListWrap: HTMLElement | null = null;
 	private lineListToggle: HTMLElement | null = null;
 	private lineListExpanded: boolean = true;
+	private cabHud: CabHud | null = null;
 	private stationPanelEl: HTMLElement | null = null;
 	private debugEl: HTMLElement | null = null;
 	private debugVisible: boolean = false;
@@ -77,7 +79,10 @@ export default class GameUISystem extends System {
 		(window as any).__config = Config;
 
 		this.mobile = window.innerWidth <= 768 || ('ontouchstart' in window && window.innerWidth <= 1024);
-		this.lineListExpanded = !this.mobile;
+		// Closed by default on every device: measured at roughly 38% of the
+		// width and 63% of the height of an iPad portrait screen, permanently,
+		// to list routes you pick once and never touch again.
+		this.lineListExpanded = false;
 
 		this.container = document.createElement('div');
 		this.container.id = 'game-hud';
@@ -302,7 +307,12 @@ export default class GameUISystem extends System {
 		this.infoPanelEl.appendChild(row('PAX', 'hud-pax-val', false));
 		this.infoPanelEl.appendChild(row('NEXT', 'hud-eta-val', false));
 
+		// Superseded by the cab HUD; kept in the tree because the update loop
+		// still writes to its rows, which other surfaces read.
+		this.infoPanelEl.style.display = 'none';
 		this.container.appendChild(this.infoPanelEl);
+
+		this.cabHud = new CabHud(this.container, action => this.onCabAction(action));
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
@@ -561,6 +571,73 @@ export default class GameUISystem extends System {
 		this.rebuildLineList(trainSystem);
 		this.applyLineListVisibility();
 		this.container.appendChild(this.lineListWrap);
+	}
+
+	/** Buttons on the cab console and utility rail. */
+	private onCabAction(action: 'map' | 'camera' | 'menu' | 'doors' | 'horn'): void {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (action === 'doors') {
+			trainSystem?.toggleDoors();
+			return;
+		}
+		if (action === 'horn') {
+			this.systemManager.getSystem(AudioSystem)?.playHorn?.();
+			return;
+		}
+		if (action === 'camera') {
+			this.systemManager.getSystem(GameCameraSystem)?.cycleMode();
+			return;
+		}
+		if (action === 'map') {
+			document.getElementById('game-metro-map-btn')?.click();
+			return;
+		}
+
+		// Menu: the line picker, which is now summoned rather than permanent.
+		this.lineListExpanded = !this.lineListExpanded;
+		this.applyLineListVisibility();
+	}
+
+	/** Feed the cab instruments from real game state. */
+	private updateCabHud(trainSystem: TrainSystem, deltaTime: number): void {
+		if (!this.cabHud) return;
+
+		const limits = this.systemManager.getSystem(SpeedLimitSystem);
+		const passengers = this.systemManager.getSystem(PassengerSystem);
+		const ls = trainSystem.getCurrentLine();
+		const stops = ls?.parsed.stations.length ?? 2;
+		const physics = trainSystem.physicsState;
+		const speed = Math.round(trainSystem.getSpeedKmH());
+		const limit = limits && limits.limit > 0 ? Math.round(limits.signFace()) : 0;
+
+		const total = ls?.track?.cumDist?.[ls.track.cumDist.length - 1] ?? 0;
+		const progress = total > 0 ? Math.min(1, Math.max(0, (physics?.trainDist ?? 0) / total)) : 0;
+		// stationState already resolves arriving-vs-next; reuse it rather than
+		// recomputing a second, subtly different answer.
+		const ss = trainSystem.stationState;
+		const nextIdx = ss ? (ss.arriving ? ss.nearestStationIdx : ss.nextStationIdx) : -1;
+		const name = ss?.stationName ?? '—';
+		const waiting = passengers && nextIdx >= 0 ? passengers.waitingAt(nextIdx) : null;
+
+		this.cabHud.update({
+			speedKmh: speed,
+			limitKmh: limit,
+			dialMax: Math.max(120, Math.ceil((limit || 100) * 1.6 / 20) * 20),
+			stationName: name,
+			stationMeta: physics?.doorsOpen ? 'DOORS OPEN' : ss?.arriving ? 'ARRIVING' : 'NEXT STOP',
+			waiting: waiting === null || waiting === undefined ? null : waiting,
+			progress,
+			stopCount: stops,
+			stopIndex: nextIdx,
+			doorsOpen: !!physics?.doorsOpen,
+			overLimit: limit > 0 && speed > limit,
+			// Input is a hold, not an axis, so the lever shows demand rather
+			// than a notch position until F6 gives vehicles a real notch model.
+			power: trainSystem.getInput?.().isHeld('throttle') ? 1 : 0,
+			brake: trainSystem.getInput?.().isHeld('brake') ? 1 : 0,
+			lineName: ls?.parsed.id ?? 'LINE',
+		});
 	}
 
 	private applyLineListVisibility(): void {
@@ -1589,6 +1666,7 @@ export default class GameUISystem extends System {
 		if (this.infoPanelEl) this.infoPanelEl.style.display = 'none';
 		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'none';
 		if (this.lineListWrap) this.lineListWrap.style.display = 'none';
+		this.cabHud?.setVisible(false);
 		this.hideStationPanel();
 
 		const startBtn = document.getElementById('game-start-btn');
@@ -1621,9 +1699,13 @@ export default class GameUISystem extends System {
 	}
 
 	private showGameUI(): void {
-		if (this.infoPanelEl) this.infoPanelEl.style.display = 'block';
-		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'block';
+		// The stacked readout and the station banner are both superseded by
+		// the cab HUD, which shows the same facts as instruments. Raising them
+		// here is what put the old panel back on screen over the new one.
+		if (this.infoPanelEl) this.infoPanelEl.style.display = 'none';
+		if (this.stationEl?.parentElement) this.stationEl.parentElement.style.display = 'none';
 		if (this.lineListWrap) this.lineListWrap.style.display = 'flex';
+		this.cabHud?.setVisible(true);
 		this.applyLineListVisibility();
 	}
 
@@ -1642,6 +1724,8 @@ export default class GameUISystem extends System {
 		if (this.speedEl) {
 			this.speedEl.textContent = `${Math.round(trainSystem.getSpeedKmH())} km/h`;
 		}
+
+		this.updateCabHud(trainSystem, deltaTime);
 
 		const now = new Date();
 		const currentMinute = now.getHours() * 60 + now.getMinutes();
