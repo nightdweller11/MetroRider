@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.9.0',
+		codename: 'Notch by Notch',
+		date: '2026-08-14',
+		emblem: '🎚️🚆',
+		summary: 'The power handle works like a real one: it winds up through its notches instead of jumping straight to full.',
+		changes: [
+			'THE LEVER MEANS SOMETHING NOW — Hold the throttle and the handle walks up through P1, P2, P3, P4 over about a second and a half, and the train pulls away the way a train does instead of leaping off the platform. Let go and it drops off quickly, the way it does in a cab.',
+			'The brake handle works the same way, and the emergency brake goes over fast — that is the point of it.',
+			'Until now the lever was drawn with all its notches but only ever showed "off" or "everything". It was an instrument that did not tell you anything.',
+		],
+	},
+	{
 		version: '2.8.0',
 		codename: 'Anywhere',
 		date: '2026-08-14',

@@ -5,6 +5,28 @@ const ACCEL = 5.0;
 const BRAKE_FORCE = 6.0;
 /** How firmly Simple driving pulls back toward the limit, m/s². */
 const ASSIST_EASE = 1.4;
+/**
+ * Handle movement, in fraction of full travel per second.
+ *
+ * ~1.6 s from neutral to full power and ~0.4 s back off it. Slow enough that
+ * the lever visibly steps through P1–P4 and a train leaves a platform the way
+ * a train does; fast enough that a child holding the button does not feel the
+ * game is ignoring them.
+ */
+const NOTCH_ON_RATE = 0.62;
+const NOTCH_OFF_RATE = 2.5;
+/** The emergency handle goes over fast — that is the point of it. */
+const EMERGENCY_APPLY_S = 0.25;
+
+/** Move `value` toward `target` at `rate` per second, without overshooting. */
+function approach(value: number, target: number, rate: number, dt: number): number {
+	const step = rate * dt;
+
+	if (value < target) return Math.min(target, value + step);
+	if (value > target) return Math.max(target, value - step);
+
+	return value;
+}
 const FRICTION = 0.0;
 
 export interface TrainPhysicsState {
@@ -12,6 +34,18 @@ export interface TrainPhysicsState {
 	trainSpeed: number;
 	direction: number;
 	doorsOpen: boolean;
+	/**
+	 * Where the power handle actually is, 0 (neutral) to 1 (full).
+	 *
+	 * A real train does not go from nothing to full power the instant a handle
+	 * moves, and the cab lever is drawn with notches — P1 to P4 — that were
+	 * showing only "off" or "everything". Holding the throttle now winds the
+	 * handle up through them, which is both what the instrument claims is
+	 * happening and a gentler start out of a station.
+	 */
+	powerNotch: number;
+	/** Where the brake handle is, 0 to 1. Same story as the power handle. */
+	brakeNotch: number;
 }
 
 export interface TrainInput {
@@ -38,6 +72,8 @@ export function createTrainPhysicsState(initialDist: number = 60): TrainPhysicsS
 		trainSpeed: 0,
 		direction: 1,
 		doorsOpen: false,
+		powerNotch: 0,
+		brakeNotch: 0,
 	};
 }
 
@@ -59,12 +95,27 @@ export function updateTrainPhysics(
 	// leaving it live meant assisted acceleration (3.0 m/s²) simply outran the
 	// ease (1.4 m/s²) and the train still reached 132 km/h against a 55 limit —
 	// the assist looked applied and did nothing.
-	if (input.throttle && state.trainSpeed < ceiling) {
-		state.trainSpeed += ACCEL * assistScale * dt;
-	} else if (input.emergency) {
-		state.trainSpeed -= BRAKE_FORCE * 2 * dt;
+	const wantsPower = input.throttle && state.trainSpeed < ceiling;
+
+	// Wind the handles toward where the driver is asking, rather than snapping.
+	// Coming off is quicker than going on, as it is in a cab: you can always
+	// drop power immediately, but you cannot slam to full.
+	state.powerNotch = approach(state.powerNotch, wantsPower ? 1 : 0, wantsPower ? NOTCH_ON_RATE : NOTCH_OFF_RATE, dt);
+	state.brakeNotch = approach(
+		state.brakeNotch,
+		input.emergency ? 1 : input.braking ? 1 : 0,
+		input.emergency ? 1 / EMERGENCY_APPLY_S : NOTCH_ON_RATE,
+		dt,
+	);
+
+	if (state.powerNotch > 0 && !input.braking && !input.emergency) {
+		state.trainSpeed += ACCEL * assistScale * state.powerNotch * dt;
+	}
+
+	if (input.emergency) {
+		state.trainSpeed -= BRAKE_FORCE * 2 * state.brakeNotch * dt;
 	} else if (input.braking) {
-		state.trainSpeed -= BRAKE_FORCE * dt;
+		state.trainSpeed -= BRAKE_FORCE * state.brakeNotch * dt;
 	} else {
 		state.trainSpeed -= FRICTION * dt;
 	}

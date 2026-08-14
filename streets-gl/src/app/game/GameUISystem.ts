@@ -1264,10 +1264,11 @@ export default class GameUISystem extends System {
 			stopIndex: nextIdx,
 			doorsOpen: !!physics?.doorsOpen,
 			overLimit: limit > 0 && speed > limit,
-			// Input is a hold, not an axis, so the lever shows demand rather
-			// than a notch position until F6 gives vehicles a real notch model.
-			power: trainSystem.getInput?.().isHeld('throttle') ? 1 : 0,
-			brake: trainSystem.getInput?.().isHeld('brake') ? 1 : 0,
+			// The real handle positions, which now wind up and down through the
+			// notches the lever is drawn with rather than jumping between off
+			// and everything.
+			power: physics?.powerNotch ?? 0,
+			brake: physics?.brakeNotch ?? 0,
 			lineName: ls?.parsed.id ?? 'LINE',
 			simpleMode: this.systemManager.getSystem(SettingsSystem)
 				?.settings.get('driveMode')?.statusValue === 'simple',
