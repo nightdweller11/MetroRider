@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.11.0',
+		codename: 'Red and Green',
+		date: '2026-08-14',
+		emblem: '🚦🚆',
+		summary: 'Signals stand along the line beside you, and they mean what signals mean.',
+		changes: [
+			'BLOCK SIGNALS — Colour-light signals stand along the track the other trains run on. One shows red while a train is in the stretch of line beyond it, and turns green the moment that train is clear.',
+			'Watch for it when a train is coming the other way: the signal ahead of it is red, and as the train goes by it changes to green.',
+			'They are on the OTHER track on purpose. A signal only means something if something can be behind it — a red light on your own line that never stops you would teach the opposite of what a signal is.',
+			'They come and go with the other trains: turn those off in Settings and the signals go too, because there would be nothing for them to protect.',
+		],
+	},
+	{
 		version: '2.10.0',
 		codename: 'Keep the Picture',
 		date: '2026-08-14',

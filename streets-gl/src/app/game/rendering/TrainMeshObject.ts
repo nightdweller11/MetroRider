@@ -151,6 +151,23 @@ export default class TrainMeshObject extends RenderableObject3D {
 		}
 	}
 
+	/**
+	 * Rewrite vertex colours without touching the geometry.
+	 *
+	 * For anything that changes appearance but not shape — a signal going from
+	 * green to red — this beats `setBuffers`, which disposes the mesh and
+	 * rebuilds its GPU buffers and VAO. A signal changes several times a
+	 * minute; recreating buffers at that rate is the shape of the leak that
+	 * used to grow all session.
+	 */
+	public updateColorBuffer(color: Float32Array): void {
+		this.buffers.color = color;
+
+		if (this.mesh) {
+			this.mesh.getAttribute('color').buffer.setData(color);
+		}
+	}
+
 	public isMeshReady(): boolean {
 		return this.mesh !== null && !this.needsRebuild;
 	}

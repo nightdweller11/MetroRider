@@ -40,6 +40,7 @@ import MapTimeSystem from "~/app/systems/MapTimeSystem";
 import {AircraftPartTextures} from "~/app/render/textures/createAircraftTexture";
 import PerspectiveCamera from "~/lib/core/PerspectiveCamera";
 import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContainer";
+import SignalRenderingSystem from '~/app/game/limits/SignalRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import {TRACK_BLEND_COLOR} from "~/app/game/rendering/TrainGeometry";
 import TrainSystem from "~/app/game/TrainSystem";
@@ -621,6 +622,8 @@ export default class GBufferPass extends Pass<{
 			...(passengerRendering?.crowdMeshes ?? []),
 			// Lineside speed boards — same story.
 			...(this.manager.systemManager.getSystem(TrackSignRenderingSystem)?.signMeshes ?? []),
+			// Block signals on the adjacent line.
+			...(this.manager.systemManager.getSystem(SignalRenderingSystem)?.signalMeshes ?? []),
 		].filter(Boolean);
 
 		for (const m of allMeshes) {

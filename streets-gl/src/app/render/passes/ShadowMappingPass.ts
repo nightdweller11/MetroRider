@@ -23,6 +23,7 @@ import Vec2 from "~/lib/math/Vec2";
 import VehicleSystem from "~/app/systems/VehicleSystem";
 import {AircraftPartType} from "~/app/vehicles/aircraft/Aircraft";
 import TrainDepthMaterialContainer from "~/app/render/materials/TrainDepthMaterialContainer";
+import SignalRenderingSystem from '~/app/game/limits/SignalRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import TileMegaBuffers from "~/lib/renderer/TileMegaBuffers";
 import Tile from "~/app/objects/Tile";
@@ -372,6 +373,7 @@ export default class ShadowMappingPass extends Pass<{
 			// Passing services cast shadows like anything else; the same
 			// cull-and-two-cascades rule below keeps them from costing much.
 			...trainRenderingSystem.ambientMeshes,
+			...(this.manager.systemManager.getSystem(SignalRenderingSystem)?.signalMeshes ?? []),
 			trainRenderingSystem.trackMesh,
 			...trainRenderingSystem.stationMeshes,
 		].filter(Boolean);

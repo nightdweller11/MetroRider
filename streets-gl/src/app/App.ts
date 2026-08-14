@@ -28,6 +28,7 @@ import PassengerRenderingSystem from '~/app/game/passengers/PassengerRenderingSy
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import AudioSystem from "~/app/game/audio/AudioSystem";
 import AmbientTrainSystem from "~/app/game/AmbientTrainSystem";
+import SignalRenderingSystem from "~/app/game/limits/SignalRenderingSystem";
 import ServiceSystem from "~/app/game/service/ServiceSystem";
 import AnnouncementSystem from "~/app/game/audio/AnnouncementSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
@@ -78,6 +79,7 @@ class App {
 				TrainSystem,
 				TrainRenderingSystem,
 				AmbientTrainSystem,
+				SignalRenderingSystem,
 				ServiceSystem,
 				PassengerSystem,
 				PassengerRenderingSystem,
