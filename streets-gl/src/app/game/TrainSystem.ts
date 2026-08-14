@@ -22,6 +22,7 @@ import {
 	getMaxSpeed,
 } from './physics/TrainPhysics';
 import {InputHandler} from './physics/InputHandler';
+import {lineModeInfo} from './data/LineModes';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
 import AudioSystem from './audio/AudioSystem';
@@ -360,6 +361,13 @@ export default class TrainSystem extends System {
 			// `.limit` is metres per second; the physics wants km/h. Passing the
 			// raw field held Simple driving to ~12 km/h against a 40 limit.
 			assistLimitKmh: this.systemManager.getSystem(SpeedLimitSystem)?.limitKmh() ?? 0,
+			// How this kind of service pulls away and stops. A tram is light and
+			// brisk; a high-speed train is heavy and takes its time both ways.
+			// Without this every mode reached its own top speed at exactly the
+			// same rate, and the only difference between driving a tram and a
+			// bullet train was the number the dial stopped at.
+			accelScale: lineModeInfo(this.systemManager.getSystem(SpeedLimitSystem)?.lineMode).accelScale,
+			brakeScale: lineModeInfo(this.systemManager.getSystem(SpeedLimitSystem)?.lineMode).brakeScale,
 			throttle: this.input.isHeld('throttle'),
 			braking: this.input.isHeld('brake'),
 			emergency: this.input.isHeld('emergency'),

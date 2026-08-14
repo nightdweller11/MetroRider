@@ -61,6 +61,19 @@ export interface TrainInput {
 	assist?: boolean;
 	/** The limit to ease back to when assisting, km/h. 0 disables the ease. */
 	assistLimitKmh?: number;
+	/**
+	 * How hard this vehicle pulls and stops, as multipliers on the base rates.
+	 *
+	 * A tram is light and gets away from a stop briskly; a high-speed train is
+	 * heavy and winds up slowly but keeps going far past where the tram gave
+	 * up. Without these, every mode reached its own top speed at exactly the
+	 * same rate and the only difference between driving a tram and driving a
+	 * bullet train was the number the dial stopped at.
+	 *
+	 * Absent means 1 — the behaviour every existing caller already had.
+	 */
+	accelScale?: number;
+	brakeScale?: number;
 	throttle: boolean;
 	braking: boolean;
 	emergency: boolean;
@@ -84,6 +97,9 @@ export function updateTrainPhysics(
 	dt: number,
 ): void {
 	const assistScale = input.assist ? 0.6 : 1;
+	// Absent → 1, so every existing caller keeps exactly its old behaviour.
+	const accelScale = input.accelScale && input.accelScale > 0 ? input.accelScale : 1;
+	const brakeScale = input.brakeScale && input.brakeScale > 0 ? input.brakeScale : 1;
 	// The speed Simple driving will not let the throttle carry you past. A small
 	// margin over the sign so the train is not permanently shaving the number.
 	const ceiling =
@@ -109,13 +125,13 @@ export function updateTrainPhysics(
 	);
 
 	if (state.powerNotch > 0 && !input.braking && !input.emergency) {
-		state.trainSpeed += ACCEL * assistScale * state.powerNotch * dt;
+		state.trainSpeed += ACCEL * accelScale * assistScale * state.powerNotch * dt;
 	}
 
 	if (input.emergency) {
-		state.trainSpeed -= BRAKE_FORCE * 2 * state.brakeNotch * dt;
+		state.trainSpeed -= BRAKE_FORCE * brakeScale * 2 * state.brakeNotch * dt;
 	} else if (input.braking) {
-		state.trainSpeed -= BRAKE_FORCE * state.brakeNotch * dt;
+		state.trainSpeed -= BRAKE_FORCE * brakeScale * state.brakeNotch * dt;
 	} else {
 		state.trainSpeed -= FRICTION * dt;
 	}

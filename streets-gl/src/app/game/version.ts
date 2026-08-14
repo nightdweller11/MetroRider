@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.15.0',
+		codename: 'Light and Heavy',
+		date: '2026-08-14',
+		emblem: '🚋💨',
+		summary: 'A tram gets going quickly. A high-speed train takes its time — and then keeps going.',
+		changes: [
+			'EACH KIND OF TRAIN HAS ITS OWN WEIGHT — A tram is light and pulls away from a stop briskly. A big main-line train is heavy and winds up slowly, but it carries on long after the tram has run out of speed. A high-speed train is slowest of all to get going and takes the longest to stop.',
+			'Until now every kind of train got up to speed at exactly the same rate, and the only difference between driving a tram and driving a bullet train was the number the dial stopped at.',
+			'Measured on the real thing: a bus is up to 50 in about three seconds, while a high-speed train needs nearly twenty to reach two hundred.',
+		],
+	},
+	{
 		version: '2.14.0',
 		codename: 'The Right Vehicle',
 		date: '2026-08-14',

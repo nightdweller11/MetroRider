@@ -2,6 +2,7 @@ import {
 	parseLineMode, lineModeInfo, inferLineMode, type LineMode,
 } from '../app/game/data/LineModes';
 import {buildSpeedProfile} from '../app/game/limits/SpeedProfile';
+import {createTrainPhysicsState, updateTrainPhysics} from '../app/game/physics/TrainPhysics';
 
 /**
  * The mode keys here are not invented: they were read off three published
@@ -166,5 +167,78 @@ describe('mode caps what the speed profile posts', () => {
 
 			expect(Math.max(...limits)).toBeLessThanOrEqual(lineModeInfo(mode).topKmh);
 		}
+	});
+});
+
+/**
+ * Modes must FEEL different, not just stop at different numbers.
+ *
+ * Before this, every mode reached its own top speed at exactly the same rate,
+ * so the only difference between driving a tram and driving a bullet train was
+ * where the needle stopped.
+ */
+describe('how a mode pulls away and stops', () => {
+	const modes: LineMode[] = [
+		'bus', 'tram', 'light', 'rapid', 'regional', 'hsr', 'ferry', 'gondola', 'air',
+	];
+
+	it('gives every mode a positive pull and a positive brake', () => {
+		for (const mode of modes) {
+			const info = lineModeInfo(mode);
+
+			expect(info.accelScale).toBeGreaterThan(0);
+			expect(info.brakeScale).toBeGreaterThan(0);
+		}
+	});
+
+	it('makes the light, slow services brisk and the heavy, fast ones patient', () => {
+		// A tram gets away from a stop faster than a main-line train, which in
+		// turn gets away faster than a high-speed set.
+		expect(lineModeInfo('tram').accelScale).toBeGreaterThan(lineModeInfo('regional').accelScale);
+		expect(lineModeInfo('regional').accelScale).toBeGreaterThan(lineModeInfo('hsr').accelScale);
+		// And the one that goes fastest is the one that takes longest to stop.
+		expect(lineModeInfo('hsr').brakeScale).toBeLessThan(lineModeInfo('tram').brakeScale);
+	});
+
+	it('keeps the metro at 1, so it is the yardstick the others are read against', () => {
+		expect(lineModeInfo('rapid').accelScale).toBe(1);
+		expect(lineModeInfo('rapid').brakeScale).toBe(1);
+	});
+});
+
+/** The physics honours the scales, and defaults to unchanged behaviour. */
+describe('TrainPhysics accel/brake scaling', () => {
+	const track = {totalLength: 100000, isLoop: false} as never;
+
+	function speedAfter(seconds: number, accelScale?: number): number {
+		const state = createTrainPhysicsState(1000);
+		const dt = 1 / 60;
+
+		for (let t = 0; t < seconds * 60; t++) {
+			updateTrainPhysics(
+				state,
+				{throttle: true, braking: false, emergency: false, accelScale},
+				track,
+				dt,
+			);
+		}
+
+		return state.trainSpeed;
+	}
+
+	it('an absent scale behaves exactly as before', () => {
+		expect(speedAfter(5, undefined)).toBeCloseTo(speedAfter(5, 1), 6);
+	});
+
+	it('a tram out-accelerates a high-speed set from a standing start', () => {
+		const tram = speedAfter(5, lineModeInfo('tram').accelScale);
+		const hsr = speedAfter(5, lineModeInfo('hsr').accelScale);
+
+		expect(tram).toBeGreaterThan(hsr);
+	});
+
+	it('ignores a nonsensical scale rather than stopping the train dead', () => {
+		expect(speedAfter(5, 0)).toBeCloseTo(speedAfter(5, 1), 6);
+		expect(speedAfter(5, -3)).toBeCloseTo(speedAfter(5, 1), 6);
 	});
 });

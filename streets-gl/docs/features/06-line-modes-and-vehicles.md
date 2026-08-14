@@ -116,6 +116,33 @@
 > Screenshots — including the bus rendering black beside two models that render
 > correctly under the same sun — in
 > `docs/features/_artifacts/mode-consists-2026-08-14/`.
+>
+> ### What shipped in 2.15.0 — per-mode accel/brake feel
+>
+> `LineModeInfo` gains `accelScale`/`brakeScale`, threaded through
+> `TrainInput` into `updateTrainPhysics` (absent → 1, so every existing caller
+> is byte-identical). The metro is the yardstick at 1.00; a bus/tram is 1.15-1.20,
+> a regional train 0.80, a high-speed set 0.60. These are FEEL, not physics —
+> the base rate is deliberately generous so a child is not waiting a minute for
+> line speed.
+>
+> Time to line speed, from the shipped constants: bus 3.1 s to 50, tram 3.7 s to
+> 60, metro 5.8 s to 90, regional 11.9 s to 160, high-speed 19.1 s to 198.
+>
+> **Measured live, not just computed:** on the regional Israel map the dial read
+> 18 / 46 / 75 / 104 / 133 / 162 km/h at two-second intervals — 14.4 km/h per
+> second, exactly `ACCEL x 0.80`. A light-service line measured ~20.6 km/h per
+> second against a predicted 20.7-21.6.
+>
+> **Note on the high-speed cap.** The mode says 300 km/h because that is what
+> the service does, but `TrainPhysics.MAX_SPEED` is 55 m/s (198 km/h) and
+> `SpeedLimitSystem` takes `min(mode, rolling stock)` — so the sign shows ~198
+> and the train reaches ~198. Nothing lies; the 300 simply never binds until
+> the vehicle can go that fast.
+>
+> **Not built:** per-MODEL `performance` metadata in `catalog.json`. The feel is
+> per kind of line, not per carriage, so a steam loco and an EMU on the same
+> regional line still pull away identically.
 
 ## 1. Product definition
 
