@@ -1,7 +1,9 @@
 # Interface redesign — iPad first
 
-> STATUS: MOCKED. Interactive mock: `mocks/metrorider-ui.html` (open the file
-> directly). Captures: `mocks/shot-*.png`. Nothing is implemented yet.
+> STATUS: BUILT AND SHIPPED (2.1.0 – 2.7.0). Interactive mock:
+> `mocks/metrorider-ui.html` (open the file directly). Design captures:
+> `mocks/shot-*.png`. Captures of the SHIPPED interface: `mocks/impl-*.png`.
+> See "What shipped" at the end for the mapping from design to release.
 
 ## Why
 
@@ -82,9 +84,39 @@ Each renders at iPad landscape (primary), iPad portrait, iPhone and laptop.
   because it suits a touch screen, but that wants trying on real glass.
 - The map/metro overlay, which stays as it is until F10 reworks it.
 
-## Next
+## What shipped
 
-Implementation should extract the HUD out of `GameUISystem.ts` into components
-with a real layout layer and breakpoints, rather than more inline `cssText`.
-That refactor is the bulk of the work; the mock exists so the target is agreed
-before any of it starts.
+The HUD came out of `GameUISystem.ts` into two components with a real
+stylesheet and breakpoints, as planned: `game/ui/CabHud.ts` (the driving
+instruments, minimap and route ribbon) and `game/ui/CabSheet.ts` (every
+summoned panel). `GameUISystem` now feeds them state and owns the sheet
+contents; it no longer positions anything with inline `cssText`.
+
+| Design screen | Shipped in | Where |
+|---|---|---|
+| Driving | 2.1.0 | `CabHud` — dial, notched lever, brake gauge, DOORS/LIMIT lamps, minimap, route ribbon |
+| Pick a line | 2.1.0 | menu → Pick a line (`showLinePicker`) |
+| Camera & driving | 2.1.0, 2.2.0 | menu → Camera — six named views + Simple/Advanced |
+| Settings | 2.3.0 | menu → Settings — driving, time of day, announcements, other trains, sound, graphics, frame rate |
+| Service | 2.7.0 | menu → Timetable, plus the due time on the destination board |
+| World | 2.4.0 (time of day) | Settings → Time of day. Weather and seasons are NOT built |
+
+Added beyond the mock, because hiding the old chrome would otherwise have
+deleted the functions: **Turn the train around**, **Change map** and **Trains &
+sounds** are menu rows (2.3.0), and **About this line** (2.6.0).
+
+### Rules that survived contact, and one that changed
+
+Rules 1–7 all held. The one correction: the mock put the route ribbon on the
+same row as the destination board in landscape. The board's width follows the
+station name, so a long bilingual name put the ribbon straight over the
+waiting-passenger count. The ribbon now sits UNDER the board in landscape, as
+it already did in portrait and on the phone — measured at 0 px overlap in all
+three (2.2.0).
+
+### Not built
+
+- Weather and seasons (the sky is a physically-based atmosphere LUT; overcast
+  is a renderer change, not a setting).
+- The map/metro overlay is still the original one.
+- Per-vehicle physics and line modes.
