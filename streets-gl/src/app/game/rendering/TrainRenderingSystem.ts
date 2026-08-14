@@ -40,6 +40,25 @@ interface CarAnimState {
 	originalNormals: Float32Array;
 }
 
+/**
+ * Whether a texture URL points somewhere other than the page it is loaded on.
+ *
+ * Relative paths, blob: and data: are all same-origin by construction; an
+ * unparseable URL is treated as same-origin because the only cost of being
+ * wrong that way is a tainted canvas we would notice immediately, whereas the
+ * other way silently aborts the load.
+ */
+function isCrossOrigin(url: string): boolean {
+	if (typeof window === 'undefined') return false;
+	if (url.startsWith('data:') || url.startsWith('blob:')) return false;
+
+	try {
+		return new URL(url, window.location.href).origin !== window.location.origin;
+	} catch {
+		return false;
+	}
+}
+
 export default class TrainRenderingSystem extends System {
 	public carMeshes: TrainMeshObject[] = [];
 	/** Cars belonging to other services running on the network. */
@@ -948,7 +967,22 @@ export default class TrainRenderingSystem extends System {
 	private async fetchTexturePixels(url: string): Promise<{data: Uint8ClampedArray; width: number; height: number} | null> {
 		return new Promise((resolve) => {
 			const img = new Image();
-			img.crossOrigin = 'anonymous';
+
+			// Only ask for CORS when the texture really is cross-origin.
+			//
+			// `crossOrigin` forces a CORS-mode fetch. Cross-origin that is
+			// required, or the canvas is tainted and `getImageData` throws. But
+			// on a SAME-ORIGIN file it gains nothing and can lose everything: if
+			// the host does not answer with CORS headers the browser ABORTS the
+			// load (`net::ERR_ABORTED`) even though the file serves 200 to an
+			// ordinary request. That is what left the lead locomotive running on
+			// baked vertex colours instead of its own texture — in production and
+			// locally alike, since 4 of 5 cars carry their textures inside the
+			// GLB and never come through here.
+			if (isCrossOrigin(url)) {
+				img.crossOrigin = 'anonymous';
+			}
+
 			img.onload = (): void => {
 				const canvas = document.createElement('canvas');
 				canvas.width = img.width;
