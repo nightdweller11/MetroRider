@@ -48,17 +48,18 @@ export default class AnnouncementSystem extends System {
 	 * stopped at the platform. Announcing there is announcing a station you
 	 * are looking at.
 	 */
-	public announceApproach(name: string, isTerminus: boolean): void {
+	public announceApproach(name: string, isTerminus: boolean, changeFor: string = ''): void {
 		const stop = this.speakable(name);
 
 		if (!stop) return;
 
-		this.speakAfter(
-			isTerminus
-				? `Now approaching ${stop}. This is the last stop.`
-				: `Now approaching ${stop}.`,
-			CHIME_HEADROOM_MS,
-		);
+		// "Change here for the B1-B2 and C6-C5 lines" — the sentence the
+		// announcement has always been shaped to carry and never had.
+		const head = isTerminus
+			? `Now approaching ${stop}. This is the last stop.`
+			: `Now approaching ${stop}.`;
+
+		this.speakAfter(changeFor ? `${head} ${changeFor}` : head, CHIME_HEADROOM_MS);
 	}
 
 	/** Pulling away — what is coming up. */

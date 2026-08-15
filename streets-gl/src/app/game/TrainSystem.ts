@@ -13,6 +13,7 @@ import {parseMetroMap} from './data/RouteParser';
 import type {TrackData, PositionOnTrack} from './data/TrackBuilder';
 import {buildTrackData, getPositionAtDistance, wrapTrackDistance} from './data/TrackBuilder';
 import {bearing} from './data/CoordinateSystem';
+import {buildInterchangeIndex, connectionsAt, speakInterchange, type InterchangeIndex} from './data/Interchanges';
 import {StationManager, StationState} from './data/StationManager';
 import {
 	TrainPhysicsState,
@@ -90,6 +91,15 @@ export default class TrainSystem extends System {
 	 */
 	public journeyGeneration: number = 0;
 
+	/**
+	 * Which lines share each station, worked out once per map.
+	 *
+	 * NOT from `isInterchange` — see `Interchanges.ts`. That flag is the map
+	 * author's list of separate-but-walkable stations, and on the Israel map
+	 * it names three of the seventy stations that are actually shared.
+	 */
+	public interchangeIndex: InterchangeIndex = new Map();
+
 	private stationManager: StationManager = new StationManager();
 	private input: InputHandler = new InputHandler();
 	private pendingCameraMove: {lat: number; lng: number} | null = null;
@@ -118,6 +128,7 @@ export default class TrainSystem extends System {
 			return {parsed: line, track, realStationDists};
 		});
 
+		this.interchangeIndex = buildInterchangeIndex(this.lines.map(l => l.parsed));
 		this.mapGeneration++;
 
 		if (this.lines.length > 0) {
@@ -720,9 +731,14 @@ export default class TrainSystem extends System {
 
 		const last = ls.parsed.stations.length - 1;
 
+		const changeFor = speakInterchange(
+			connectionsAt(this.interchangeIndex, station.id, ls.parsed.id),
+		);
+
 		this.systemManager.getSystem(AnnouncementSystem)?.announceApproach(
 			station.name,
 			!ls.track.isLoop && (idx === 0 || idx === last),
+			changeFor,
 		);
 	}
 }

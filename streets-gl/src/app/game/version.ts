@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.42.0',
+		codename: 'Change Here',
+		date: '2026-08-16',
+		emblem: '🔄🚉',
+		summary: 'The board and the announcement tell you which other lines stop here.',
+		changes: [
+			'CHANGE FOR — Coming into a station that other lines also serve, the board names them and the announcement says them out loud. A map is a network, and nothing in the game had ever said so.',
+			'A big junction says the first few and how many more, rather than reading out eleven line codes.',
+			'Worked out from the lines themselves — the same station appearing on more than one. The map file has a flag for this and it means something else entirely: on the Israel map it marks 3 stations, while 70 are places you can actually change.',
+		],
+	},
+	{
 		version: '2.41.0',
 		codename: 'Hold It There',
 		date: '2026-08-15',

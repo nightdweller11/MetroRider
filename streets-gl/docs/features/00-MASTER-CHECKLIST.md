@@ -11,12 +11,12 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.41.0 "Hold It There"** — 62 releases. Every row
+**Live on metrorider.net: v2.42.0 "Change Here"** — 63 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 ### What shipped on 2026-08-15
 
-Nineteen releases in one session, and thirteen of them were CORRECTIONS rather
+Twenty releases in one session, and fourteen of them were CORRECTIONS rather
 than features — things that existed in code and did nothing, or did the wrong
 thing. The pattern is worth naming because it recurred every single time: a
 surface that looked built, wired to nothing or to the wrong source. Reading
@@ -43,6 +43,7 @@ the code showed a lever; running the game showed a green bar.
 | 2.39.0 Race Yourself | A best time you could never chase — and the clock ran before the race started |
 | 2.40.0 Show Your Working | "Good stop, 65" is a grade with no mark scheme; the ghost row could come up empty |
 | 2.41.0 Hold It There | A train jumped to a stop kept full power and drove off; in neutral it rolled away. Score and train-ahead were computed and shown nowhere |
+| 2.42.0 Change Here | Nothing said a map was a network — and the flag that looked like it meant "you can change here" answers a different question, true at 3 stations out of 70 |
 
 **The habit that found all of it: open the game and use it.** Not one of these
 was visible to a passing test suite, and several had passing tests around
@@ -108,7 +109,7 @@ This file was re-read against the source before this run and was wrong in
 | **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance readout v2.17.0, stop marker v2.18.0, own-ghost v2.39.0. Stop replay outstanding |
 | **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside boards, country-correct signage. Ribbon limit ticks outstanding |
 | **F4 Timetables** | **PART SHIPPED v2.7.0** — due times from the line's real speed profile, punctuality read, follows a reversal. Service picker + punctuality SCORING outstanding |
-| **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms. Interchange surfacing outstanding |
+| **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms, interchange surfacing v2.42.0 |
 | **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, tint v2.13.0, consists v2.14.0/v2.16.0, feel v2.15.0, TTS v2.5.0, grade v2.22.0. Ferry water, cab overlay, flange squeal outstanding |
 | **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI and SPAD outstanding |
 | **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo save v2.10.0, Simple/Advanced v2.2.0 incl. drain suppression. Walk mode outstanding |

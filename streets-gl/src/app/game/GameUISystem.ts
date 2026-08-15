@@ -28,6 +28,7 @@ import JourneySystem from './JourneySystem';
 import GhostSystem from './replay/GhostSystem';
 import {ghostChip} from './replay/GhostTrace';
 import AmbientTrainSystem from './AmbientTrainSystem';
+import {connectionsAt, describeInterchange} from './data/Interchanges';
 import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
@@ -910,9 +911,39 @@ export default class GameUISystem extends System {
 		];
 	}
 
+	/**
+	 * What else stops at the station being approached.
+	 *
+	 * Read from the index the train system builds once per map, NOT from the
+	 * `isInterchange` flag — that flag answers a different question and is
+	 * false at almost every station you can actually change at. See
+	 * `Interchanges.ts`.
+	 */
+	private interchangeLine(): string {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const ls = trainSystem?.getCurrentLine();
+		const ss = trainSystem?.stationState;
+
+		if (!trainSystem || !ls || !ss) return '';
+
+		const idx = ss.arriving ? ss.nearestStationIdx : ss.nextStationIdx;
+		const station = idx >= 0 ? ls.parsed.stations[idx] : undefined;
+
+		if (!station) return '';
+
+		return describeInterchange(
+			connectionsAt(trainSystem.interchangeIndex, station.id, ls.parsed.id),
+		);
+	}
+
 	/** "NEXT STOP · DUE 09:14 · 2 MIN LATE" — state, schedule, standing. */
 	private stationMetaLine(doorsOpen: boolean | undefined, arriving: boolean | undefined): string {
 		const state = doorsOpen ? 'DOORS OPEN' : arriving ? 'ARRIVING' : 'NEXT STOP';
+		// Appended at every exit rather than at one of them: this line has
+		// three different returns and a clause added to only the last would be
+		// missing from exactly the moments it matters — coming in and standing.
+		const change = this.interchangeLine();
+		const withChange = (text: string): string => (change ? `${text} · ${change}` : text);
 
 		// Coming in, the one number that matters is how far to the mark. The
 		// due time can wait — it is not what you are doing with your hands.
@@ -923,13 +954,13 @@ export default class GameUISystem extends System {
 			const within = Math.max(STOP_MARK_READOUT_FLOOR_M, speed * STOP_MARK_READOUT_S);
 
 			if (away !== undefined && away > 0 && away < within) {
-				return `STOP MARK IN ${Math.round(away)} m`;
+				return withChange(`STOP MARK IN ${Math.round(away)} m`);
 			}
 		}
 		const service = this.systemManager.getSystem(ServiceSystem);
 		const due = service?.dueAtNext();
 
-		if (due === null || due === undefined) return state;
+		if (due === null || due === undefined) return withChange(state);
 
 		const late = service?.currentLateness() ?? null;
 		const there = doorsOpen || arriving;
@@ -941,7 +972,7 @@ export default class GameUISystem extends System {
 		const show = there || (late !== null && late >= 45);
 		const standing = show ? describeLateness(late) : '';
 
-		return `${state} · DUE ${clockFace(due)}${standing ? ` · ${standing.toUpperCase()}` : ''}`;
+		return withChange(`${state} · DUE ${clockFace(due)}${standing ? ` · ${standing.toUpperCase()}` : ''}`);
 	}
 
 	/**
