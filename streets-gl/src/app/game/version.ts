@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.29.0',
+		codename: 'Drive the 18:30',
+		date: '2026-08-15',
+		emblem: '🕐🚉',
+		summary: 'Pick which service you are driving — the 18:30, or the one that left half an hour ago.',
+		changes: [
+			'PICK YOUR SERVICE — "Which service?" in the menu lists the departures on your line, on the real clock. A metro leaves every five minutes, a big train twice an hour, a ferry once.',
+			'Take one that has already gone and you start late on purpose, with the whole timetable against you. That is a proper challenge and a real driver\'s day.',
+			'Or choose "Just drive" and the clock starts when you do, like before.',
+		],
+	},
+	{
 		version: '2.28.0',
 		codename: 'The Streets Around You',
 		date: '2026-08-15',

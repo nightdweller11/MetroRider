@@ -2,7 +2,9 @@ import System from '../../System';
 import UISystem from '../../systems/UISystem';
 import TrainSystem from '../TrainSystem';
 import SpeedLimitSystem from '../limits/SpeedLimitSystem';
-import {buildTimetable, latenessSeconds, stopFor, type ServiceStop} from './ServiceTimetable';
+import {
+	buildTimetable, latenessSeconds, serviceDepartures, stopFor, type ServiceStop,
+} from './ServiceTimetable';
 import {lineModeInfo} from '../data/LineModes';
 
 /**
@@ -26,6 +28,15 @@ export default class ServiceSystem extends System {
 	private lastRecordedIdx: number = -1;
 	private builtForDirection: number = 0;
 	private builtForMap: number = -1;
+	/**
+	 * The departure the player chose, if they chose one.
+	 *
+	 * Null means "the service leaving now", which is what happens if nobody ever
+	 * opens the picker. Choosing one anchors the whole schedule to that time, so
+	 * picking a departure that has already gone means starting late on purpose —
+	 * which is a thing a driver does, and is the more interesting run.
+	 */
+	private chosenDeparture: number | null = null;
 
 	public postInit(): void {
 		// The line and its stations are not loaded yet.
@@ -33,6 +44,30 @@ export default class ServiceSystem extends System {
 
 	public timetable(): ServiceStop[] {
 		return this.stops;
+	}
+
+	/** The services running on this line around now, for the picker. */
+	public offeredServices(count: number = 6): number[] {
+		const limits = this.systemManager.getSystem(SpeedLimitSystem);
+
+		return serviceDepartures(this.worldNow(), lineModeInfo(limits?.lineMode).headwayMin, count);
+	}
+
+	/** The departure the player is driving, or null for "leaving now". */
+	public chosenService(): number | null {
+		return this.chosenDeparture;
+	}
+
+	/**
+	 * Drive the service leaving at this time.
+	 *
+	 * Forces a rebuild by clearing the line the timetable was built for, rather
+	 * than rebuilding here: the update path already knows how to construct one
+	 * correctly, including which way round the train is pointing.
+	 */
+	public chooseService(departAt: number | null): void {
+		this.chosenDeparture = departAt;
+		this.builtForLine = -1;
 	}
 
 	public departedAt(): number {
@@ -107,7 +142,8 @@ export default class ServiceSystem extends System {
 			this.builtForDirection !== direction ||
 			this.builtForMap !== trainSystem.mapGeneration
 		) {
-			this.builtAt = this.worldNow();
+			// A chosen service anchors the schedule; otherwise it leaves now.
+			this.builtAt = this.chosenDeparture ?? this.worldNow();
 			// The line's own speed profile, so the schedule is keepable at the
 			// speeds the line actually permits rather than a flat guess.
 			const limits = this.systemManager.getSystem(SpeedLimitSystem);

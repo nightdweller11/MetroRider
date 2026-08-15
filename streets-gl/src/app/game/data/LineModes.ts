@@ -31,6 +31,15 @@ export interface LineModeInfo {
 	/** How long it waits at a stop, seconds. */
 	dwellSec: number;
 	/**
+	 * How often a service runs, minutes — the gap between one departure and the
+	 * next.
+	 *
+	 * A metro every few minutes, a regional train twice an hour, a ferry once.
+	 * This is what makes "drive the 09:12" mean something: services have to sit
+	 * on a believable clock, or every departure is an arbitrary moment.
+	 */
+	headwayMin: number;
+	/**
 	 * How hard it pulls away and how hard it stops, relative to a metro.
 	 *
 	 * A tram is light and gets going briskly from a stop; a high-speed train is
@@ -92,15 +101,15 @@ const MODES: Record<LineMode, LineModeInfo> = {
 	 * model, 0 of 72,469 vertices carried it. Wiring it through is what made
 	 * the bus red and white.
 	 */
-	bus:      {label: 'Bus',              icon: '🚌', topKmh: 50,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  accelScale: 1.20, brakeScale: 1.20, consist: ['generic-town-bus']},
-	tram:     {label: 'Tram',             icon: '🚋', topKmh: 60,  floorKmh: 20, dwellSec: 20, sign: 'tram',       onTrack: true,  accelScale: 1.15, brakeScale: 1.15, consist: TRAM_SET},
-	light:    {label: 'Light rail',       icon: '🚈', topKmh: 80,  floorKmh: 25, dwellSec: 25, sign: 'light-rail', onTrack: true,  accelScale: 1.05, brakeScale: 1.05, consist: ['train-tram-round', 'train-tram-round', 'train-tram-round']},
-	rapid:    {label: 'Metro',            icon: '🚇', topKmh: 90,  floorKmh: 30, dwellSec: 25, sign: 'metro',      onTrack: true,  accelScale: 1.00, brakeScale: 1.00, consist: METRO_SET},
-	regional: {label: 'Regional train',   icon: '🚆', topKmh: 200, floorKmh: 40, dwellSec: 40, sign: 'rail',       onTrack: true,  accelScale: 0.80, brakeScale: 0.80, consist: CITY_SET},
-	hsr:      {label: 'High-speed train', icon: '🚄', topKmh: 300, floorKmh: 60, dwellSec: 60, sign: 'rail',       onTrack: true,  accelScale: 0.60, brakeScale: 0.65, consist: BULLET_SET},
-	ferry:    {label: 'Ferry',            icon: '⛴️', topKmh: 35,  floorKmh: 15, dwellSec: 90, sign: 'tram',       onTrack: false, accelScale: 0.45, brakeScale: 0.45, consist: []},
-	gondola:  {label: 'Cable car',        icon: '🚠', topKmh: 25,  floorKmh: 15, dwellSec: 20, sign: 'tram',       onTrack: false, accelScale: 0.70, brakeScale: 0.90, consist: ['funicular']},
-	air:      {label: 'Air route',        icon: '✈️', topKmh: 300, floorKmh: 60, dwellSec: 60, sign: 'rail',       onTrack: false, accelScale: 0.60, brakeScale: 0.65, consist: []},
+	bus:      {label: 'Bus',              icon: '🚌', topKmh: 50,  floorKmh: 20, dwellSec: 20, headwayMin: 12, sign: 'tram',       onTrack: true,  accelScale: 1.20, brakeScale: 1.20, consist: ['generic-town-bus']},
+	tram:     {label: 'Tram',             icon: '🚋', topKmh: 60,  floorKmh: 20, dwellSec: 20, headwayMin: 10, sign: 'tram',       onTrack: true,  accelScale: 1.15, brakeScale: 1.15, consist: TRAM_SET},
+	light:    {label: 'Light rail',       icon: '🚈', topKmh: 80,  floorKmh: 25, dwellSec: 25, headwayMin: 12, sign: 'light-rail', onTrack: true,  accelScale: 1.05, brakeScale: 1.05, consist: ['train-tram-round', 'train-tram-round', 'train-tram-round']},
+	rapid:    {label: 'Metro',            icon: '🚇', topKmh: 90,  floorKmh: 30, dwellSec: 25, headwayMin: 5, sign: 'metro',      onTrack: true,  accelScale: 1.00, brakeScale: 1.00, consist: METRO_SET},
+	regional: {label: 'Regional train',   icon: '🚆', topKmh: 200, floorKmh: 40, dwellSec: 40, headwayMin: 30, sign: 'rail',       onTrack: true,  accelScale: 0.80, brakeScale: 0.80, consist: CITY_SET},
+	hsr:      {label: 'High-speed train', icon: '🚄', topKmh: 300, floorKmh: 60, dwellSec: 60, headwayMin: 60, sign: 'rail',       onTrack: true,  accelScale: 0.60, brakeScale: 0.65, consist: BULLET_SET},
+	ferry:    {label: 'Ferry',            icon: '⛴️', topKmh: 35,  floorKmh: 15, dwellSec: 90, headwayMin: 90, sign: 'tram',       onTrack: false, accelScale: 0.45, brakeScale: 0.45, consist: []},
+	gondola:  {label: 'Cable car',        icon: '🚠', topKmh: 25,  floorKmh: 15, dwellSec: 20, headwayMin: 10, sign: 'tram',       onTrack: false, accelScale: 0.70, brakeScale: 0.90, consist: ['funicular']},
+	air:      {label: 'Air route',        icon: '✈️', topKmh: 300, floorKmh: 60, dwellSec: 60, headwayMin: 120, sign: 'rail',       onTrack: false, accelScale: 0.60, brakeScale: 0.65, consist: []},
 };
 
 /**

@@ -11,7 +11,7 @@ import UISystem from '../systems/UISystem';
 import ControlsSystem from '../systems/ControlsSystem';
 import RenderSystem from '../systems/RenderSystem';
 import ServiceSystem from './service/ServiceSystem';
-import {clockFace, describeLateness, latenessSeconds} from './service/ServiceTimetable';
+import {clockFace, describeDeparture, describeLateness, latenessSeconds} from './service/ServiceTimetable';
 import AudioSystem from './audio/AudioSystem';
 import AssetConfigSystem from './assets/AssetConfigSystem';
 import TerrainSystem from '../systems/TerrainSystem';
@@ -756,6 +756,14 @@ export default class GameUISystem extends System {
 			// that strip without rehoming them would have removed two real
 			// features rather than tidying the screen.
 			{
+				badge: 'SVC',
+				badgeColor: '#4fb6ef',
+				title: 'Which service?',
+				subtitle: 'Pick the departure you are driving',
+				keepOpen: true,
+				onSelect: (): void => this.openServicePickerSheet(),
+			},
+			{
 				badge: 'TIME',
 				badgeColor: '#4fd996',
 				title: 'Timetable',
@@ -905,6 +913,53 @@ export default class GameUISystem extends System {
 		const standing = show ? describeLateness(late) : '';
 
 		return `${state} · DUE ${clockFace(due)}${standing ? ` · ${standing.toUpperCase()}` : ''}`;
+	}
+
+	/**
+	 * Which service you are driving.
+	 *
+	 * A line runs to a headway — a metro every five minutes, a regional train
+	 * twice an hour — so the departures sit on the clock and you pick one. A
+	 * service that has already gone is offered too, and starting it means
+	 * starting late, which is a real thing a driver does and a better run.
+	 */
+	private openServicePickerSheet(): void {
+		const service = this.systemManager.getSystem(ServiceSystem);
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const ls = trainSystem?.getCurrentLine();
+
+		if (!service || !ls || !this.cabSheet) return;
+
+		const now = this.systemManager.getSystem(UISystem)?.mapTime ?? Date.now();
+		const chosen = service.chosenService();
+
+		const rows: SheetRow[] = service.offeredServices(6).map(departAt => {
+			const late = departAt < now;
+
+			return {
+				badge: clockFace(departAt),
+				badgeColor: chosen === departAt ? '#4fd996' : late ? '#8b7bef' : '#4fb6ef',
+				title: `The ${clockFace(departAt)} to ${ls.parsed.stations[ls.parsed.stations.length - 1]?.name ?? 'the end of the line'}`,
+				subtitle: `${describeDeparture(departAt, now)}${late ? ' — you would start late' : ''}`,
+				onSelect: (): void => {
+					service.chooseService(departAt);
+					this.showToast(`Driving the ${clockFace(departAt)}`, 1800);
+				},
+			};
+		});
+
+		rows.push({
+			badge: 'NOW',
+			badgeColor: chosen === null ? '#4fd996' : '#5d6f81',
+			title: 'Just drive',
+			subtitle: 'No booked service — the clock starts when you do',
+			onSelect: (): void => {
+				service.chooseService(null);
+				this.showToast('Driving without a booked service', 1800);
+			},
+		});
+
+		this.cabSheet.show('Which service?', rows);
 	}
 
 	/** The whole working timetable, due against actual. */

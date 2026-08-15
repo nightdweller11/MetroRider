@@ -158,6 +158,52 @@ export function describeLateness(seconds: number | null): string {
 	return `${Math.round(seconds / 60)} min late`;
 }
 
+/**
+ * The services running on this line around now.
+ *
+ * Departures sit on the clock rather than on the moment you happened to press
+ * Play: a line with a 30-minute headway leaves at :00 and :30, and one every
+ * five minutes leaves at :00, :05, :10. That is what makes "drive the 09:12"
+ * a real thing to say — an arbitrary offset from now would just be a countdown
+ * wearing a clock face.
+ *
+ * Returns `count` departures starting with the one before now, so there is
+ * always a service you are already late for as well as ones still to come.
+ */
+export function serviceDepartures(
+	now: number,
+	headwayMin: number,
+	count: number = 6,
+): number[] {
+	const headway = Math.max(1, Math.round(headwayMin)) * 60_000;
+	// Anchored to midnight local so the grid lines up with a real clock rather
+	// than with the epoch, which is midnight UTC and puts a 90-minute ferry at
+	// :30 past in half the world's timezones.
+	const midnight = new Date(now);
+
+	midnight.setHours(0, 0, 0, 0);
+
+	const sinceMidnight = now - midnight.getTime();
+	const previousIndex = Math.floor(sinceMidnight / headway);
+	const out: number[] = [];
+
+	for (let i = 0; i < count; i++) {
+		out.push(midnight.getTime() + (previousIndex + i) * headway);
+	}
+
+	return out;
+}
+
+/** How a departure reads against the clock right now. */
+export function describeDeparture(departAt: number, now: number): string {
+	const deltaMin = Math.round((departAt - now) / 60_000);
+
+	if (deltaMin === 0) return 'due now';
+	if (deltaMin > 0) return `in ${deltaMin} min`;
+
+	return `${-deltaMin} min ago`;
+}
+
 /** Clock face for a due time, in the player's own local convention. */
 export function clockFace(epochMs: number): string {
 	const when = new Date(epochMs);
