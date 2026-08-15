@@ -214,6 +214,16 @@ A train set down at a platform is now HELD ON THE BRAKE — which is what the
 physics already assumed, in a comment about doors that this path never
 reached. Same for selecting a new line.
 
+Re-run after the batch landed: 15 lonely members became **5**, none of them
+from the new code. The five that remain (`AssetConfigSystem.isLoaded`,
+`PassengerSystem.getModel`, `ProfileClient.isSignedIn`,
+`ScoringSystem.getStopCount`, `StopScorer.getStationIndex`) were each read
+and left alone deliberately: they are small accessors with no feature hiding
+behind them and no bug in front of them, and two of the five belong to
+coherent minimal public APIs where removing one predicate makes the class
+worse rather than tidier. Reviewed and kept is a different answer from
+missed, and worth writing down as one.
+
 Sweep script: `/tmp/sweep.mjs` shape is four lines of `readdirSync` +
 `matchAll(/^\s*public\s+…/gm)` + a reference count. Worth re-running whenever
 a batch of features lands; it costs seconds and has now found more real
