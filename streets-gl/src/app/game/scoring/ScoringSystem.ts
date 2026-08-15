@@ -6,9 +6,20 @@ import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import ServiceSystem from '../service/ServiceSystem';
 import SignalRenderingSystem from '../limits/SignalRenderingSystem';
 import JourneySystem from '../JourneySystem';
+import GhostSystem from '../replay/GhostSystem';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 import SettingsSystem from '~/app/systems/SettingsSystem';
+
+/** How the run went against the record it was chasing. */
+export interface GhostOutcome {
+	/** Seconds up on the previous best, negative for down, null with no best. */
+	delta: number | null;
+	/** Whether this run is the new best. */
+	improved: boolean;
+	/** Whether there was anything to race in the first place. */
+	hadGhost: boolean;
+}
 
 /**
  * Turns driving into a score.
@@ -38,7 +49,13 @@ export default class ScoringSystem extends System {
 
 	/** Set by GameUISystem so cards can be shown without this system knowing the DOM. */
 	public onStopScored: ((result: StopResult, stationName: string) => void) | null = null;
-	public onRunFinished: ((result: RunResult, badges: Badge[], isPersonalBest: boolean, best: number | null) => void) | null = null;
+	public onRunFinished: ((
+		result: RunResult,
+		badges: Badge[],
+		isPersonalBest: boolean,
+		best: number | null,
+		ghost: GhostOutcome,
+	) => void) | null = null;
 
 	public postInit(): void {
 		// Nothing: scoring starts when a line is selected and the game is running.
@@ -52,7 +69,11 @@ export default class ScoringSystem extends System {
 		const state = trainSystem.stationState;
 		if (!ls || !state) return;
 
-		const lineKey = `${trainSystem.mapName}::${ls.parsed.id}`;
+		// The journey generation is in the key, not just the line: jumping to
+		// another stop or turning around leaves the line index alone but makes
+		// it a different journey, and a run that spans one is being scored
+		// against ground it did not cover.
+		const lineKey = `${trainSystem.mapName}::${ls.parsed.id}::${trainSystem.journeyGeneration}`;
 		if (lineKey !== this.lastLineKey) {
 			this.lastLineKey = lineKey;
 			this.startRun(trainSystem, ls);
@@ -108,6 +129,17 @@ export default class ScoringSystem extends System {
 			stationCount: ls.parsed.stations.length,
 			isLoop: ls.parsed.isLoop,
 		}, performance.now());
+
+		// The ghost is started from here rather than detecting a new run for
+		// itself: two detectors would eventually disagree about where a run
+		// begins, and then the chip on the console and the line on the card
+		// would be describing different journeys.
+		this.systemManager.getSystem(GhostSystem)?.beginRun(
+			trainSystem.mapName || 'unknown-map',
+			ls.parsed.id,
+			trainSystem.stationState?.nearestStationIdx ?? 0,
+			trainSystem.physicsState.direction,
+		);
 	}
 
 	private recordStop(
@@ -198,6 +230,12 @@ export default class ScoringSystem extends System {
 			result.summary += ` · ${spads === 1 ? 'a red signal passed' : `${spads} red signals passed`} (−${cost})`;
 		}
 
+		// Closed before the card is built and before the next run is started,
+		// so the comparison is against the record as it stood when the player
+		// set off — the thing they were actually chasing.
+		const ghost = this.systemManager.getSystem(GhostSystem)?.finishRun()
+			?? {delta: null, improved: false, hadGhost: false};
+
 		const badges = badgesForRun(result, new Date().getHours());
 
 		// A guest's run is queued locally and uploaded if they ever sign in —
@@ -231,7 +269,7 @@ export default class ScoringSystem extends System {
 			});
 		}
 
-		this.onRunFinished?.(result, badges, posted?.isPersonalBest ?? false, posted?.best ?? null);
+		this.onRunFinished?.(result, badges, posted?.isPersonalBest ?? false, posted?.best ?? null, ghost);
 
 		// A finished run rolls straight into the next one, so a loop line keeps
 		// scoring lap after lap without the player restarting anything.

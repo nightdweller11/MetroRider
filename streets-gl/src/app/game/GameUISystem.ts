@@ -25,6 +25,8 @@ import SignalRenderingSystem from './limits/SignalRenderingSystem';
 import WalkPad from './ui/WalkPad';
 import {distanceFromTrain, leashNotice} from './WalkController';
 import JourneySystem from './JourneySystem';
+import GhostSystem from './replay/GhostSystem';
+import {ghostChip} from './replay/GhostTrace';
 import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
@@ -1837,6 +1839,10 @@ export default class GameUISystem extends System {
 			heading: this.miniHeading,
 			legs: this.ribbonLegs(ls, limits),
 			isLoop: ls?.parsed.isLoop ?? false,
+			// Null all the way through when this journey has no record yet, so
+			// the chip stays hidden rather than claiming a dead heat with a
+			// ghost that does not exist.
+			ghost: ghostChip(this.systemManager.getSystem(GhostSystem)?.delta() ?? null),
 		});
 
 		this.updateMiniMap(trainSystem);
@@ -2315,8 +2321,8 @@ export default class GameUISystem extends System {
 		scoring.onStopScored = (result, stationName): void => {
 			this.scoreUI?.showStopCard(result, stationName);
 		};
-		scoring.onRunFinished = (run, badges, isPersonalBest, best): void => {
-			void this.scoreUI?.showRunCard(run, badges, isPersonalBest, best);
+		scoring.onRunFinished = (run, badges, isPersonalBest, best, ghost): void => {
+			void this.scoreUI?.showRunCard(run, badges, isPersonalBest, best, ghost);
 		};
 	}
 

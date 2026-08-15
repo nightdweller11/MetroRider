@@ -53,6 +53,15 @@ export interface CabHudState {
 	/** A circle line has no end, and the strip says so. */
 	isLoop?: boolean;
 	doorsOpen: boolean;
+	/**
+	 * How this run is going against your best on the same journey.
+	 *
+	 * Absent means there is nothing to race — a first run, or a line whose
+	 * record was set from a different station — and the chip is hidden rather
+	 * than showing a zero, which would read as "dead level with a ghost" when
+	 * in fact there is no ghost.
+	 */
+	ghost?: {text: string; state: 'ahead' | 'behind' | 'level'} | null;
 	/** Simple driving: bigger targets and a calmer console. */
 	simpleMode: boolean;
 	overLimit: boolean;
@@ -114,6 +123,17 @@ const CSS = `
 .cab-dest .mt{font-family:var(--tech);font-size:10px;letter-spacing:.16em;color:var(--ink-3);margin-top:2px}
 .cab-dest .pax{padding:6px 10px;border-radius:8px;font-family:var(--tech);font-size:12px;font-weight:700;color:#cfe8ff;
   background:linear-gradient(180deg,rgba(87,182,255,.2),rgba(87,182,255,.07));box-shadow:inset 0 0 0 1px rgba(110,185,255,.28)}
+/* Racing your own best. Hidden outright when there is no record for this
+   journey — an empty chip would be read as a result. */
+.cab-dest .gho{display:none;padding:6px 10px;border-radius:8px;font-family:var(--tech);font-size:12px;font-weight:700;
+  align-items:center;gap:5px;white-space:nowrap}
+.cab-dest .gho.on{display:flex}
+.cab-dest .gho b{font-size:13px;line-height:1}
+.cab-dest .gho.ahead{color:#8ff0b0;background:linear-gradient(180deg,rgba(90,208,122,.22),rgba(90,208,122,.07));
+  box-shadow:inset 0 0 0 1px rgba(90,208,122,.32)}
+.cab-dest .gho.behind{color:#ffcf9a;background:linear-gradient(180deg,rgba(255,180,58,.2),rgba(255,180,58,.06));
+  box-shadow:inset 0 0 0 1px rgba(255,180,58,.3)}
+.cab-dest .gho.level{color:var(--ink-2);background:rgba(255,255,255,.06);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
 
 /* route ribbon */
 .cab-rib{display:flex;align-items:center;padding:9px 14px;border-radius:999px}
@@ -312,6 +332,7 @@ export default class CabHud {
 	private destName: HTMLElement | null = null;
 	private destMeta: HTMLElement | null = null;
 	private destPax: HTMLElement | null = null;
+	private destGhost: HTMLElement | null = null;
 	private ribbonEl: HTMLElement | null = null;
 	private miniYou: HTMLElement | null = null;
 	private miniFoot: HTMLElement | null = null;
@@ -362,7 +383,7 @@ export default class CabHud {
 		root.innerHTML = `
 			<div class="panel cab-dest">
 				<div class="strip"></div>
-				<div class="in"><div><div class="nm">—</div><div class="mt"></div></div><span class="pax"></span></div>
+				<div class="in"><div><div class="nm">—</div><div class="mt"></div></div><span class="gho"><b>👻</b><span class="v"></span></span><span class="pax"></span></div>
 			</div>
 			<div class="panel cab-rib"></div>
 			<div class="panel cab-mini">
@@ -529,6 +550,7 @@ export default class CabHud {
 		this.destName = root.querySelector('.cab-dest .nm');
 		this.destMeta = root.querySelector('.cab-dest .mt');
 		this.destPax = root.querySelector('.cab-dest .pax');
+		this.destGhost = root.querySelector('.cab-dest .gho');
 		this.ribbonEl = root.querySelector('.cab-rib');
 		this.miniYou = root.querySelector('.cab-mini .you');
 		this.miniFoot = root.querySelector('.cab-mini .foot');
@@ -630,6 +652,14 @@ export default class CabHud {
 		if (this.destPax) {
 			this.destPax.textContent = s.waiting === null ? '' : `${s.waiting} WAITING`;
 			this.destPax.style.display = s.waiting === null ? 'none' : '';
+		}
+
+		if (this.destGhost) {
+			const g = s.ghost ?? null;
+			const value = this.destGhost.querySelector('.v');
+
+			this.destGhost.className = g ? `gho on ${g.state}` : 'gho';
+			if (value) value.textContent = g?.text ?? '';
 		}
 
 		this.renderRibbon(s);

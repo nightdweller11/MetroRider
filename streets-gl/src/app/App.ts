@@ -33,6 +33,7 @@ import StopMarkRenderingSystem from "~/app/game/scoring/StopMarkRenderingSystem"
 import AvatarSystem from "~/app/game/AvatarSystem";
 import JourneySystem from "~/app/game/JourneySystem";
 import DiscoverySystem from "~/app/game/DiscoverySystem";
+import GhostSystem from "~/app/game/replay/GhostSystem";
 import ServiceSystem from "~/app/game/service/ServiceSystem";
 import AnnouncementSystem from "~/app/game/audio/AnnouncementSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
@@ -88,6 +89,7 @@ class App {
 				AvatarSystem,
 				JourneySystem,
 				DiscoverySystem,
+				GhostSystem,
 				ServiceSystem,
 				PassengerSystem,
 				PassengerRenderingSystem,

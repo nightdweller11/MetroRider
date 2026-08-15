@@ -1,6 +1,7 @@
 import {StopResult, verdictLabel} from './StopScorer';
 import {RunResult, Badge} from './RunScorer';
 import ProfileClient, {BoardEntry} from '../profiles/ProfileClient';
+import {describeGhostDelta} from '../replay/GhostTrace';
 
 /**
  * The two cards the player actually sees: a quick verdict after each stop, and
@@ -110,6 +111,9 @@ export default class ScoreUI {
 		badges: Badge[],
 		isPersonalBest: boolean,
 		best: number | null,
+		ghost: {delta: number | null; improved: boolean; hadGhost: boolean} = {
+			delta: null, improved: false, hadGhost: false,
+		},
 	): Promise<void> {
 		const overlay = document.createElement('div');
 		overlay.id = 'run-card';
@@ -180,6 +184,30 @@ export default class ScoreUI {
 			timing.appendChild(bonus);
 		}
 
+		// Racing yourself gets its own row for the same reason timekeeping does:
+		// it is not a component of the score, it is a different question about
+		// the same run — was that quicker than last time?
+		const race = document.createElement('div');
+		if (ghost.hadGhost || ghost.improved) {
+			const won = ghost.improved;
+			race.style.cssText = `
+				display: flex; justify-content: space-between; align-items: baseline;
+				font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px;
+				background: ${won ? 'rgba(90,208,122,0.12)' : 'rgba(255,255,255,0.06)'};
+				border: 1px solid ${won ? 'rgba(90,208,122,0.28)' : 'rgba(255,255,255,0.12)'};
+			`;
+			const label = document.createElement('span');
+			label.style.color = won ? '#5ad07a' : '#ddd';
+			label.textContent = ghost.hadGhost
+				? `👻 ${describeGhostDelta(ghost.delta)}`
+				: '👻 First run on this journey — a time to beat';
+			const mark = document.createElement('span');
+			mark.style.cssText = 'color: #ddd; font-weight: 700;';
+			mark.textContent = won ? 'NEW BEST' : '';
+			race.appendChild(label);
+			race.appendChild(mark);
+		}
+
 		const stopList = document.createElement('div');
 		stopList.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;';
 		for (const stop of run.stops) {
@@ -205,6 +233,7 @@ export default class ScoreUI {
 		card.appendChild(pb);
 		card.appendChild(summary);
 		if (run.punctualityPercent !== null) card.appendChild(timing);
+		if (ghost.hadGhost || ghost.improved) card.appendChild(race);
 		card.appendChild(stopList);
 
 		if (badges.length > 0) {
@@ -250,7 +279,11 @@ export default class ScoreUI {
 	private renderBoard(target: HTMLElement, board: BoardEntry[]): void {
 		target.innerHTML = '';
 		if (board.length === 0) {
-			target.textContent = 'No saved runs on this line yet — yours will be the first.';
+			// "Posted", not "saved": the same card can now say "46s faster than
+			// your best" two rows above, and "no saved runs yet" underneath it
+			// reads as a flat contradiction. The board is scores other drivers
+			// have put up; your best time is your own and is kept either way.
+			target.textContent = 'No scores posted on this line yet — yours will be the first.';
 			return;
 		}
 

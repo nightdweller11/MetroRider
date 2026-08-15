@@ -78,6 +78,17 @@ export default class TrainSystem extends System {
 	 * previous city's schedule and services.
 	 */
 	public mapGeneration: number = 0;
+	/**
+	 * Bumped whenever the player changes WHICH JOURNEY they are driving —
+	 * jumping to another stop, or turning the train around.
+	 *
+	 * The line index is unchanged by both, so anything keyed on the line alone
+	 * cannot tell that the journey is now a different one. Scoring uses this to
+	 * start a fresh run, and the ghost to race the right record: without it,
+	 * "from the first station, forwards" and "from halfway, backwards" are the
+	 * same key, and the game would compare a run to a journey it never made.
+	 */
+	public journeyGeneration: number = 0;
 
 	private stationManager: StationManager = new StationManager();
 	private input: InputHandler = new InputHandler();
@@ -277,6 +288,7 @@ export default class TrainSystem extends System {
 		this.physicsState.direction = dir;
 		this.physicsState.doorsOpen = false;
 		this.stationManager.reset();
+		this.journeyGeneration++;
 
 		const station = stations[stationIdx];
 		this.moveCameraToLatLon(station.lat, station.lng);
@@ -284,10 +296,13 @@ export default class TrainSystem extends System {
 
 	public reverseDirection(): void {
 		this.physicsState.direction *= -1;
+		this.journeyGeneration++;
 		this.onDirectionChangeCallback?.();
 	}
 
 	public setDirection(dir: number): void {
+		if (dir !== this.physicsState.direction) this.journeyGeneration++;
+
 		this.physicsState.direction = dir;
 		this.onDirectionChangeCallback?.();
 	}

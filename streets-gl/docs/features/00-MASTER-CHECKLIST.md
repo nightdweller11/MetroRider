@@ -99,7 +99,7 @@ This file was re-read against the source before this run and was wrong in
 | Feature | State |
 |---|---|
 | **F1 Profiles & scores** | **SHIPPED** — Railway volume attached with `DATA_DIR=/data`, persistence PROVEN across a real container replacement |
-| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance readout v2.17.0, stop marker v2.18.0. Replay/ghost outstanding |
+| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance readout v2.17.0, stop marker v2.18.0, own-ghost v2.39.0. Stop replay outstanding |
 | **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside boards, country-correct signage. Ribbon limit ticks outstanding |
 | **F4 Timetables** | **PART SHIPPED v2.7.0** — due times from the line's real speed profile, punctuality read, follows a reversal. Service picker + punctuality SCORING outstanding |
 | **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms. Interchange surfacing outstanding |
@@ -185,8 +185,34 @@ wants a camera).
       limit puts a train a clear two minutes early by the third station;
       marking that down would have scored good driving as a failure and fought
       the speed limits at the same time
-- [ ] **Phase 2: `RunRecorder`** (5 Hz ring) + stop replay + own-ghost
-- [ ] Local browser validation of a full scored run, production, changelog
+- [x] **Own-ghost — race your best time (v2.39.0).** Shipped as a
+      `GhostTrace`: a table of "how long it took me to get this far", one entry
+      every 50 m, per journey. NOT a recorded train — nothing is drawn,
+      animated, or kept in step with the physics, and a whole line's record is
+      a few hundred numbers in localStorage. A green chip on the destination
+      board says how far up or down you are and moves the whole way along; the
+      run card says "46s faster than your best"; a better run replaces the
+      record. 35 unit tests
+- [~] **DECIDED: the clock starts when the train does.** The first build
+      counted the time you sat at the platform before setting off, so the
+      console told a stationary driver they were "24s down" on a race that had
+      not started. Dwell at every LATER stop still counts — standing too long
+      at a station genuinely is a slower run
+- [x] **A journey is start-station + direction, not just the line** — jumping
+      to another stop or turning the train round now bumps
+      `TrainSystem.journeyGeneration`, which is in the scoring key. Without it
+      "from the first station, forwards" and "from halfway, backwards" were the
+      same key, and the game would have compared a run to a journey it never
+      made — and scored a run over ground it never covered
+- [ ] **Stop replay** — watch the last approach again from outside. Needs a
+      5 Hz `RunRecorder` ring and a replay camera; the ghost did NOT need one,
+      which is why it shipped first
+- [x] Local browser validation of two full scored runs on C6-C5 (2026-08-15):
+      first run recorded (`::14::2::r`, 261.5 s / 3 677 m), second driven
+      faster, chip tracked live from "4.0s up" through "level" to "3.4s down"
+      and back, card read "46s faster than your best · NEW BEST", stored trace
+      replaced with the 215.2 s one. Artifacts:
+      `_artifacts/ghost-2.39.0/`
 
 ## F3 — Speed limits & route ribbon (`03-speed-limits.md`)
 - [x] `SpeedProfile.ts` (curvature → limit, smoothing, loop-aware) + tests

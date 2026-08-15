@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.39.0',
+		codename: 'Race Yourself',
+		date: '2026-08-15',
+		emblem: '👻⏱️',
+		summary: 'Your best run on a journey becomes a ghost you race the next time you drive it.',
+		changes: [
+			'A GHOST TO CHASE — Drive a line end to end and your time is kept. Next time you drive the same journey a green chip on the destination board says how far up or down on it you are, and it moves the whole way along.',
+			'The run card says how it went — "12s faster than your best" — and a new record is marked NEW BEST.',
+			'The clock starts when the train does, so reading the timetable at the platform first costs you nothing. Waiting too long at a stop along the way still does.',
+			'Starting from a different stop, or turning the train round, is a different journey with its own best time — so a short hop is never compared with the whole line.',
+		],
+	},
+	{
 		version: '2.38.0',
 		codename: 'Pin It on the Map',
 		date: '2026-08-15',
