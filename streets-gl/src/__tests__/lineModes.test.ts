@@ -75,10 +75,16 @@ describe('lineModeInfo', () => {
 		expect(lineModeInfo('regional').consist.length).toBeGreaterThan(1);
 	});
 
-	it('states no opinion where the catalog has no suitable vehicle', () => {
-		// No boat and no aircraft model exist, and putting a train on the water
-		// is worse than leaving the configured one alone.
-		expect(lineModeInfo('ferry').consist).toEqual([]);
+	it('runs a boat on a ferry, not a train', () => {
+		// The catalog has no boat, so the game builds one: waiting for a model
+		// left the mode with nothing to run, and a train on the water is worse
+		// than either.
+		expect(lineModeInfo('ferry').consist).toEqual(['procedural-ferry']);
+	});
+
+	it('still states no opinion where there is genuinely nothing to run', () => {
+		// No aircraft, procedural or otherwise. Leaving the player's own choice
+		// alone beats flying a boat.
 		expect(lineModeInfo('air').consist).toEqual([]);
 	});
 
@@ -91,7 +97,10 @@ describe('lineModeInfo', () => {
 		const catalog: {models: {trains: {id: string}[]}} =
 			// eslint-disable-next-line @typescript-eslint/no-var-requires
 			require('../../data-seed/assets/catalog.json');
-		const known = new Set(catalog.models.trains.map(e => e.id));
+		// Procedural vehicles are built in code and are never in the catalog;
+		// TrainRenderingSystem knows them by these ids.
+		const procedural = new Set(['procedural-default', 'procedural-ferry']);
+		const known = new Set([...catalog.models.trains.map(e => e.id), ...procedural]);
 		const modes: LineMode[] = [
 			'bus', 'tram', 'light', 'rapid', 'regional', 'hsr', 'ferry', 'gondola', 'air',
 		];
