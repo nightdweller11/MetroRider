@@ -6,7 +6,7 @@
  * this a train climbed a hill exactly as fast as it ran on the flat, which is
  * the one thing everybody knows trains do not do.
  */
-import {createTrainPhysicsState, updateTrainPhysics} from '~/app/game/physics/TrainPhysics';
+import {createTrainPhysicsState, updateTrainPhysics, getMaxSpeed} from '~/app/game/physics/TrainPhysics';
 
 const track = {totalLength: 100000, isLoop: false} as never;
 
@@ -77,7 +77,10 @@ describe('gravity on a gradient', () => {
 	});
 
 	it('still cannot exceed the vehicle ceiling on a long descent', () => {
-		expect(coast(600, -0.09, 50)).toBeLessThanOrEqual(55);
+		// Read the real ceiling rather than repeating the number: this assertion
+		// hard-coded 55 and started failing the day the top speed moved to 56,
+		// reporting a physics regression that was nothing of the sort.
+		expect(coast(600, -0.09, 50)).toBeLessThanOrEqual(getMaxSpeed());
 	});
 
 	it('does not move a train standing at a platform with its doors open', () => {

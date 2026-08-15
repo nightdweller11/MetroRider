@@ -141,8 +141,15 @@ const Config = {
 		driveMode: {
 			label: 'Driving',
 			status: ['simple', 'advanced'],
-			statusLabels: ['Simple — gentler, nothing to lose', 'Advanced — full control, runs are scored'],
-			statusDefault: 'simple',
+			statusLabels: ['Simple — holds the speed limit for you', 'Advanced — full control, runs are scored'],
+			// Advanced is the default. Simple eases the train back under the
+			// posted limit, which meant a new player was pinned to 60 km/h on a
+			// line the train could run at 200 — with nothing on screen saying
+			// why, because the assist is invisible when it is working. The limit
+			// is meant to be information the driver acts on; being unable to
+			// exceed it takes the decision away and makes the sign pointless.
+			// Simple is still there for a gentler drive, and now says what it does.
+			statusDefault: 'advanced',
 			category: 'general'
 		},
 		ambientTrains: {

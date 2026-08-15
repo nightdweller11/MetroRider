@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.26.0',
+		codename: 'Let It Run',
+		date: '2026-08-15',
+		emblem: '🏎️💨',
+		summary: 'The train will do 200 now — the speed limit is a sign to read, not a wall.',
+		changes: [
+			'IT GOES FAST NOW — Hold P4 on a clear stretch and the train winds all the way up to 200 km/h. It used to stop dead at whatever the local speed limit said, with nothing on screen explaining why.',
+			'The reason was the game starting everyone in Simple driving, which quietly holds the limit for you. Everyone now starts in full control.',
+			'The limit sign still tells you what it is, the LIMIT light still comes on when you pass it, and going too fast still costs you points on the run card. Now it is your call.',
+			'Simple driving is still in Settings if you want the game to hold the limit for you — and it now says that is what it does.',
+		],
+	},
+	{
 		version: '2.25.0',
 		codename: 'The Real Lever',
 		date: '2026-08-15',

@@ -1,6 +1,13 @@
 import type {TrackData} from '../data/TrackBuilder';
 
-const MAX_SPEED = 55; // m/s (~200 km/h)
+/**
+ * The fastest anything may go, m/s — 201.6 km/h.
+ *
+ * A whisker over 200 rather than a whisker under, so a train that is supposed
+ * to reach two hundred actually shows two hundred on the dial rather than
+ * stopping at 198 and looking throttled.
+ */
+const MAX_SPEED = 56;
 const ACCEL = 5.0;
 const BRAKE_FORCE = 6.0;
 /** How firmly Simple driving pulls back toward the limit, m/s². */
