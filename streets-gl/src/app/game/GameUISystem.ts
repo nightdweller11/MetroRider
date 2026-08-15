@@ -20,6 +20,7 @@ import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
+import SignalRenderingSystem from './limits/SignalRenderingSystem';
 import WalkPad from './ui/WalkPad';
 import {distanceFromTrain, leashNotice} from './WalkController';
 import JourneySystem from './JourneySystem';
@@ -399,6 +400,12 @@ export default class GameUISystem extends System {
 		const journey = this.systemManager.getSystem(JourneySystem);
 
 		if (journey) journey.onMilestone = (text): void => this.showToast(`🎉 ${text}`, 3200);
+
+		// A red run through is worth saying at the moment it happens, not only
+		// on the card at the end of the run.
+		const signals = this.systemManager.getSystem(SignalRenderingSystem);
+
+		if (signals) signals.onSpad = (): void => this.showToast('🛑 You passed a red signal', 3000);
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;

@@ -3,6 +3,11 @@ import SettingsSystem from '../systems/SettingsSystem';
 import TrainSystem from './TrainSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 import type TrainMeshObject from './rendering/TrainMeshObject';
+import SpeedLimitSystem from './limits/SpeedLimitSystem';
+import {
+	createLeadingTrain, stepLeadingTrain, gapAhead,
+	type LeadingTrainState,
+} from './ai/LeadingTrainDriver';
 
 /**
  * Other trains on the network.
@@ -44,8 +49,27 @@ interface AmbientService {
 	cars: TrainMeshObject[];
 }
 
+/**
+ * How far ahead the service in front starts, metres.
+ *
+ * Close enough to catch within a stop or two — the point of it is to be caught
+ * up with — and far enough that it is not sitting on top of you at the moment
+ * you press Play.
+ */
+const LEADING_START_AHEAD = 1400;
+/** Cars in the service ahead. */
+const LEADING_CARS = 3;
+
 export default class AmbientTrainSystem extends System {
 	private services: AmbientService[] = [];
+	/**
+	 * The service in FRONT of you, on your own track, going your way.
+	 *
+	 * Kept here rather than in a system of its own because the ambient meshes
+	 * are cleared all together — two owners of that list would wipe each
+	 * other's trains out on every line change.
+	 */
+	private leading: {state: LeadingTrainState; cars: TrainMeshObject[]} | null = null;
 	private builtForLine: number = -1;
 	private builtForMap: number = -1;
 	private carLength: number = 20;
@@ -63,7 +87,25 @@ export default class AmbientTrainSystem extends System {
 	private clear(): void {
 		this.systemManager.getSystem(TrainRenderingSystem)?.clearAmbientCars();
 		this.services = [];
+		this.leading = null;
 		this.builtForLine = -1;
+	}
+
+	/**
+	 * Where the service ahead is along the line, or null when there is none.
+	 *
+	 * The signals and the SPAD check both ask this: it is the only train that
+	 * can actually be in the player's way.
+	 */
+	public leadingDistance(): number | null {
+		return this.leading?.state.dist ?? null;
+	}
+
+	/** How far ahead it is, metres — negative once you are past it. */
+	public leadingGap(playerDist: number, direction: number): number | null {
+		if (!this.leading) return null;
+
+		return gapAhead(playerDist, this.leading.state.dist, direction);
 	}
 
 	private build(trainSystem: TrainSystem, playerDist: number): void {
@@ -82,6 +124,27 @@ export default class AmbientTrainSystem extends System {
 				dist: playerDist + SPAWN_AHEAD + i * SPAWN_STAGGER,
 				cars: rendering.buildAmbientCars(CARS_PER_TRAIN, colour),
 			});
+		}
+
+		// The one that matters: ahead, on the player's own alignment, working
+		// the same stops in the same direction.
+		const ls = trainSystem.lines[trainSystem.currentLineIdx];
+
+		if (ls) {
+			const dir = trainSystem.physicsState.direction || 1;
+			const start = playerDist + LEADING_START_AHEAD * dir;
+			const stops = ls.realStationDists ?? [];
+			// The stop it is working towards: the first one beyond where it is.
+			let target = 0;
+
+			for (let i = 0; i < stops.length; i++) {
+				if ((stops[i] - start) * dir > 0) { target = i; break; }
+			}
+
+			this.leading = {
+				state: createLeadingTrain(start, target),
+				cars: rendering.buildAmbientCars(LEADING_CARS, colour),
+			};
 		}
 
 		this.builtForLine = trainSystem.currentLineIdx;
@@ -125,6 +188,57 @@ export default class AmbientTrainSystem extends System {
 			}
 
 			this.poseService(trainSystem, service, playerDir);
+		}
+
+		this.updateLeading(trainSystem, playerDist, playerDir, dt);
+	}
+
+	/** Drive the service in front and put its cars where it is. */
+	private updateLeading(
+		trainSystem: TrainSystem,
+		playerDist: number,
+		playerDir: number,
+		dt: number,
+	): void {
+		if (!this.leading) return;
+
+		const ls = trainSystem.lines[trainSystem.currentLineIdx];
+
+		if (!ls) return;
+
+		const limits = this.systemManager.getSystem(SpeedLimitSystem);
+		// It keeps to the line's own limit, which is the same rule the player
+		// is being scored against — so catching it up means driving well, not
+		// waiting for it to make a mistake.
+		const limit = Math.max(8, limits?.limit || limits?.lineCeiling || 25);
+
+		stepLeadingTrain(
+			this.leading.state, ls.realStationDists ?? [], limit, playerDir, dt, ls.track.totalLength,
+		);
+
+		// Once the player has gone past it, put it back in front: it exists to
+		// be in the way, and a service behind you is just a mesh being drawn.
+		if (gapAhead(playerDist, this.leading.state.dist, playerDir) < -260) {
+			this.leading.state.dist = playerDist + LEADING_START_AHEAD * playerDir;
+			this.leading.state.speed = 0;
+		}
+
+		const spacing = this.carLength + CAR_GAP;
+
+		for (let i = 0; i < this.leading.cars.length; i++) {
+			const pos = trainSystem.getPositionOnLine(
+				trainSystem.currentLineIdx,
+				this.leading.state.dist - i * spacing * playerDir,
+				playerDir,
+				// Zero: it is on YOUR track. That is the whole point of it.
+				0,
+			);
+
+			if (!pos) continue;
+
+			this.leading.cars[i].position.set(pos.x, pos.height, pos.y);
+			this.leading.cars[i].rotation.set(0, pos.heading, 0);
+			this.leading.cars[i].updateMatrix();
 		}
 	}
 

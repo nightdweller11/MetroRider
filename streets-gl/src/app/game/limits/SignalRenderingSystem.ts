@@ -5,6 +5,8 @@ import TrainSystem from '../TrainSystem';
 import TrainRenderingSystem from '../rendering/TrainRenderingSystem';
 import TrainMeshObject from '../rendering/TrainMeshObject';
 import {buildSignalGeometry, signalAspectColors, type SignalAspect} from './SignalGeometry';
+import AmbientTrainSystem from '../AmbientTrainSystem';
+import {blockOccupied} from '../ai/LeadingTrainDriver';
 
 /**
  * Block signals on the line beside you.
@@ -42,6 +44,15 @@ interface Signal {
 
 export default class SignalRenderingSystem extends System {
 	public signalMeshes: TrainMeshObject[] = [];
+	/**
+	 * Signals passed at danger this run — the one thing on a railway that is
+	 * never a matter of opinion. The run card reads and resets this.
+	 */
+	public spads = 0;
+	/** Set by the UI so a SPAD can be said out loud the moment it happens. */
+	public onSpad: (() => void) | null = null;
+
+	private lastPlayerDist: number | null = null;
 
 	private signals: Signal[] = [];
 	private builtForLine: number = -1;
@@ -68,6 +79,7 @@ export default class SignalRenderingSystem extends System {
 		}
 
 		this.signals = [];
+		this.lastPlayerDist = null;
 		this.signalMeshes = [];
 		this.builtForLine = -1;
 	}
@@ -131,6 +143,39 @@ export default class SignalRenderingSystem extends System {
 			this.setAspect(signal, this.aspectFor(signal, traffic, playerDir));
 			this.pose(trainSystem, signal, playerDir);
 		}
+
+		this.checkForSpad(playerDist, playerDir);
+		this.lastPlayerDist = playerDist;
+	}
+
+	/**
+	 * Did the player just go past a signal at danger?
+	 *
+	 * Compares this frame's position with the last, so a signal is only ever
+	 * counted once however fast the train is going — at 200 km/h a frame is
+	 * nearly a metre, and a test on "am I near a red" would count the same
+	 * signal for several frames running.
+	 */
+	private checkForSpad(playerDist: number, playerDir: number): void {
+		if (this.lastPlayerDist === null) return;
+
+		const from = this.lastPlayerDist;
+		const travelled = (playerDist - from) * playerDir;
+
+		if (travelled <= 0) return;
+
+		for (const signal of this.signals) {
+			if (signal.aspect !== 'danger') continue;
+
+			const before = (signal.dist - from) * playerDir;
+			const after = (signal.dist - playerDist) * playerDir;
+
+			// It was in front and is now behind: passed.
+			if (before > 0 && after <= 0) {
+				this.spads++;
+				this.onSpad?.();
+			}
+		}
 	}
 
 	/** Where the passing services are, along the line. */
@@ -155,7 +200,20 @@ export default class SignalRenderingSystem extends System {
 	private aspectFor(signal: Signal, traffic: number[], playerDir: number): SignalAspect {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
 
-		if (!trainSystem || traffic.length === 0) return 'clear';
+		if (!trainSystem) return 'clear';
+
+		// The service on the PLAYER'S OWN LINE first. Until this existed the
+		// signals only ever watched the passing trains on the adjacent
+		// alignment — traffic that cannot be in your way — so a red protected
+		// nothing and could be run through all day without consequence.
+		const lead = this.systemManager.getSystem(AmbientTrainSystem)?.leadingDistance();
+
+		if (lead !== null && lead !== undefined
+			&& blockOccupied(signal.dist, BLOCK_LENGTH, lead, playerDir)) {
+			return 'danger';
+		}
+
+		if (traffic.length === 0) return 'clear';
 
 		// The block this signal protects runs from the signal onward, AWAY from
 		// the player — the direction the oncoming service came from.

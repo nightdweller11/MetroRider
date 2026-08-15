@@ -4,6 +4,7 @@ import PassengerSystem from '../passengers/PassengerSystem';
 import ProfileClient from '../profiles/ProfileClient';
 import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import ServiceSystem from '../service/ServiceSystem';
+import SignalRenderingSystem from '../limits/SignalRenderingSystem';
 import JourneySystem from '../JourneySystem';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
@@ -179,6 +180,22 @@ export default class ScoringSystem extends System {
 		if (limits) {
 			limits.overspeedSeconds = 0;
 			limits.seriousOverspeedSeconds = 0;
+		}
+
+		// A signal passed at danger is the one thing on a railway that is never
+		// a matter of opinion, so it is charged the same in both driving modes
+		// — unlike overspeed, which the assist is entitled to forgive because
+		// the assist caused it.
+		const signals = this.systemManager.getSystem(SignalRenderingSystem);
+		const spads = signals?.spads ?? 0;
+
+		if (signals) signals.spads = 0;
+
+		if (spads > 0) {
+			const cost = Math.min(Math.round(result.totalPoints * 0.35), spads * 60);
+
+			result.totalPoints = Math.max(0, result.totalPoints - cost);
+			result.summary += ` · ${spads === 1 ? 'a red signal passed' : `${spads} red signals passed`} (−${cost})`;
 		}
 
 		const badges = badgesForRun(result, new Date().getHours());

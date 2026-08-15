@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.33.0',
+		codename: 'The Train in Front',
+		date: '2026-08-15',
+		emblem: '🚦🚆',
+		summary: 'There is a train ahead of you on your own line now — and the red signals are protecting it.',
+		changes: [
+			'A TRAIN IN FRONT — Another service runs ahead of you on your own track, stopping at the same stations. Catch it up and you have to wait behind it, like a real driver.',
+			'THE RED SIGNALS MEAN SOMETHING — Until now the signals only watched the trains on the other track, which could never be in your way, so a red protected nothing. They now go red for the train in front of you.',
+			'PASSING A RED COSTS YOU — Run through a red signal and the game says so straight away, and it comes off your score at the end of the run. That one counts in Simple driving too — a red is a red.',
+		],
+	},
+	{
 		version: '2.32.0',
 		codename: 'Every Line Its Own Name',
 		date: '2026-08-15',
