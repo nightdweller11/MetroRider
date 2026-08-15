@@ -61,14 +61,6 @@ export class InputHandler {
 		return this.pressed.has(action);
 	}
 
-	public setHeld(action: KeyAction, value: boolean): void {
-		if (value) {
-			this.held.add(action);
-		} else {
-			this.held.delete(action);
-		}
-	}
-
 	public consumePressed(): void {
 		this.pressed.clear();
 	}

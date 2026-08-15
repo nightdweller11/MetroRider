@@ -552,18 +552,22 @@ export default class GameUISystem extends System {
 		const accelBtn = createBtn('\u25B2', 'Accelerate');
 		const brakeBtn = createBtn('\u25BC', 'Brake');
 
-		const bindPress = (el: HTMLElement, action: 'throttle' | 'brake'): void => {
-			const down = (): void => trainSystem.getInput().setHeld(action, true);
-			const up = (): void => trainSystem.getInput().setHeld(action, false);
-			el.addEventListener('mousedown', down);
-			el.addEventListener('mouseup', up);
-			el.addEventListener('mouseleave', up);
-			el.addEventListener('touchstart', (e) => { e.preventDefault(); down(); });
-			el.addEventListener('touchend', (e) => { e.preventDefault(); up(); });
-			el.addEventListener('touchcancel', up);
+		// These live in the legacy cluster, which the driving interface does not
+		// mount — no player can reach them today. They are wired through the
+		// HANDLE anyway rather than left calling a path that no longer drives
+		// anything: a dead control that still looks wired is how the last three
+		// of these were found. One press, one notch, exactly as the keys.
+		const bindStep = (el: HTMLElement, towards: number): void => {
+			const step = (e?: Event): void => {
+				e?.preventDefault();
+				this.systemManager.getSystem(TrainSystem)?.stepNotch(towards);
+			};
+
+			el.addEventListener('mousedown', step);
+			el.addEventListener('touchstart', step);
 		};
-		bindPress(accelBtn, 'throttle');
-		bindPress(brakeBtn, 'brake');
+		bindStep(accelBtn, -1);
+		bindStep(brakeBtn, 1);
 
 		const hornBtn = createBtn('\uD83D\uDD0A', 'Horn');
 		const reverseBtn = createBtn('\u21BA', 'Reverse');
