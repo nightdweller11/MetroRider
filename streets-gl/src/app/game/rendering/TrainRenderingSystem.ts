@@ -8,6 +8,7 @@ import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
 import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
 import AssetConfigSystem from '~/app/game/assets/AssetConfigSystem';
+import GameUISystem from '~/app/game/GameUISystem';
 import {parseSlot, tintToRgb} from '~/app/game/assets/SlotSpec';
 import {inferLineMode, lineModeInfo} from '~/app/game/data/LineModes';
 import {debugLog} from '~/app/game/debug';
@@ -132,6 +133,13 @@ export default class TrainRenderingSystem extends System {
 	private slotsForCurrentLine(): string[] {
 		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
 		const configured = assetConfig?.getConfig().trainSlots ?? [...DEFAULT_CONSIST];
+
+		// A train that arrived in a shared link wins outright, and only for this
+		// session — it is never written to the saved setup, so opening a
+		// friend's link does not cost you the consist you built.
+		const shared = this.systemManager.getSystem(GameUISystem)?.sessionConsist?.();
+
+		if (shared && shared.length > 0) return shared;
 
 		if (!assetConfig || assetConfig.hasUserTrainChoice()) return configured;
 

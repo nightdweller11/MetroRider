@@ -21,6 +21,7 @@ import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
+import {parseRideLink, buildRideLink} from './data/ShareLink';
 
 /**
  * When the countdown to the stop mark appears — as SECONDS of running, not
@@ -90,6 +91,8 @@ export default class GameUISystem extends System {
 	public postInit(): void {
 		this.systemManager.onSystemReady(TrainSystem, (trainSystem) => {
 			this.createUI(trainSystem);
+			// After the UI exists, so the loading rows have somewhere to render.
+			void this.applyRideLink();
 		});
 	}
 
@@ -137,8 +140,11 @@ export default class GameUISystem extends System {
 		this.bindScoring();
 		this.createDebugOverlay();
 
-		// Announce a new release once per version (tracked in localStorage).
-		if (isReleaseAnnouncementUnseen()) {
+		// Announce a new release once per version (tracked in localStorage) —
+		// but never over a shared link. A link is someone saying "come and see
+		// this", and meeting a changelog dialog instead is not that. The
+		// announcement is not lost; it waits for an ordinary visit.
+		if (isReleaseAnnouncementUnseen() && !parseRideLink(window.location.search)) {
 			this.showReleaseSplash();
 		}
 
@@ -732,6 +738,14 @@ export default class GameUISystem extends System {
 				onSelect: (): void => document.getElementById('game-map-select-btn')?.click(),
 			},
 			{
+				badge: 'SEND',
+				badgeColor: '#4fb6ef',
+				title: 'Copy a link to this ride',
+				subtitle: 'Send someone this map, this line and this train',
+				keepOpen: true,
+				onSelect: (): void => void this.copyRideLink(),
+			},
+			{
 				badge: 'TRN',
 				badgeColor: '#4fd996',
 				title: 'Trains & sounds',
@@ -943,6 +957,105 @@ export default class GameUISystem extends System {
 		}
 	}
 
+	/**
+	 * Open the ride a shared link names.
+	 *
+	 * Runs once at start-up. The map is loaded the same way "Drive another map"
+	 * loads one, then the line and the train from the link are applied on top.
+	 * Anything the link does not name is simply left alone.
+	 */
+	private async applyRideLink(): Promise<void> {
+		const ride = parseRideLink(window.location.search);
+
+		if (!ride) return;
+
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (!trainSystem) return;
+
+		// The train goes in BEFORE the map loads: `loadMap` selects a line,
+		// which rebuilds the consist, and setting it afterwards would build the
+		// wrong train once and then swap it a moment later.
+		if (ride.consist) {
+			this.linkConsist = ride.consist;
+			this.systemManager.getSystem(TrainRenderingSystem)?.rebuildAll();
+		}
+
+		await this.driveAnotherCity(ride.mapId, 'the shared ride');
+
+		if (ride.lineIndex !== null && ride.lineIndex < trainSystem.lines.length) {
+			trainSystem.selectLine(ride.lineIndex);
+		}
+
+		// A link is someone saying "come and see this", so it drives straight
+		// in rather than landing on a start screen asking which map to open.
+		this.startGameFlow?.();
+	}
+
+	/**
+	 * Put a link to the current ride on the clipboard.
+	 *
+	 * Only offered when the map came from a known id — the built-in map and a
+	 * hand-pasted URL have nothing a recipient could open, and a link that
+	 * silently drops the map would be worse than no link at all, so the row
+	 * says so instead.
+	 */
+	private async copyRideLink(): Promise<void> {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (!this.cabSheet) return;
+
+		if (!this.currentMapId) {
+			this.cabSheet.show('Copy a link to this ride', [{
+				badge: '—', badgeColor: '#5d6f81',
+				title: 'This map cannot be linked to yet',
+				subtitle: 'Pick a city from "Drive another map" first, then the link will work',
+				readOnly: true, onSelect: (): void => undefined,
+			}]);
+
+			return;
+		}
+
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const url = buildRideLink(window.location.href, {
+			mapId: this.currentMapId,
+			lineIndex: trainSystem?.currentLineIdx ?? null,
+			consist: this.linkConsist ?? assetConfig?.getConfig().trainSlots ?? null,
+		});
+
+		let copied = false;
+
+		try {
+			await navigator.clipboard.writeText(url);
+			copied = true;
+		} catch {
+			// Clipboard access is refused outside a secure context and on some
+			// browsers without a user gesture. Showing the link is still useful
+			// — it can be read off the screen — so this is not an error.
+			copied = false;
+		}
+
+		this.cabSheet.show('Copy a link to this ride', [
+			{
+				badge: copied ? 'OK' : 'LINK', badgeColor: copied ? '#4fd996' : '#f0a63f',
+				title: copied ? 'Link copied' : 'Here is the link',
+				subtitle: copied ? 'Paste it to anyone — it opens this exact ride' : 'Copy it from below',
+				readOnly: true, onSelect: (): void => undefined,
+			},
+			{
+				badge: 'URL', badgeColor: '#4fb6ef',
+				title: url,
+				subtitle: 'Opens this map, this line and this train',
+				readOnly: true, onSelect: (): void => undefined,
+			},
+		]);
+	}
+
+	/** The train a shared link asked for, or null when this is an ordinary session. */
+	public sessionConsist(): string[] | null {
+		return this.linkConsist;
+	}
+
 	/** Load a different city and start driving it. */
 	private async driveAnotherCity(mapId: string, title: string): Promise<void> {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);
@@ -962,6 +1075,7 @@ export default class GameUISystem extends System {
 
 			trainSystem.loadMap(mapData);
 			this.currentMapUrl = url;
+			this.currentMapId = mapId;
 			this.saveMapEntry(url, mapData.name);
 
 			// loadMap re-selects line 0 and moves the map camera; the follow
@@ -1840,6 +1954,10 @@ export default class GameUISystem extends System {
 			this.updateLineColorIndicator(trainSystem);
 		};
 
+		// A shared link starts the game the same way the Play button does,
+		// rather than through a second path that would drift from it.
+		this.startGameFlow = startGameFlow;
+
 		let defaultMapReady = false;
 
 		const playBtn = document.createElement('div');
@@ -2095,7 +2213,12 @@ export default class GameUISystem extends System {
 		startBtn.appendChild(userMapsSection);
 		this.container.appendChild(startBtn);
 
-		loadMapFromUrl(DEFAULT_MAP_URL, false);
+		// A shared link brings its own map, and both loads would otherwise be in
+		// flight at once — measured, the default finished LAST and quietly
+		// overwrote the link's map, so the link opened the wrong city.
+		if (!parseRideLink(window.location.search)) {
+			loadMapFromUrl(DEFAULT_MAP_URL, false);
+		}
 	}
 
 	private createSettingsButton(): void {
@@ -2139,6 +2262,18 @@ export default class GameUISystem extends System {
 	}
 
 	private currentMapUrl: string | null = null;
+	/** The map id this session is on, when it came from a known id. */
+	private currentMapId: string | null = null;
+	/**
+	 * A train that arrived in a shared link.
+	 *
+	 * Session-only and never written to the saved setup: someone who has spent
+	 * an afternoon building a consist should be able to open a friend's link
+	 * and still have their own train when they come back.
+	 */
+	private linkConsist: string[] | null = null;
+	/** The Play button's own flow, so a shared link starts the game identically. */
+	private startGameFlow: (() => void) | null = null;
 	private metroMapOverlayEl: HTMLElement | null = null;
 	private metroMapMarkerTimer: number = 0;
 

@@ -10,9 +10,9 @@
 > no real-time multiplayer. Scores, records, badges and shared score boards
 > ARE in scope, backed by lightweight profiles.
 
-## Progress (2026-08-14)
+## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.20.0 "Local Noon"** — 41 releases. Every row
+**Live on metrorider.net: v2.21.0 "Come and See This"** — 42 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 | Feature | State |
@@ -26,7 +26,7 @@ below reflects what is DEPLOYED, not what is merged.
 | **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI, dispatch spacing and SPAD outstanding |
 | **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo mode saves the photo v2.10.0, Simple/Advanced driving v2.2.0. Walk mode outstanding |
 | **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, corrected to the map's own local solar time v2.20.0. Weather and seasons deliberately deferred: overcast is a change to the atmosphere LUT chain and its UBO layout, not a setting |
-| **F10 City & discovery** | **PART SHIPPED** — world tour / drive any map from inside the game v2.8.0, line facts v2.6.0. Landmarks, discovery toasts and share links outstanding |
+| **F10 City & discovery** | **PART SHIPPED** — world tour / drive any map from inside the game v2.8.0, line facts v2.6.0, share links v2.21.0. Landmarks, discovery toasts and city stats outstanding |
 
 The interface was rebuilt in v2.1.0–v2.3.0 (`docs/features/ui-2.1/`), which is
 where most of the per-feature UI actually landed.
@@ -109,7 +109,9 @@ where most of the per-feature UI actually landed.
 - [ ] Physics: >25% overspeed penalty brake; `SpeedState` (none/amber/red)
 - [x] HUD limit chip + approach countdown
 - [x] Track-side speed boards (number quads at change points)
-- [ ] Overspeed → F2 score drain wiring
+- [x] Overspeed → F2 score drain wiring — `ScoringSystem` reads
+      `overspeedSeconds` / `seriousOverspeedSeconds` off `SpeedLimitSystem` at
+      run end and resets them, and suppresses both in Simple driving
 - [~] Route ribbon (v2.1.0) — dots per stop, travelled segments lit, train
       marker, responsive placement. Limit ticks and a loop RING are NOT built
 - [ ] Local browser validation (known-curve limits, forced overspeed chain,
@@ -198,8 +200,10 @@ where most of the per-feature UI actually landed.
       (server-served JSON), richer Recents metadata
 - [~] "Drive another map" (v2.8.0) lists the live profile's maps and loads any
       of them mid-game. It is NOT the curated tour with goals and stamps
-- [ ] Share links (`?map&line&consist` parse/apply, session-only consist,
-      confirm before overwriting saved setup) + unit tests
+- [x] Share links (2.21.0) — `?map&line&train`, session-only consist that is
+      never written to the saved setup (so no confirm is needed), + 12 unit
+      tests. Opens straight into the game, skipping the start screen and the
+      release splash
 - [ ] Local browser validation (discovery toast, stats plausibility, share
       round-trip in fresh context, tour stamp), production validation,
       changelog entry

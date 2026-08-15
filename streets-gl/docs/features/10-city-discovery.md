@@ -85,3 +85,44 @@ Browser upgrades: 1–2 days. World tour: 1–2 days. Share links: 1 day.
   overwriting saved config; world tour stamp after completing a goal map.
 - **Production validation**: Playwright — discovery toast on live, share
   link round-trip on the deployed URL, featured list renders; screenshots.
+
+---
+
+## Share links (2.21.0)
+
+A parent sending their child a URL that opens the exact map, line and train
+they were just looking at — rather than "load London, then find the Circle
+line, then set the carriages".
+
+| Piece | Where |
+|---|---|
+| Parse + build (pure, no DOM) | `src/app/game/data/ShareLink.ts` |
+| Applying an incoming link | `GameUISystem.applyRideLink` (called from `postInit`) |
+| Session-only consist | `GameUISystem.sessionConsist()` → `TrainRenderingSystem.slotsForCurrentLine()` |
+| "Copy a link to this ride" | `GameUISystem.copyRideLink`, menu row |
+| Tests | `src/__tests__/shareLink.test.ts` (12) |
+
+Format: `?map=<metrodreamin id>&line=<index>&train=<slot,slot,…>`.
+
+**A link never changes the train you built.** Its consist is applied for the
+session only and is never written to the saved setup, which is also why there
+is no "are you sure?" prompt — there is nothing to overwrite. It sits at the
+top of the same `slotsForCurrentLine()` resolution the mode defaults use:
+shared link → the player's own choice → the line's mode default → configured.
+
+**A link is untrusted input**, so the parser caps the consist at 12 cars and
+each slot at 120 characters; without that, a URL asking for ten thousand
+carriages would take the tab down, and it would be handed to a child.
+
+**Two things the build corrected**, both found by opening a link rather than by
+reading the code. (1) The default map was ALREADY loading when the link's map
+started, and being larger it finished LAST and silently overwrote it — the link
+opened the wrong city while reporting success. The default load is now skipped
+when a link is present. (2) The release splash rendered on top of the shared
+ride; a link is someone saying "come and see this", and meeting a changelog
+dialog instead is not that, so the announcement waits for an ordinary visit.
+
+Validated end to end: a link naming SEPTA, line 17 and two tinted trams opened
+on SEPTA's M line with a red tram and a yellow tram, no splash, saved setup
+untouched — and "Copy a link to this ride" round-tripped back to the same ride.
+Screenshot in `docs/features/_artifacts/share-links-2026-08-15/`.

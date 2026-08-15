@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.21.0',
+		codename: 'Come and See This',
+		date: '2026-08-15',
+		emblem: '🔗🚆',
+		summary: 'Send someone a link and it opens your exact map, line and train.',
+		changes: [
+			'SHARE A RIDE — There is a "Copy a link to this ride" button in the menu. Send the link to anyone and it opens the same city, the same line and the same train you were driving, straight into the game.',
+			'A link never changes the train you built. It borrows one for that visit only, and yours is still there next time.',
+			'A shared link goes straight to driving — no start screen and no changelog in the way.',
+		],
+	},
+	{
 		version: '2.20.0',
 		codename: 'Local Noon',
 		date: '2026-08-14',
