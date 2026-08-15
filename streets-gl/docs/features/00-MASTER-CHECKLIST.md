@@ -11,7 +11,8 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.43.0 "One Handle"** — 64 releases. Every row
+**Live on metrorider.net: v2.43.0 "One Handle"** — 64 releases, all verified
+by driving them on production rather than by reading the deploy log. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 ### What shipped on 2026-08-15
