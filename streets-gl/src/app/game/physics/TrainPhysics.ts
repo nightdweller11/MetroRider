@@ -28,6 +28,18 @@ function approach(value: number, target: number, rate: number, dt: number): numb
 	return value;
 }
 const FRICTION = 0.0;
+/** Gravity, m/s². */
+const GRAVITY = 9.81;
+/**
+ * The steepest slope gravity is allowed to act on, as rise over run.
+ *
+ * Real railways rarely exceed 4%, and the steepest adhesion lines in the world
+ * are around 9%. The terrain under a MetroDreamin line is real OSM elevation
+ * that the line was drawn across without regard for it, so a route can cross a
+ * cliff: unclamped, one sample off a 60% face would either stop the train dead
+ * or fire it down the hill at line speed.
+ */
+const MAX_GRADE = 0.09;
 
 export interface TrainPhysicsState {
 	trainDist: number;
@@ -74,6 +86,17 @@ export interface TrainInput {
 	 */
 	accelScale?: number;
 	brakeScale?: number;
+	/**
+	 * The slope under the train, as a rise-over-run fraction in the direction
+	 * of travel. Positive is uphill.
+	 *
+	 * Gravity is the one force here that acts whether or not the driver is
+	 * doing anything: a train coasting down a bank picks up speed, and one
+	 * climbing loses it. Without this a train climbed a hill exactly as fast as
+	 * it ran on the flat, which is the one thing everybody knows trains do not
+	 * do.
+	 */
+	grade?: number;
 	throttle: boolean;
 	braking: boolean;
 	emergency: boolean;
@@ -144,6 +167,24 @@ export function updateTrainPhysics(
 	if (state.trainSpeed > ceiling) {
 		state.trainSpeed = Math.max(ceiling, state.trainSpeed - ASSIST_EASE * dt);
 	}
+
+	// Gravity along the rail. `g · sin(atan(grade))` is the real figure, and at
+	// railway gradients the small-angle form is within a whisper of it — a 4%
+	// bank differs by 0.08%. Clamped because map terrain has cliffs in it that
+	// no railway would ever be built on, and a 60% "gradient" sampled off one
+	// would stop a train dead or fire it down the hill.
+	//
+	// Not while the doors are open: a train at a platform is held on its
+	// brakes. Without that guard it crept away down any slope — gravity added a
+	// little each frame, the doors-open clamp only fires above 0.1 m/s, and the
+	// two oscillated instead of holding it still.
+	if (input.grade && !state.doorsOpen) {
+		const grade = Math.max(-MAX_GRADE, Math.min(MAX_GRADE, input.grade));
+
+		state.trainSpeed -= GRAVITY * grade * dt;
+	}
+
+	state.trainSpeed = Math.max(0, Math.min(MAX_SPEED, state.trainSpeed));
 
 	if (state.doorsOpen && state.trainSpeed > 0.1) {
 		state.trainSpeed = 0;

@@ -239,3 +239,29 @@ Cab overlay: 1–2 days. Sounds: 1–2 days. Tint: 1 day. Ferry: 1 day + assets.
 - **Production validation**: Playwright on live — pick a tram line on a real
   map, confirm tram consist + 60 cap + icon; a tinted, flipped car survives
   reload (slot string persistence).
+
+> ### What shipped in 2.22.0 — gravity on gradients
+>
+> `TrainInput.grade` (rise over run, positive uphill) → `g x grade` subtracted
+> from speed each step. `TrainSystem.currentGrade` samples the terrain height
+> at the train and one baseline ahead, along the direction of travel.
+>
+> **Three decisions the terrain forced.**
+> (1) The baseline is **60 m**, not adjacent points: the height grid is
+> interpolated and carries noise, and two samples a metre apart mostly measure
+> that noise rather than the bank.
+> (2) The grade is **clamped to 9%** — real railways rarely exceed 4% and the
+> steepest adhesion lines in the world are about 9%, but a MetroDreamin line is
+> drawn across real OSM elevation without regard for it and CAN cross a cliff.
+> Measured on the built-in Israel map: the line ranges -9.8% to +6.9%, with 63
+> of 220 samples over 1%, so the clamp is load-bearing rather than theoretical.
+> (3) Gravity is **suppressed while the doors are open**. A test caught the
+> train creeping away down a slope at a platform: gravity added a little each
+> frame, the doors-open clamp only fires above 0.1 m/s, and the two oscillated
+> instead of holding it. A train at a platform is held on its brakes.
+>
+> **Measured in the running game**, coasting from 40 km/h with no throttle and
+> no brake: down the steepest bank 40 -> 43 km/h, up the steepest climb
+> 40 -> 25 km/h. From a dead stand at the foot of that climb, full power gets
+> away cleanly (13 / 37 / 61 / 88 / 117 km/h at two-second intervals), so
+> nothing can be left stuck on a hill.

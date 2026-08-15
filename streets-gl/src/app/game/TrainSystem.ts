@@ -30,6 +30,15 @@ import AnnouncementSystem from './audio/AnnouncementSystem';
 import GameCameraSystem from './GameCameraSystem';
 import {debugLog} from './debug';
 
+/**
+ * Distance over which the gradient is measured, metres.
+ *
+ * Short enough to feel the bank the train is actually on, long enough that the
+ * interpolated terrain grid's noise averages out instead of being read as a
+ * series of tiny cliffs.
+ */
+const GRADE_BASELINE_M = 60;
+
 /** How far ahead of a station the approach is announced, metres. */
 const APPROACH_ANNOUNCE_DIST = 600;
 
@@ -368,6 +377,8 @@ export default class TrainSystem extends System {
 			// bullet train was the number the dial stopped at.
 			accelScale: lineModeInfo(this.systemManager.getSystem(SpeedLimitSystem)?.lineMode).accelScale,
 			brakeScale: lineModeInfo(this.systemManager.getSystem(SpeedLimitSystem)?.lineMode).brakeScale,
+			// Gravity acts whether or not the driver is doing anything.
+			grade: this.currentGrade(ls),
 			throttle: this.input.isHeld('throttle'),
 			braking: this.input.isHeld('brake'),
 			emergency: this.input.isHeld('emergency'),
@@ -438,6 +449,43 @@ export default class TrainSystem extends System {
 			lat: pos.lat,
 			lon: pos.lng,
 		};
+	}
+
+	/**
+	 * The slope under the train, rise over run, positive uphill.
+	 *
+	 * Sampled over a BASELINE rather than between adjacent points, for the same
+	 * reason the curvature profile is: the terrain grid is interpolated and
+	 * carries noise, and two samples a metre apart mostly measure that noise.
+	 * Over 60 m a real bank shows and the noise averages out.
+	 *
+	 * Returns 0 whenever the terrain is not loaded yet, which is the honest
+	 * answer — an unknown hill should not push the train around.
+	 */
+	private currentGrade(ls: LineState): number {
+		const terrain = this.systemManager.getSystem(TerrainSystem)?.terrainHeightProvider;
+
+		if (!terrain) return 0;
+
+		const dir = this.physicsState.direction || 1;
+		const here = this.physicsState.trainDist;
+		const there = wrapTrackDistance(here + GRADE_BASELINE_M * dir, ls.track);
+		const sample = (dist: number): number | null => {
+			const p = getPositionAtDistance(ls.track.spline.points, ls.track.cumDist, dist);
+			const m = MathUtils.degrees2meters(p.lat, p.lng);
+
+			return terrain.getHeightGlobalInterpolated(m.x, m.y, true);
+		};
+
+		const h0 = sample(here);
+		const h1 = sample(there);
+
+		if (h0 === null || h1 === null) return 0;
+
+		// The run is the baseline, not the straight-line distance between the
+		// samples: on a curve those differ, and it is the distance ALONG THE
+		// RAIL that gravity is resolved over.
+		return (h1 - h0) / GRADE_BASELINE_M;
 	}
 
 	public getCarPosition(offsetFromFront: number): TrainWorldPosition | null {

@@ -12,7 +12,7 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.21.0 "Come and See This"** — 42 releases. Every row
+**Live on metrorider.net: v2.22.0 "Uphill"** — 43 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 | Feature | State |
@@ -22,7 +22,7 @@ below reflects what is DEPLOYED, not what is merged.
 | **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside speed boards, country-correct signage |
 | **F4 Timetables** | **SHIPPED v2.7.0 "The 08:06"** — due times from the line's real speed profile, punctuality read, follows a reversal |
 | **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms |
-| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, livery tint v2.13.0, mode consists + texture fixes v2.14.0/v2.16.0, per-mode accel/brake feel v2.15.0, TTS announcements v2.5.0. Per-MODEL physics, terrain grade, ferry water, cab overlay, flange squeal outstanding |
+| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, livery tint v2.13.0, mode consists + texture fixes v2.14.0/v2.16.0, per-mode accel/brake feel v2.15.0, TTS announcements v2.5.0. terrain grade v2.22.0. Per-MODEL physics, ferry water, cab overlay, flange squeal outstanding |
 | **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI, dispatch spacing and SPAD outstanding |
 | **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo mode saves the photo v2.10.0, Simple/Advanced driving v2.2.0. Walk mode outstanding |
 | **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, corrected to the map's own local solar time v2.20.0. Weather and seasons deliberately deferred: overcast is a change to the atmosphere LUT chain and its UBO layout, not a setting |
@@ -69,7 +69,11 @@ where most of the per-feature UI actually landed.
       `LineModeInfo`, threaded into `TrainInput`; mode top-speed cap done in
       2.12.0. Per-MODEL `performance` metadata in catalog.json is NOT built:
       the feel is per line kind, not per carriage
-- [ ] Terrain-grade force in physics
+- [x] Terrain-grade force in physics (2.22.0) — `g x grade` along the rail,
+      sampled over a 60 m baseline so the interpolated terrain grid's noise
+      averages out, clamped to 9% because a MetroDreamin line is drawn across
+      real terrain without regard for it and CAN cross a cliff. Suppressed
+      while the doors are open: a train at a platform is held on its brakes
 - [ ] Ferry mode (water routes; 1–2 boat GLBs added via existing import flow)
 - [~] Cab instruments (speedo dial, notched power lever, brake gauge, DOORS/LIMIT
       lamps) shipped in v2.1.0 — but as the permanent HUD in EVERY view, not a

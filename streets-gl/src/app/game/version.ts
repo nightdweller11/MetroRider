@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.22.0',
+		codename: 'Uphill',
+		date: '2026-08-15',
+		emblem: '⛰️🚆',
+		summary: 'Hills are real now — the train works to climb them and runs away downhill.',
+		changes: [
+			'HILLS SLOW YOU DOWN — Going up a hill the train loses speed, and coming down it picks speed up on its own. Until now a train climbed a hill exactly as fast as it ran on the flat.',
+			'The ground under the line is real, so the hills are the real ones. On the built-in Israel map the line climbs and drops as much as one metre in every fourteen.',
+			'A train standing at a platform stays put, however steep the slope — its brakes are on.',
+		],
+	},
+	{
 		version: '2.21.0',
 		codename: 'Come and See This',
 		date: '2026-08-15',
