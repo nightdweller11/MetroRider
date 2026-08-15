@@ -57,6 +57,7 @@ export default class JourneySystem extends System {
 				lines: Array.isArray(parsed.lines) ? parsed.lines : [],
 				maps: Array.isArray(parsed.maps) ? parsed.maps : [],
 				places: Array.isArray(parsed.places) ? parsed.places : [],
+				placeMarks: Array.isArray(parsed.placeMarks) ? parsed.placeMarks : [],
 			};
 		} catch {
 			return emptyJourney();
@@ -79,10 +80,10 @@ export default class JourneySystem extends System {
 	}
 
 	/** Record a named place come across, and say so if it is new. */
-	public recordPlace(name: string): boolean {
+	public recordPlace(name: string, x?: number, z?: number): boolean {
 		const before = this.log;
 
-		this.log = addPlace(before, name);
+		this.log = addPlace(before, name, x, z);
 
 		if (this.log === before) return false;
 

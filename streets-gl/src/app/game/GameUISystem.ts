@@ -2797,6 +2797,58 @@ export default class GameUISystem extends System {
 		}
 	}
 
+	/**
+	 * The places you have found, marked on the map.
+	 *
+	 * Only the ones inside this map's own bounds: the record spans every city
+	 * you have driven, and a find from London has no business on a map of
+	 * Israel. Positions are stored in world metres, so they are turned back
+	 * into lat/lng to go through the same projection the lines use.
+	 */
+	private drawFoundPlaces(
+		svg: SVGSVGElement,
+		ns: string,
+		toSvg: (lat: number, lng: number) => [number, number],
+	): void {
+		const marks = this.systemManager.getSystem(JourneySystem)?.snapshot().placeMarks ?? [];
+
+		if (marks.length === 0) return;
+
+		const group = document.createElementNS(ns, 'g');
+
+		for (const mark of marks) {
+			const ll = MathUtils.meters2degrees(mark.x, mark.z);
+			const [x, y] = toSvg(ll.lat, ll.lon);
+
+			// Off this map entirely — a find from another city.
+			if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+			if (x < -40 || y < -40 || x > 1040 || y > 740) continue;
+
+			const pin = document.createElementNS(ns, 'circle');
+
+			pin.setAttribute('cx', String(x));
+			pin.setAttribute('cy', String(y));
+			pin.setAttribute('r', '4.5');
+			pin.setAttribute('fill', '#4fd996');
+			pin.setAttribute('stroke', '#08111a');
+			pin.setAttribute('stroke-width', '2');
+			group.appendChild(pin);
+
+			const label = document.createElementNS(ns, 'text');
+
+			label.setAttribute('x', String(x + 8));
+			label.setAttribute('y', String(y + 4));
+			label.setAttribute('fill', '#bfe9d2');
+			label.setAttribute('font-size', '11');
+			// textContent, never innerHTML: these names come off other people's
+			// maps and a place called `<img onerror=…>` must be a silly name.
+			label.textContent = mark.n;
+			group.appendChild(label);
+		}
+
+		if (group.childNodes.length > 0) svg.appendChild(group);
+	}
+
 	private closeMetroMapOverlay(): void {
 		if (this.metroMapMarkerTimer) {
 			window.clearInterval(this.metroMapMarkerTimer);
@@ -2995,6 +3047,8 @@ export default class GameUISystem extends System {
 		};
 		updateMarker();
 		this.metroMapMarkerTimer = window.setInterval(updateMarker, 300);
+
+		this.drawFoundPlaces(svg, SVG_NS, toSvg);
 
 		svgWrap.appendChild(svg);
 		overlay.appendChild(header);

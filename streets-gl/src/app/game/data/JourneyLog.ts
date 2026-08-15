@@ -29,12 +29,20 @@ export interface JourneyLog {
 	topSpeedMs: number;
 	/** Named places found, in the order they were come across. */
 	places: string[];
+	/**
+	 * Where each was found, in world metres, so the map can show them.
+	 *
+	 * Kept alongside the names rather than replacing them: a record written by
+	 * an earlier version has names and no positions, and those finds should
+	 * still count even though they cannot be drawn.
+	 */
+	placeMarks: {n: string; x: number; z: number}[];
 }
 
 export function emptyJourney(): JourneyLog {
 	return {
 		metres: 0, drivingSeconds: 0, stations: [], lines: [], maps: [],
-		stops: 0, delivered: 0, topSpeedMs: 0, places: [],
+		stops: 0, delivered: 0, topSpeedMs: 0, places: [], placeMarks: [],
 	};
 }
 
@@ -90,10 +98,14 @@ export function addStop(
 }
 
 /** Record a named place come across. Ignores one already found. */
-export function addPlace(log: JourneyLog, name: string): JourneyLog {
+export function addPlace(log: JourneyLog, name: string, x?: number, z?: number): JourneyLog {
 	if (!name || log.places.includes(name)) return log;
 
-	return {...log, places: remember(log.places, name)};
+	const marks = Number.isFinite(x) && Number.isFinite(z)
+		? [...log.placeMarks, {n: name, x: x as number, z: z as number}].slice(-MAX_KEYS)
+		: log.placeMarks;
+
+	return {...log, places: remember(log.places, name), placeMarks: marks};
 }
 
 /** Record that a line, on a map, is being driven. */

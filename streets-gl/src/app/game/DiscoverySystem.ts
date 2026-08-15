@@ -64,7 +64,7 @@ export default class DiscoverySystem extends System {
 
 		if (!place) return;
 
-		if (journey.recordPlace(place.name)) {
+		if (journey.recordPlace(place.name, place.x, place.z)) {
 			this.sinceAnnounceS = 0;
 			this.onFind?.(describeFind(place.name, journey.snapshot().places.length));
 		}

@@ -20,6 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.38.0',
+		codename: 'Pin It on the Map',
+		date: '2026-08-15',
+		emblem: '📌🗺️',
+		summary: 'The places you find get marked on the map of the city.',
+		changes: [
+			'YOUR FINDS ON THE MAP — Open the map and the places you have found are marked in green with their names, alongside the lines and stations.',
+			'Only the ones on the map you are looking at — a place you found in London does not turn up on a map of Israel.',
+		],
+	},
+	{
 		version: '2.37.0',
 		codename: 'Inside the Cab',
 		date: '2026-08-15',
