@@ -3,9 +3,10 @@
 > STATUS: PART SHIPPED · **Line modes 2.12.0 "Bus, Tram, Train"** · **livery
 > tint 2.13.0 "Your Colours"** · **mode consists + a texture double-apply fix
 > 2.14.0 "The Right Vehicle"** · **per-mode accel/brake feel 2.15.0 "Light and
-> Heavy"** · **the bus 2.16.0 "The Bus Arrives"** · TTS announcements 2.5.0.
-> Still planned: per-MODEL physics profiles, terrain grade, ferry water routes,
-> cab overlay, flange squeal + sustained horn. Foundation for F3 and F7.
+> Heavy"** · **the bus 2.16.0 "The Bus Arrives"** · **sustained horn 2.19.0
+> "Lean On It"** · **terrain grade 2.22.0 "Uphill"** · TTS announcements 2.5.0.
+> Still planned: per-MODEL physics profiles, ferry water routes, cab overlay,
+> flange squeal. Foundation for F3 and F7.
 >
 > ### What shipped in 2.13.0 — livery tint
 >
