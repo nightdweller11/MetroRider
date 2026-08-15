@@ -3,7 +3,7 @@ import SceneSystem from '~/app/systems/SceneSystem';
 import TerrainSystem from '~/app/systems/TerrainSystem';
 import TrainSystem from '~/app/game/TrainSystem';
 import TrainMeshObject from './TrainMeshObject';
-import {buildTrainCarGeometry, buildTrackGeometry, buildStationGeometry, GeometryBuffers, AnimationData, NodeTRS} from './TrainGeometry';
+import {buildFerryGeometry, buildTrainCarGeometry, buildTrackGeometry, buildStationGeometry, GeometryBuffers, AnimationData, NodeTRS} from './TrainGeometry';
 import MathUtils from '~/lib/math/MathUtils';
 import {bearing} from '~/app/game/data/CoordinateSystem';
 import {getPositionAtDistance} from '~/app/game/data/TrackBuilder';
@@ -63,6 +63,15 @@ function isCrossOrigin(url: string): boolean {
 
 /** What runs when nothing — not the player, not the line — has an opinion. */
 const DEFAULT_CONSIST: string[] = ['procedural-default', 'procedural-default', 'procedural-default'];
+/**
+ * Slot ids the game builds itself rather than loading.
+ *
+ * A ferry has been a real line mode since 2.12.0 — read off the map, with its
+ * own speed, dwell and icon — and had nothing to run, because the catalog has
+ * no boat. Rather than wait for one to be modelled, the boat is built from the
+ * same primitives the fallback carriage is.
+ */
+const PROCEDURAL_IDS = new Set(['procedural-default', 'procedural-ferry']);
 
 export default class TrainRenderingSystem extends System {
 	/**
@@ -154,7 +163,10 @@ export default class TrainRenderingSystem extends System {
 
 		// The catalog is admin-editable, so a mode could name a model that is
 		// no longer there. Falling back beats rendering a line of grey boxes.
-		if (consist.length === 0 || !consist.every(id => assetConfig.hasTrainModel(id))) {
+		// Procedural ids are built in code and are never IN the catalog, so
+		// they have to be exempt or a ferry would fall straight back to a train.
+		if (consist.length === 0
+			|| !consist.every(id => PROCEDURAL_IDS.has(id) || assetConfig.hasTrainModel(id))) {
 			return configured;
 		}
 
@@ -236,7 +248,7 @@ export default class TrainRenderingSystem extends System {
 		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
 		const catalog = assetConfig?.getCatalog();
 
-		const allProcedural = slots.every(s => parseSlot(s).modelId === 'procedural-default');
+		const allProcedural = slots.every(s => PROCEDURAL_IDS.has(parseSlot(s).modelId));
 		if (!allProcedural && !catalog) {
 			debugLog('[TrainRenderingSystem] Catalog not loaded yet, will retry');
 			this.pendingModelRebuild = true;
@@ -244,7 +256,7 @@ export default class TrainRenderingSystem extends System {
 			return;
 		}
 
-		const uniqueIds = [...new Set(slots.map(s => parseSlot(s).modelId).filter(id => id !== 'procedural-default'))];
+		const uniqueIds = [...new Set(slots.map(s => parseSlot(s).modelId).filter(id => !PROCEDURAL_IDS.has(id)))];
 		const toLoad: {id: string; url: string}[] = [];
 		for (const id of uniqueIds) {
 			if (this.glbCache.has(id)) continue;
@@ -296,13 +308,18 @@ export default class TrainRenderingSystem extends System {
 
 		const proceduralBuf = buildTrainCarGeometry(fallbackColor);
 		const proceduralSingleCar = this.extractSingleProceduralCar(proceduralBuf);
+		// Built whole, not extracted: the carriage builder emits three cars and
+		// one is cut out of it, but a ferry is one vessel.
+		const proceduralFerry = buildFerryGeometry(fallbackColor);
 
 		const carLengths: number[] = [];
 		for (let i = 0; i < slots.length; i++) {
 			const {modelId, flipped, tint} = parseSlot(slots[i]);
 			this.carFlipped.push(flipped);
 			let buf: GeometryBuffers;
-			if (modelId === 'procedural-default') {
+			if (modelId === 'procedural-ferry') {
+				buf = proceduralFerry;
+			} else if (modelId === 'procedural-default') {
 				buf = proceduralSingleCar;
 			} else {
 				buf = this.glbCache.get(modelId) || proceduralSingleCar;

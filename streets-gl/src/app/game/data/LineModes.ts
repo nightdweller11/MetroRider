@@ -107,7 +107,7 @@ const MODES: Record<LineMode, LineModeInfo> = {
 	rapid:    {label: 'Metro',            icon: '🚇', topKmh: 90,  floorKmh: 30, dwellSec: 25, headwayMin: 5, sign: 'metro',      onTrack: true,  accelScale: 1.00, brakeScale: 1.00, consist: METRO_SET},
 	regional: {label: 'Regional train',   icon: '🚆', topKmh: 200, floorKmh: 40, dwellSec: 40, headwayMin: 30, sign: 'rail',       onTrack: true,  accelScale: 0.80, brakeScale: 0.80, consist: CITY_SET},
 	hsr:      {label: 'High-speed train', icon: '🚄', topKmh: 300, floorKmh: 60, dwellSec: 60, headwayMin: 60, sign: 'rail',       onTrack: true,  accelScale: 0.60, brakeScale: 0.65, consist: BULLET_SET},
-	ferry:    {label: 'Ferry',            icon: '⛴️', topKmh: 35,  floorKmh: 15, dwellSec: 90, headwayMin: 90, sign: 'tram',       onTrack: false, accelScale: 0.45, brakeScale: 0.45, consist: []},
+	ferry:    {label: 'Ferry',            icon: '⛴️', topKmh: 35,  floorKmh: 15, dwellSec: 90, headwayMin: 90, sign: 'tram',       onTrack: false, accelScale: 0.45, brakeScale: 0.45, consist: ['procedural-ferry']},
 	gondola:  {label: 'Cable car',        icon: '🚠', topKmh: 25,  floorKmh: 15, dwellSec: 20, headwayMin: 10, sign: 'tram',       onTrack: false, accelScale: 0.70, brakeScale: 0.90, consist: ['funicular']},
 	air:      {label: 'Air route',        icon: '✈️', topKmh: 300, floorKmh: 60, dwellSec: 60, headwayMin: 120, sign: 'rail',       onTrack: false, accelScale: 0.60, brakeScale: 0.65, consist: []},
 };

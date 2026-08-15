@@ -467,3 +467,108 @@ export function buildStationGeometry(
 		indices: new Uint32Array(indices),
 	};
 }
+
+/**
+ * A ferry, built the same way the procedural train car is.
+ *
+ * Ferry has been a real line mode since 2.12.0 — read off the map, given a
+ * speed, a dwell and an icon — and it has never had anything to run, because
+ * the asset catalog has no boat in it. So picking a ferry route put a TRAIN on
+ * the water, or nothing at all. A hull and a wheelhouse in the same primitives
+ * everything else here uses is worth more than an empty mode.
+ *
+ * Modelled bow-forward along +z, like the carriages, so the same placement
+ * code carries it.
+ */
+export function buildFerryGeometry(colorHex: string): GeometryBuffers {
+	const [r, g, b] = hexToRGB(colorHex);
+	const positions: number[] = [];
+	const normals: number[] = [];
+	const colors: number[] = [];
+	const indices: number[] = [];
+
+	const LENGTH = 34;
+	const BEAM = 9.5;
+	const HULL_H = 3.4;
+	// Sat low: a boat sits IN the water, and the line it follows is drawn at
+	// the surface, so a hull centred on the track would float above it.
+	const WATERLINE = -0.6;
+
+	const hullDark = 0.55;
+
+	// Hull, tapered by stacking three shorter boxes of narrowing beam — the
+	// primitives here are boxes, so a bow is made rather than modelled.
+	appendBox(positions, normals, colors, indices,
+		0, WATERLINE + HULL_H / 2, -4,
+		BEAM, HULL_H, LENGTH * 0.62,
+		r * hullDark, g * hullDark, b * hullDark);
+	appendBox(positions, normals, colors, indices,
+		0, WATERLINE + HULL_H / 2, LENGTH * 0.30,
+		BEAM * 0.78, HULL_H, LENGTH * 0.22,
+		r * hullDark, g * hullDark, b * hullDark);
+	appendBox(positions, normals, colors, indices,
+		0, WATERLINE + HULL_H / 2, LENGTH * 0.43,
+		BEAM * 0.42, HULL_H * 0.92, LENGTH * 0.12,
+		r * hullDark, g * hullDark, b * hullDark);
+
+	// Deck.
+	appendBox(positions, normals, colors, indices,
+		0, WATERLINE + HULL_H + 0.15, -1,
+		BEAM * 0.97, 0.3, LENGTH * 0.8,
+		0.82, 0.80, 0.75);
+
+	// Passenger cabin, in the line's colour so a ferry route reads as its own.
+	const cabinY = WATERLINE + HULL_H + 1.7;
+
+	appendBox(positions, normals, colors, indices,
+		0, cabinY, -3, BEAM * 0.74, 2.8, LENGTH * 0.44, r, g, b);
+
+	// Windows down both sides.
+	for (let i = 0; i < 6; i++) {
+		const wz = -3 - (LENGTH * 0.44) / 2 + 2.2 + i * 2.4;
+
+		for (const side of [-1, 1]) {
+			appendBox(positions, normals, colors, indices,
+				side * (BEAM * 0.37 + 0.02), cabinY + 0.35, wz,
+				0.06, 1.1, 1.5,
+				0.7, 0.85, 0.95);
+		}
+	}
+
+	// Wheelhouse, forward and higher — what makes it read as a boat rather
+	// than a shed on a raft.
+	appendBox(positions, normals, colors, indices,
+		0, cabinY + 2.4, 3.5, BEAM * 0.5, 2.0, 5.0, 0.90, 0.90, 0.88);
+	for (const side of [-1, 1]) {
+		appendBox(positions, normals, colors, indices,
+			side * (BEAM * 0.25 + 0.02), cabinY + 2.7, 3.5,
+			0.06, 1.0, 3.4, 0.7, 0.85, 0.95);
+	}
+	// Bridge front glass.
+	appendBox(positions, normals, colors, indices,
+		0, cabinY + 2.7, 3.5 + 2.5 + 0.02, BEAM * 0.44, 1.0, 0.06, 0.7, 0.85, 0.95);
+
+	// Funnel.
+	appendBox(positions, normals, colors, indices,
+		0, cabinY + 3.4, -8, 1.5, 2.6, 1.9, r * 0.8, g * 0.8, b * 0.8);
+	appendBox(positions, normals, colors, indices,
+		0, cabinY + 4.8, -8, 1.7, 0.4, 2.1, 0.16, 0.16, 0.18);
+
+	// A mast, so it has a silhouette from a distance.
+	appendBox(positions, normals, colors, indices,
+		0, cabinY + 4.2, 1.0, 0.22, 3.4, 0.22, 0.85, 0.85, 0.82);
+
+	// Railings along the open deck aft.
+	for (const side of [-1, 1]) {
+		appendBox(positions, normals, colors, indices,
+			side * BEAM * 0.47, WATERLINE + HULL_H + 0.75, -11,
+			0.12, 0.9, LENGTH * 0.28, 0.85, 0.85, 0.82);
+	}
+
+	return {
+		position: new Float32Array(positions),
+		normal: new Float32Array(normals),
+		color: new Float32Array(colors),
+		indices: new Uint32Array(indices),
+	};
+}

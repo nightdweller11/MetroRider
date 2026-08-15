@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.36.0',
+		codename: 'Cast Off',
+		date: '2026-08-15',
+		emblem: '⛴️🌊',
+		summary: 'Ferry routes run an actual boat, on water, with no railway under it.',
+		changes: [
+			'A REAL BOAT — Ferry lines have been on the map since the line modes went in, with their own speed and their own icon, and nothing to run. There is a proper ferry now: hull, deck, cabin, wheelhouse, funnel and mast.',
+			'NO TRACK ON THE WATER — A ferry route no longer lays railway along it. Boats do not run on rails.',
+			'It takes the line\'s colour, like the trains do, so a ferry route still looks like itself.',
+		],
+	},
+	{
 		version: '2.35.0',
 		codename: 'Somewhere New',
 		date: '2026-08-15',

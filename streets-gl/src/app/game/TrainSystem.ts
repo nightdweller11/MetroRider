@@ -22,7 +22,7 @@ import {
 	getMaxSpeed,
 } from './physics/TrainPhysics';
 import {InputHandler} from './physics/InputHandler';
-import {lineModeInfo} from './data/LineModes';
+import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
 import AudioSystem from './audio/AudioSystem';
@@ -191,6 +191,17 @@ export default class TrainSystem extends System {
 		const CORRIDOR_RADIUS = 10;
 
 		for (const ls of this.lines) {
+			// A ferry does not run on rails. The corridor is what makes the tile
+			// pipeline lay synthetic railway along a route, so a water route
+			// simply does not contribute to it — otherwise the boat sails up a
+			// track. `onTrack` has been declared on every line mode since 2.12.0
+			// and read by nothing until now.
+			const mode = ls.parsed.mode ?? inferLineMode(
+				ls.parsed.name, ls.track.totalLength, ls.parsed.stations.length,
+			);
+
+			if (!lineModeInfo(mode).onTrack) continue;
+
 			const points = ls.track.spline.points;
 			for (let i = 0; i < points.length - 1; i++) {
 				const [lng1, lat1] = points[i];
