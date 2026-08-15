@@ -158,6 +158,23 @@ export default class PassengerRenderingSystem extends System {
 	private animClock = 0;
 	private lastLineKey = '';
 
+	/**
+	 * One character's walk cycle, for anything that needs a single figure
+	 * rather than a crowd — the player's own avatar, above all.
+	 *
+	 * Returns the poses of the first rigged character that finished loading, or
+	 * a single static figure if none is rigged, or null if the cast has not
+	 * arrived yet. The caller is expected to cope with null and try again: these
+	 * models stream in, and the walker exists before they do.
+	 */
+	public walkCyclePoses(): PersonBuffers[] | null {
+		for (const poses of this.poseCycles.values()) {
+			if (poses.length > 0) return poses;
+		}
+
+		return this.variants.length > 0 && this.variants[0] ? [this.variants[0]] : null;
+	}
+
 	public postInit(): void {
 		// Nothing to set up: crowds are built lazily on the first update that
 		// has a line, a passenger model and a camera position to work from.

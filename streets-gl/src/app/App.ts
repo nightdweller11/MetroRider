@@ -30,6 +30,7 @@ import AudioSystem from "~/app/game/audio/AudioSystem";
 import AmbientTrainSystem from "~/app/game/AmbientTrainSystem";
 import SignalRenderingSystem from "~/app/game/limits/SignalRenderingSystem";
 import StopMarkRenderingSystem from "~/app/game/scoring/StopMarkRenderingSystem";
+import AvatarSystem from "~/app/game/AvatarSystem";
 import ServiceSystem from "~/app/game/service/ServiceSystem";
 import AnnouncementSystem from "~/app/game/audio/AnnouncementSystem";
 import AssetConfigSystem from "~/app/game/assets/AssetConfigSystem";
@@ -82,6 +83,7 @@ class App {
 				AmbientTrainSystem,
 				SignalRenderingSystem,
 				StopMarkRenderingSystem,
+				AvatarSystem,
 				ServiceSystem,
 				PassengerSystem,
 				PassengerRenderingSystem,

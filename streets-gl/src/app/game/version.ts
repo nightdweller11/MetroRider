@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.31.0',
+		codename: 'Someone to Be',
+		date: '2026-08-15',
+		emblem: '🧍🚶',
+		summary: 'When you step out you can see yourself — a real person, walking.',
+		changes: [
+			'YOU CAN SEE YOURSELF — Stepping off the train now shows you as a person, from just behind, walking around the city. Before there was nobody there at all: it was a camera floating along the ground.',
+			'The legs move as you walk and stop when you stop, and you turn to face wherever you are going.',
+			'Tap "See through my eyes" to switch to looking out of your own eyes, and tap it again to see yourself.',
+		],
+	},
+	{
 		version: '2.30.0',
 		codename: 'Step Out',
 		date: '2026-08-15',

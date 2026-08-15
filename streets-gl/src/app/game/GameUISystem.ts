@@ -1487,9 +1487,15 @@ export default class GameUISystem extends System {
 						(forward, strafe) => cam?.setWalkInput(forward, strafe),
 						(yaw, pitch) => cam?.lookWalk(yaw, pitch),
 						() => this.setCameraMode(GameCameraMode.Chase),
+						() => {
+							const third = cam?.toggleThirdPerson() ?? true;
+
+							this.walkPad?.setViewLabel(third);
+						},
 					);
 				}
 				this.walkPad?.show();
+				this.walkPad?.setViewLabel(cam?.isThirdPerson() ?? true);
 			} else {
 				this.walkPad?.hide();
 			}

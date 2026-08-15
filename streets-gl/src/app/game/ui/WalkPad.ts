@@ -37,6 +37,11 @@ const CSS = `
   background:linear-gradient(180deg,#4ea8f5,#125a9f);color:#02121f;font-weight:800;font-size:15px;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 10px 26px rgba(0,0,0,.5)}
 
+.walk-pad .view{position:absolute;right:26px;bottom:88px;pointer-events:auto;touch-action:none;
+  display:flex;align-items:center;gap:8px;padding:11px 16px;border-radius:11px;cursor:pointer;
+  font-weight:700;font-size:14px;color:#e8f0f8;
+  background:linear-gradient(180deg,#39434f,#161d25);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 8px 20px rgba(0,0,0,.5)}
 .walk-pad .hint{position:absolute;left:50%;top:22px;transform:translateX(-50%);
   padding:9px 15px;border-radius:11px;font-size:13px;font-weight:600;
   background:rgba(8,12,18,.76);box-shadow:inset 0 0 0 1px rgba(160,190,220,.2);
@@ -65,6 +70,7 @@ export default class WalkPad {
 		private readonly onMove: (forward: number, strafe: number) => void,
 		private readonly onLook: (deltaYaw: number, deltaPitch: number) => void,
 		private readonly onBack: () => void,
+		private readonly onToggleView: () => void = (): void => undefined,
 	) {
 		if (!document.getElementById(STYLE_ID)) {
 			const style = document.createElement('style');
@@ -88,6 +94,7 @@ export default class WalkPad {
 		root.innerHTML = `
 			<div class="look"></div>
 			<div class="stick"><div class="ring"></div><div class="knob"></div></div>
+			<div class="view">👁 View</div>
 			<div class="back">🚆 Back to the train</div>
 			<div class="hint">Drag to look around · use the stick to walk</div>`;
 
@@ -101,6 +108,10 @@ export default class WalkPad {
 		root.querySelector('.back')?.addEventListener('pointerdown', e => {
 			e.preventDefault();
 			this.onBack();
+		});
+		root.querySelector('.view')?.addEventListener('pointerdown', e => {
+			e.preventDefault();
+			this.onToggleView();
 		});
 
 		window.setTimeout(() => {
@@ -176,6 +187,13 @@ export default class WalkPad {
 		el.addEventListener('pointerup', release);
 		el.addEventListener('pointercancel', release);
 		window.addEventListener('blur', release);
+	}
+
+	/** Name which view the button will switch to. */
+	public setViewLabel(thirdPerson: boolean): void {
+		const el = this.root?.querySelector('.view');
+
+		if (el) el.textContent = thirdPerson ? '👁 See through my eyes' : '🚶 See myself';
 	}
 
 	/** Say how far the train is, once it is far enough to matter. */

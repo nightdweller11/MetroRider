@@ -41,6 +41,7 @@ import {AircraftPartTextures} from "~/app/render/textures/createAircraftTexture"
 import PerspectiveCamera from "~/lib/core/PerspectiveCamera";
 import TrainMaterialContainer from "~/app/render/materials/TrainMaterialContainer";
 import SignalRenderingSystem from '~/app/game/limits/SignalRenderingSystem';
+import AvatarSystem from '~/app/game/AvatarSystem';
 import StopMarkRenderingSystem from '~/app/game/scoring/StopMarkRenderingSystem';
 import TrainRenderingSystem from "~/app/game/rendering/TrainRenderingSystem";
 import {TRACK_BLEND_COLOR} from "~/app/game/rendering/TrainGeometry";
@@ -625,6 +626,11 @@ export default class GBufferPass extends Pass<{
 			...(this.manager.systemManager.getSystem(TrackSignRenderingSystem)?.signMeshes ?? []),
 			// Block signals on the adjacent line.
 			...(this.manager.systemManager.getSystem(SignalRenderingSystem)?.signalMeshes ?? []),
+			// The player's own figure, when they have stepped off the train.
+			// This pass draws an explicit LIST — a mesh added to the scene
+			// wrapper alone is never drawn, which is exactly how the avatar
+			// came to exist, be positioned, be posed, and be invisible.
+			...(this.manager.systemManager.getSystem(AvatarSystem)?.avatarMeshes ?? []),
 			...(this.manager.systemManager.getSystem(StopMarkRenderingSystem)?.markMesh
 				? [this.manager.systemManager.getSystem(StopMarkRenderingSystem).markMesh]
 				: []),

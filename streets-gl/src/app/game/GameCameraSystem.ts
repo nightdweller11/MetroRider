@@ -36,6 +36,16 @@ const WALK_NEAR = 0.4;
  * make out anyway.
  */
 const WALK_FAR = 20000;
+/**
+ * Over-the-shoulder distance behind the walker, metres.
+ *
+ * Far enough that the whole figure is in frame with room to see where it is
+ * going. At 3.6 m the camera cropped the feet, which reads as the person
+ * sinking into the ground rather than standing on it.
+ */
+const WALK_THIRD_BACK = 5.2;
+/** How high the third-person camera rides above the ground, metres. */
+const WALK_THIRD_HEIGHT = 2.7;
 
 export enum GameCameraMode {
 	Chase = 'chase',
@@ -126,6 +136,15 @@ export default class GameCameraSystem extends System {
 	private walkInput: WalkInput = {forward: 0, strafe: 0, running: false};
 	private savedNear: number | null = null;
 	private savedFar: number | null = null;
+	/**
+	 * Whether walking is seen over the walker's shoulder.
+	 *
+	 * On by default: the first build put a camera at eye height and called that
+	 * walking, so there was nobody there — from your own point of view a body is
+	 * invisible, and "walk around the city" was a floating eye. Seeing yourself
+	 * is most of the point.
+	 */
+	private walkThirdPerson = true;
 
 	/** Where Trackside is standing, in world space, until it re-plants. */
 	private tracksideX: number = 0;
@@ -308,6 +327,17 @@ export default class GameCameraSystem extends System {
 		return this.mode === GameCameraMode.Walk;
 	}
 
+	public isThirdPerson(): boolean {
+		return this.walkThirdPerson;
+	}
+
+	/** Swap between over-the-shoulder and through-your-own-eyes. */
+	public toggleThirdPerson(): boolean {
+		this.walkThirdPerson = !this.walkThirdPerson;
+
+		return this.walkThirdPerson;
+	}
+
 	public walkPosition(): WalkState | null {
 		return this.walk;
 	}
@@ -376,17 +406,32 @@ export default class GameCameraSystem extends System {
 		const eye = this.walk.groundY + EYE_HEIGHT;
 		const cosPitch = Math.cos(this.walk.pitch);
 
-		this.camera.position.set(this.walk.x, eye, this.walk.z);
+		// Well ahead of the walker, so both views aim at the same thing and
+		// switching between them does not swing the view.
+		const aim = new Vec3(
+			this.walk.x + Math.sin(this.walk.heading) * cosPitch * 20,
+			eye + Math.sin(this.walk.pitch) * 20,
+			this.walk.z - Math.cos(this.walk.heading) * cosPitch * 20,
+		);
+
+		if (this.walkThirdPerson) {
+			// Behind and a little above, so the figure sits low in frame with
+			// the street ahead of it rather than filling the screen.
+			this.camera.position.set(
+				this.walk.x - Math.sin(this.walk.heading) * WALK_THIRD_BACK,
+				this.walk.groundY + WALK_THIRD_HEIGHT,
+				this.walk.z + Math.cos(this.walk.heading) * WALK_THIRD_BACK,
+			);
+		} else {
+			this.camera.position.set(this.walk.x, eye, this.walk.z);
+		}
+
 		// position + lookAt and nothing else, exactly as the other planted views
 		// do it. Calling updateMatrix() after lookAt recomputes the matrix from
 		// position and rotation and throws the orientation lookAt just set away:
 		// the camera kept pointing wherever it already pointed, so turning did
 		// nothing at all.
-		this.camera.lookAt(new Vec3(
-			this.walk.x + Math.sin(this.walk.heading) * cosPitch,
-			eye + Math.sin(this.walk.pitch),
-			this.walk.z - Math.cos(this.walk.heading) * cosPitch,
-		), false);
+		this.camera.lookAt(aim, false);
 	}
 
 	/** What the on-screen thumbstick and keys are asking for. */
