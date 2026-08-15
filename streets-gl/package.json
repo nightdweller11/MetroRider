@@ -1,6 +1,6 @@
 {
 	"name": "streets-gl",
-	"version": "2.33.0",
+	"version": "2.34.0",
 	"description": "OpenStreetMap 3D renderer",
 	"scripts": {
 		"start": "node server/dist/index.js",

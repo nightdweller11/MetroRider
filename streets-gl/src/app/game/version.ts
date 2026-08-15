@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.34.0',
+		codename: 'Count the Stops',
+		date: '2026-08-15',
+		emblem: '🔵🟠',
+		summary: 'The strip of stops shows every stop on your line, and marks where the line makes you slow down.',
+		changes: [
+			'ONE DOT PER STOP — The strip across the top drew twelve dots no matter how many stations the line had. A line with 21 stops now shows 21, so counting how many are left works.',
+			'THE MARKER IS ON A STOP — It used to float between the dots. It now sits on the station you are heading for.',
+			'WHERE THE LINE SLOWS DOWN — The bits between stops are tinted, so you can see the slow stretches coming before you get to them.',
+			'A circle line shows a ⟳ at the end, because it has no far end to reach.',
+		],
+	},
+	{
 		version: '2.33.0',
 		codename: 'The Train in Front',
 		date: '2026-08-15',

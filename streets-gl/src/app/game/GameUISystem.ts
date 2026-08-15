@@ -28,6 +28,7 @@ import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
 import {lineBadge, lineNameWithoutCode, lineShortLabel} from './data/LineLabel';
+import {limitAt} from './limits/SpeedProfile';
 import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
 import {bakeTileGround, drawGround, type BakedTile} from './ui/MiniMapGround';
 import TileSystem from '../systems/TileSystem';
@@ -95,6 +96,8 @@ export default class GameUISystem extends System {
 	private miniHeading = 0;
 	private miniBuiltAt = -1e9;
 	private miniLineKey = '';
+	private ribbonLegsKey = '';
+	private ribbonLegsCache: {limitKmh: number}[] = [];
 	/** One baked ground plan per loaded tile, keyed 'x,y'. */
 	private bakedTiles: Map<string, BakedTile> = new Map();
 	/** What photo mode the interface is currently dressed for. */
@@ -1809,9 +1812,54 @@ export default class GameUISystem extends System {
 				?.settings.get('driveMode')?.statusValue === 'simple',
 			miniView: this.miniView,
 			heading: this.miniHeading,
+			legs: this.ribbonLegs(ls, limits),
+			isLoop: ls?.parsed.isLoop ?? false,
 		});
 
 		this.updateMiniMap(trainSystem);
+	}
+
+	/**
+	 * The speed permitted on each leg of the line, for the ribbon's ticks.
+	 *
+	 * Cached per line: it depends only on the track geometry, and working it
+	 * out for every leg of an 87 km route on every frame would be real work for
+	 * a strip 460 pixels wide.
+	 */
+	private ribbonLegs(
+		ls: {parsed: {id: string}; realStationDists: number[]} | null | undefined,
+		limits: SpeedLimitSystem | undefined,
+	): {limitKmh: number}[] {
+		if (!ls || !limits) return [];
+
+		const key = `${ls.parsed.id}::${limits.getSegments().length}`;
+
+		if (key === this.ribbonLegsKey) return this.ribbonLegsCache;
+
+		const stops = ls.realStationDists ?? [];
+		const segments = limits.getSegments();
+		const fallback = limits.lineCeiling || 25;
+		const legs: {limitKmh: number}[] = [];
+
+		for (let i = 1; i < stops.length; i++) {
+			// The SLOWEST limit anywhere on the leg, sampled along it: the
+			// average of a leg that is fast either side of a tight curve hides
+			// the curve, which is the one thing worth marking.
+			let slowest = Infinity;
+
+			for (let t = 0; t <= 8; t++) {
+				const at = stops[i - 1] + ((stops[i] - stops[i - 1]) * t) / 8;
+
+				slowest = Math.min(slowest, limitAt(segments, at, fallback));
+			}
+
+			legs.push({limitKmh: Math.round((Number.isFinite(slowest) ? slowest : fallback) * 3.6)});
+		}
+
+		this.ribbonLegsKey = key;
+		this.ribbonLegsCache = legs;
+
+		return legs;
 	}
 
 	/**

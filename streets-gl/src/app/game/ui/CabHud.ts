@@ -22,6 +22,7 @@
  */
 
 import {describeSpan, type MiniMapView} from './MiniMap';
+import {buildRibbon, type RibbonLeg} from './RouteRibbon';
 
 export interface CabHudState {
 	speedKmh: number;
@@ -47,6 +48,10 @@ export interface CabHudState {
 	miniView?: MiniMapView;
 	/** Which way the train is pointing, degrees clockwise from north. */
 	heading?: number;
+	/** Speed permitted on each leg of the line, km/h — for the ribbon's ticks. */
+	legs?: RibbonLeg[];
+	/** A circle line has no end, and the strip says so. */
+	isLoop?: boolean;
 	doorsOpen: boolean;
 	/** Simple driving: bigger targets and a calmer console. */
 	simpleMode: boolean;
@@ -114,6 +119,16 @@ const CSS = `
 .cab-rib{display:flex;align-items:center;padding:9px 14px;border-radius:999px}
 .cab-rib .sg{flex:1;height:3px;background:rgba(255,255,255,.13)}
 .cab-rib .sg.on{background:linear-gradient(90deg,#1a6bbd,var(--accent));box-shadow:0 0 9px rgba(87,182,255,.5)}
+/* How fast the line lets you go on each leg, RELATIVE to its own best —
+   60 km/h is flat out on a tram route and a crawl on a main line. */
+.cab-rib .sg.slow{background:rgba(255,120,70,.5)}
+.cab-rib .sg.medium{background:rgba(255,180,58,.34)}
+.cab-rib .sg.slow.on{background:linear-gradient(90deg,#8a3a18,#ff8a5c)}
+.cab-rib .sg.medium.on{background:linear-gradient(90deg,#8a6a18,#ffc35c)}
+.cab-rib .loop{margin-left:7px;font-family:var(--tech);font-size:13px;color:var(--ink-2)}
+/* Too many stations to draw one dot each: the strip is a proportion now, and
+   saying so is better than letting it be miscounted. */
+.cab-rib .more{margin-left:7px;font-family:var(--tech);font-size:9px;letter-spacing:.1em;color:var(--ink-3)}
 .cab-rib .st{width:8px;height:8px;border-radius:50%;background:#b9c9d9;margin:0 -3px;box-shadow:0 0 0 2px #0c1219}
 .cab-rib .st.now{width:14px;height:14px;background:radial-gradient(circle at 50% 35%,#ffd489,var(--amber));
   box-shadow:0 0 0 3px #0c1219,0 0 14px rgba(255,180,58,.9)}
@@ -304,7 +319,7 @@ export default class CabHud {
 	private lampLimit: HTMLElement | null = null;
 	private leverFill: HTMLElement | null = null;
 	private brakeFill: HTMLElement | null = null;
-	private lastRibbonStops = -1;
+	private lastRibbonKey = '';
 	private lastOrientation = '';
 	private onResize: (() => void) | null = null;
 	/** Where the master controller handle is sitting. Starts at neutral. */
@@ -767,28 +782,34 @@ export default class CabHud {
 	private renderRibbon(s: CabHudState): void {
 		if (!this.ribbonEl) return;
 
-		const stops = Math.max(2, Math.min(s.stopCount, 12));
+		const view = buildRibbon(s.stopCount, s.stopIndex, s.legs ?? []);
+		// The shape changes with the line, and the pace bands with it, so the
+		// key covers both rather than the dot count alone.
+		const key = `${view.dots}|${view.legPace.join('')}|${s.isLoop ? 'o' : ''}|${view.compressed ? 'c' : ''}`;
 
-		// Rebuilt only when the shape changes; the marker moves by class alone.
-		if (stops !== this.lastRibbonStops) {
-			this.lastRibbonStops = stops;
+		if (key !== this.lastRibbonKey) {
+			this.lastRibbonKey = key;
 
 			let html = '';
 
-			for (let i = 0; i < stops; i++) {
-				if (i > 0) html += '<span class="sg"></span>';
+			for (let i = 0; i < view.dots; i++) {
+				if (i > 0) html += `<span class="sg ${view.legPace[i - 1] ?? ''}"></span>`;
 				html += '<span class="st"></span>';
 			}
+
+			// A circle line has no far end to reach, which the strip should not
+			// imply by simply stopping.
+			if (s.isLoop) html += '<span class="loop">⟳</span>';
+			else if (view.compressed) html += `<span class="more">${s.stopCount} STOPS</span>`;
 
 			this.ribbonEl.innerHTML = html;
 		}
 
 		const dots = this.ribbonEl.querySelectorAll('.st');
 		const segs = this.ribbonEl.querySelectorAll('.sg');
-		const here = Math.round(s.progress * (stops - 1));
 
-		dots.forEach((d, i) => d.classList.toggle('now', i === here));
-		segs.forEach((g, i) => g.classList.toggle('on', i < here));
+		dots.forEach((d, i) => d.classList.toggle('now', i === view.here));
+		segs.forEach((g, i) => g.classList.toggle('on', i < view.here));
 	}
 
 	public dispose(): void {
