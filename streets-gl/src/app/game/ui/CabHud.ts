@@ -12,7 +12,7 @@
  *   - a console the controls sit in, rather than buttons floating over the
  *     scene;
  *   - cab tell-tales that light;
- *   - a minimap of the route with your position on it.
+ *   - a minimap of the ground around the train, north up.
  *
  * Layout comes from a stylesheet with real breakpoints — landscape puts the
  * console in the bottom corner where a thumb rests, portrait gives it a band
@@ -20,6 +20,8 @@
  *
  * Design + mocks: `docs/features/ui-2.1/`.
  */
+
+import {describeSpan, type MiniMapView} from './MiniMap';
 
 export interface CabHudState {
 	speedKmh: number;
@@ -33,8 +35,18 @@ export interface CabHudState {
 	progress: number;
 	stopCount: number;
 	stopIndex: number;
-	/** Route shape in 0..1 space, for the minimap. Empty falls back to a line. */
-	routePoints?: [number, number][];
+	/**
+	 * What is around the train, already projected into the minimap's viewBox.
+	 *
+	 * Absent means the caller has nothing to show yet and the map draws its
+	 * "no map" state — NOT a decorative placeholder. The panel used to render a
+	 * fixed diagonal with five dots whenever real geometry was missing, which is
+	 * exactly what it did on every line in every city, because the geometry was
+	 * never passed in at all.
+	 */
+	miniView?: MiniMapView;
+	/** Which way the train is pointing, degrees clockwise from north. */
+	heading?: number;
 	doorsOpen: boolean;
 	/** Simple driving: bigger targets and a calmer console. */
 	simpleMode: boolean;
@@ -86,8 +98,11 @@ const CSS = `
 .cab-mini .plot{position:relative;flex:1;background:linear-gradient(180deg,#080d13,#050a0f);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.05),inset 0 0 18px rgba(0,0,0,.8)}
 .cab-mini .plot svg{position:absolute;inset:0;width:100%;height:100%}
-.cab-mini .you{position:absolute;width:11px;height:11px;border-radius:50%;transform:translate(-50%,-50%);
-  background:radial-gradient(circle at 50% 35%,#ffe6b0,var(--amber));box-shadow:0 0 0 3px rgba(255,180,58,.22),0 0 15px rgba(255,180,58,.95)}
+/* A wedge, not a dot: the map is north-up and does not turn, so the marker is
+   the only thing that can say which way the train is facing. */
+.cab-mini .you{position:absolute;width:0;height:0;transform:translate(-50%,-50%);
+  border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:13px solid var(--amber);
+  filter:drop-shadow(0 0 6px rgba(255,180,58,.95))}
 .cab-mini .foot{padding:6px 10px 8px;font-family:var(--tech);font-size:10px;letter-spacing:.08em;color:var(--ink-2)}
 
 /* console */
@@ -149,7 +164,11 @@ const CSS = `
 .cab[data-o="land"] .cab-rib{left:20px;top:76px;width:min(460px,36%)}
 .cab[data-o="land"] .cab-util{right:20px;top:20px}
 .cab[data-o="land"] .cab-con{right:20px;bottom:20px}
-.cab[data-o="land"] .cab-mini{left:20px;bottom:20px;width:200px;height:172px}
+/* Under the ribbon in the left-hand column, NOT the bottom-left corner. The
+   engine's own control cluster (time of day among them) lives down there and
+   occupies about 323x200 of it, so a map anchored to the bottom sat straight on
+   top of the time control and swallowed its clicks. */
+.cab[data-o="land"] .cab-mini{left:20px;top:120px;width:200px;height:172px}
 
 /* ---- portrait: board and ribbon across the top, console across the bottom ---- */
 .cab[data-o="port"] .cab-dest{left:18px;right:18px;top:18px}
@@ -221,6 +240,7 @@ export default class CabHud {
 	private brakeFill: HTMLElement | null = null;
 	private lastRibbonStops = -1;
 	private lastOrientation = '';
+	private onResize: (() => void) | null = null;
 
 	public constructor(
 		private readonly parent: HTMLElement,
@@ -307,6 +327,28 @@ export default class CabHud {
 			window.addEventListener('blur', up);
 		}
 
+		// EVERY panel's position comes from a `.cab[data-o="…"]` rule, so the
+		// attribute has to exist before the element is on screen. It used to be
+		// written only inside `update()`, which meant that until the first frame
+		// of a RUNNING game not one rule matched: `.cab-dest`, `.cab-rib`,
+		// `.cab-util`, `.cab-con` and `.cab-mini` are all `position:absolute`
+		// with no offsets of their own, so they stacked in the top-left corner,
+		// on top of each other and on top of the time-of-day control underneath.
+		// The whole interface was unclickable before you started driving.
+		root.dataset.o = this.orientation();
+		this.lastOrientation = root.dataset.o;
+
+		// Hidden until the game says otherwise. The HUD is built during startup,
+		// long before anybody is driving; showing it over the start screen put a
+		// cab console on top of the menu.
+		root.style.display = 'none';
+
+		// Turning a phone changes which layout applies, and a paused game gets no
+		// frames to notice it in.
+		this.onResize = (): void => { this.applyOrientation(); };
+		window.addEventListener('resize', this.onResize);
+		window.addEventListener('orientationchange', this.onResize);
+
 		this.parent.appendChild(root);
 		this.root = root;
 		this.dialEl = root.querySelector('.cab-dial');
@@ -332,19 +374,32 @@ export default class CabHud {
 		return w >= h ? 'land' : 'port';
 	}
 
+	/** Put the layout the viewport currently calls for onto the root. */
+	private applyOrientation(): string {
+		const o = this.orientation();
+
+		if (this.root && o !== this.lastOrientation) {
+			this.lastOrientation = o;
+			this.root.dataset.o = o;
+		}
+
+		return o;
+	}
+
 	public setVisible(visible: boolean): void {
-		if (this.root) this.root.style.display = visible ? '' : 'none';
+		if (!this.root) return;
+
+		// Re-assert the layout on the way in: the window may have been resized
+		// while the console was put away.
+		if (visible) this.applyOrientation();
+
+		this.root.style.display = visible ? '' : 'none';
 	}
 
 	public update(s: CabHudState): void {
 		if (!this.root) return;
 
-		const o = this.orientation();
-
-		if (o !== this.lastOrientation) {
-			this.lastOrientation = o;
-			this.root.dataset.o = o;
-		}
+		const o = this.applyOrientation();
 
 		this.renderDial(s, o);
 
@@ -359,11 +414,14 @@ export default class CabHud {
 
 		this.renderMiniRoute(s);
 
+		// The map moves under the train, so the train is always the middle of it.
+		// It used to slide along a fixed diagonal by percentage-of-route, which
+		// is why it drifted across the panel independently of the drawn line.
 		if (this.miniYou) {
-			this.miniYou.style.left = `${(6 + s.progress * 88).toFixed(1)}%`;
-			this.miniYou.style.top = `${(84 - s.progress * 68).toFixed(1)}%`;
+			this.miniYou.style.left = '50%';
+			this.miniYou.style.top = '50%';
+			this.miniYou.style.transform = `translate(-50%,-50%) rotate(${(s.heading ?? 0).toFixed(0)}deg)`;
 		}
-		if (this.miniFoot) this.miniFoot.textContent = s.stationName.toUpperCase();
 
 		const cap = this.root.querySelector('.cab-mini .micro');
 
@@ -456,23 +514,47 @@ export default class CabHud {
 
 		if (!svg) return;
 
-		const pts = s.routePoints && s.routePoints.length > 1
-			? s.routePoints
-			: [[8, 84], [30, 66], [52, 50], [74, 32], [92, 16]] as [number, number][];
+		const view = s.miniView;
 
-		if (svg.dataset.n === String(pts.length) && svg.dataset.k === s.lineName) return;
+		if (!view || view.paths.length === 0) {
+			// Say so rather than drawing something. A placeholder that looks like
+			// a route is worse than an empty panel: it cannot be told apart from
+			// a real one, which is how a decorative diagonal survived in here for
+			// nine releases.
+			if (svg.dataset.k !== 'empty') {
+				svg.dataset.k = 'empty';
+				svg.innerHTML = '';
+			}
 
-		svg.dataset.n = String(pts.length);
-		svg.dataset.k = s.lineName;
+			if (this.miniFoot) this.miniFoot.textContent = 'NO MAP YET';
 
-		const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
-		const cut = Math.max(1, Math.round(pts.length * s.progress));
-		const done = pts.slice(0, cut + 1).map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
+			return;
+		}
 
-		svg.innerHTML =
-			`<path d="${d}" stroke="rgba(255,255,255,.15)" stroke-width="3.2" fill="none" stroke-linecap="round"/>` +
-			`<path d="${done}" stroke="#57b6ff" stroke-width="3.2" fill="none" stroke-linecap="round"/>` +
-			pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.4" fill="#c2d2e2"/>`).join('');
+		// Rebuilt only when the picture actually changed. The caller throttles by
+		// distance travelled, so this is a cheap second guard rather than the
+		// main one.
+		const key = `${view.paths.map(p => p.d.length).join(',')}|${view.stations.length}|${Math.round(s.heading ?? 0)}`;
+
+		if (svg.dataset.k === key) return;
+
+		svg.dataset.k = key;
+
+		const lines = view.paths.map(p => {
+			const width = p.current ? 3.4 : 2;
+			const opacity = p.current ? 1 : 0.45;
+
+			return `<path d="${p.d}" stroke="${p.color}" stroke-width="${width}" stroke-opacity="${opacity}"`
+				+ ' fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+		}).join('');
+
+		const stations = view.stations
+			.map(st => `<circle cx="${st.x}" cy="${st.y}" r="1.9" fill="#0b1017" stroke="#c2d2e2" stroke-width="1"/>`)
+			.join('');
+
+		svg.innerHTML = lines + stations;
+
+		if (this.miniFoot) this.miniFoot.textContent = describeSpan(view.spanM).toUpperCase();
 	}
 
 	private renderRibbon(s: CabHudState): void {
@@ -503,6 +585,11 @@ export default class CabHud {
 	}
 
 	public dispose(): void {
+		if (this.onResize) {
+			window.removeEventListener('resize', this.onResize);
+			window.removeEventListener('orientationchange', this.onResize);
+			this.onResize = null;
+		}
 		this.root?.remove();
 		this.root = null;
 	}

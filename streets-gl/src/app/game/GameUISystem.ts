@@ -22,6 +22,9 @@ import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
+import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
+import {getPositionAtDistance} from './data/TrackBuilder';
+import MathUtils from '~/lib/math/MathUtils';
 
 /**
  * When the countdown to the stop mark appears — as SECONDS of running, not
@@ -36,6 +39,15 @@ import {parseRideLink, buildRideLink} from './data/ShareLink';
  */
 const STOP_MARK_READOUT_S = 20;
 const STOP_MARK_READOUT_FLOOR_M = 250;
+/**
+ * How much ground the corner map covers, metres across.
+ *
+ * Two kilometres holds the next couple of stops on a metro and enough of a
+ * regional line to see where the route is going, without collapsing a city into
+ * a smudge. Fixed rather than zoomed by speed: a map whose scale keeps changing
+ * is one you have to re-read every time you look at it.
+ */
+const MINI_SPAN_M = 2000;
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -65,6 +77,13 @@ export default class GameUISystem extends System {
 	private lineListExpanded: boolean = true;
 	private cabHud: CabHud | null = null;
 	private cabSheet: CabSheet | null = null;
+	/** Every line on the map, projected to metres once and reused. */
+	private miniLines: MiniMapLineInput[] = [];
+	private miniStations: MiniMapPoint[] = [];
+	private miniView: MiniMapView | undefined = undefined;
+	private miniHeading = 0;
+	private miniBuiltAt = -1e9;
+	private miniLineKey = '';
 	/** What photo mode the interface is currently dressed for. */
 	private photoModeApplied: boolean = false;
 	private stationPanelEl: HTMLElement | null = null;
@@ -1526,7 +1545,73 @@ export default class GameUISystem extends System {
 			lineName: ls?.parsed.id ?? 'LINE',
 			simpleMode: this.systemManager.getSystem(SettingsSystem)
 				?.settings.get('driveMode')?.statusValue === 'simple',
+			miniView: this.miniView,
+			heading: this.miniHeading,
 		});
+
+		this.updateMiniMap(trainSystem);
+	}
+
+	/**
+	 * The ground around the train, for the corner map.
+	 *
+	 * Rebuilt on distance travelled rather than every frame. Projecting every
+	 * point of every line on a 26-line map is thousands of coordinates, and at
+	 * 60 Hz that is real work for a 200-pixel panel that cannot show the
+	 * difference — 40 m of movement is under two pixels on a 2 km window.
+	 */
+	private updateMiniMap(trainSystem: TrainSystem): void {
+		const ls = trainSystem.getCurrentLine();
+
+		if (!ls) return;
+
+		const dist = trainSystem.physicsState.trainDist;
+
+		if (this.miniLineKey === `${trainSystem.mapGeneration}` && Math.abs(dist - this.miniBuiltAt) < 40) return;
+
+		// Project once per map: the geometry does not move, only the window over
+		// it does. Re-projecting 26 lines on every rebuild was the whole cost.
+		if (this.miniLineKey !== `${trainSystem.mapGeneration}`) {
+			this.miniLineKey = `${trainSystem.mapGeneration}`;
+			this.miniLines = trainSystem.lines.map(line => ({
+				points: line.parsed.allPoints.map((p: {lat: number; lng: number}) => {
+					const m = MathUtils.degrees2meters(p.lat, p.lng);
+
+					return {x: m.x, y: m.y};
+				}),
+				color: line.parsed.color || '#8aa',
+				isCurrent: false,
+			}));
+			this.miniStations = trainSystem.lines.flatMap(line =>
+				line.parsed.stations.map((st: {lat: number; lng: number}) => {
+					const m = MathUtils.degrees2meters(st.lat, st.lng);
+
+					return {x: m.x, y: m.y};
+				}));
+		}
+
+		this.miniBuiltAt = dist;
+
+		const pts = ls.track.spline.points;
+		const here = getPositionAtDistance(pts, ls.track.cumDist, dist);
+		const ahead = getPositionAtDistance(
+			pts, ls.track.cumDist, dist + 40 * (trainSystem.physicsState.direction || 1),
+		);
+
+		const centreM = MathUtils.degrees2meters(here.lat, here.lng);
+		const centre = {x: centreM.x, y: centreM.y};
+		const aheadM = MathUtils.degrees2meters(ahead.lat, ahead.lng);
+
+		// Clockwise from north, which is what rotating an up-pointing wedge wants.
+		if (aheadM.x !== centreM.x || aheadM.y !== centreM.y) {
+			this.miniHeading = Math.atan2(aheadM.x - centreM.x, aheadM.y - centreM.y) * 180 / Math.PI;
+		}
+
+		const current = trainSystem.currentLineIdx;
+
+		this.miniLines.forEach((line, i) => { line.isCurrent = i === current; });
+
+		this.miniView = buildMiniMapView(this.miniLines, this.miniStations, centre, MINI_SPAN_M);
 	}
 
 	private applyLineListVisibility(): void {

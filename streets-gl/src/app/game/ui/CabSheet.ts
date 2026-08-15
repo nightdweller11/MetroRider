@@ -15,7 +15,14 @@
 const STYLE_ID = 'cab-sheet-style';
 
 const CSS = `
-.cab-sheet{position:fixed;display:flex;flex-direction:column;overflow:hidden;z-index:50;
+/* pointer-events MUST be restored here. The sheet is mounted inside the
+   game HUD container, which is pointer-events:none so the world can be
+   dragged through it — every real control inside it has to opt back in. Without
+   this line the panel painted correctly and was completely dead: the menu
+   opened (its button is a .cab-btn, which does opt in) and then not one row
+   inside it could be clicked. That is the "I can't click on anything" report —
+   Pick a line, Camera, Settings, Timetable and every other sheet at once. */
+.cab-sheet{position:fixed;display:flex;flex-direction:column;overflow:hidden;z-index:50;pointer-events:auto;
   background:linear-gradient(180deg,#212a35,#0e141a);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 0 0 1px rgba(120,150,180,.16),0 22px 50px rgba(0,0,0,.6);
   font-family:ui-rounded,"SF Pro Rounded",-apple-system,system-ui,sans-serif;color:#e8f0f8;

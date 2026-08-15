@@ -294,7 +294,8 @@ describe('badges', () => {
 	const baseRun = (over: Partial<RunResult> = {}): RunResult => ({
 		mapId: 'm', lineId: 'l', lineName: 'Line', stops: [stopResult()], stationCount: 3,
 		totalPoints: 175, averagePoints: 175, perfectStops: 1, passengersDelivered: 10,
-		passengersLeftBehind: 0, durationMs: 1000, completedLine: false, summary: '', ...over,
+		passengersLeftBehind: 0, durationMs: 1000, completedLine: false, summary: '',
+		punctualityPercent: null, punctualityBonus: 0, ...over,
 	});
 
 	it('awards a perfect-stop badge', () => {

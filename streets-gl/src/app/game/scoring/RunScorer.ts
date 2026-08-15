@@ -1,4 +1,7 @@
 import {StopResult} from './StopScorer';
+import {
+	arrivalMark, describePunctuality, lateArrivals, punctualityBonus, punctualityPercent,
+} from '../service/Punctuality';
 
 /**
  * A run = the stops made since the line was picked, aggregated into one score
@@ -25,6 +28,13 @@ export interface RunResult {
 	durationMs: number;
 	completedLine: boolean;
 	summary: string;
+	/**
+	 * How well the timetable was kept, as a percentage — `null` when nothing on
+	 * this run had a scheduled time to be kept to.
+	 */
+	punctualityPercent: number | null;
+	/** Points earned for keeping it. Always a bonus, never a deduction. */
+	punctualityBonus: number;
 }
 
 export interface RunContext {
@@ -84,10 +94,21 @@ export class RunScorer {
 		now: number,
 		passengers: {delivered: number; leftBehind: number},
 		completedLine: boolean,
+		/**
+		 * How late each scored stop was, in the order they were made. `null` for
+		 * a stop with no schedule — dropped from the average rather than counted
+		 * as a failure.
+		 */
+		lateness: (number | null)[] = [],
 	): RunResult | null {
 		if (!this.context || this.stops.length === 0) return null;
 
-		const totalPoints = this.getTotalPoints();
+		const marks = lateness.map(arrivalMark);
+		const timed = marks.filter(m => m !== null).length;
+		const percent = punctualityPercent(marks);
+		const bonus = punctualityBonus(percent, timed);
+
+		const totalPoints = this.getTotalPoints() + bonus;
 		const perfect = this.stops.filter(s => s.verdict === 'perfect').length;
 		const average = Math.round(totalPoints / this.stops.length);
 
@@ -104,7 +125,12 @@ export class RunScorer {
 			passengersLeftBehind: passengers.leftBehind,
 			durationMs: Math.max(0, now - this.startedAt),
 			completedLine,
-			summary: buildSummary(this.stops, perfect, passengers, completedLine),
+			punctualityPercent: percent,
+			punctualityBonus: bonus,
+			summary: buildSummary(
+				this.stops, perfect, passengers, completedLine,
+				describePunctuality(percent, lateArrivals(lateness)),
+			),
 		};
 
 		this.context = null;
@@ -126,6 +152,7 @@ function buildSummary(
 	perfect: number,
 	passengers: {delivered: number; leftBehind: number},
 	completedLine: boolean,
+	punctuality: string,
 ): string {
 	const scored = stops.filter(s => s.verdict !== 'passed').length;
 	const missed = stops.length - scored;
@@ -134,6 +161,7 @@ function buildSummary(
 	parts.push(`${scored} stop${scored === 1 ? '' : 's'} made`);
 	if (perfect > 0) parts.push(`${perfect} perfect`);
 	if (missed > 0) parts.push(`${missed} rolled through`);
+	if (punctuality) parts.push(punctuality);
 	if (passengers.delivered > 0) parts.push(`${passengers.delivered} passengers delivered`);
 	if (passengers.leftBehind > 0) parts.push(`${passengers.leftBehind} left waiting`);
 
@@ -165,6 +193,10 @@ export function badgesForRun(run: RunResult, hourOfDay: number): Badge[] {
 	}
 	if (run.stops.length > 0 && run.stops.every(s => s.smoothness === 'smooth')) {
 		badges.push({id: 'smooth-operator', label: '☕ Smooth operator', description: 'Nobody spilled their coffee'});
+	}
+	// Three stops, because keeping time over one is not keeping time.
+	if (run.punctualityPercent === 100 && run.stops.length >= 3) {
+		badges.push({id: 'right-time', label: '⏱️ Right time', description: 'Every stop made on schedule'});
 	}
 	if (run.passengersDelivered >= 100) {
 		badges.push({id: 'busy-service', label: '👥 Busy service', description: 'Delivered 100 passengers in one run'});

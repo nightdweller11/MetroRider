@@ -43,6 +43,21 @@ export default class ServiceSystem extends System {
 		return this.actuals.get(stationIndex);
 	}
 
+	/**
+	 * How late the train actually was into a station, in seconds.
+	 *
+	 * `null` when the stop was never timed — either it has no scheduled time or
+	 * the train has not arrived yet. The scorer treats that as an unknown and
+	 * drops it, rather than marking a driver down for the game's missing data.
+	 */
+	public latenessAtStation(stationIndex: number): number | null {
+		const actual = this.actuals.get(stationIndex);
+
+		if (actual === undefined) return null;
+
+		return latenessSeconds(stopFor(this.stops, stationIndex), actual);
+	}
+
 	/** Lateness at the stop coming up, in seconds, against the world clock now. */
 	public currentLateness(): number | null {
 		const trainSystem = this.systemManager.getSystem(TrainSystem);

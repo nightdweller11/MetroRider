@@ -1,8 +1,7 @@
 # MetroRider Feature Program — Master Checklist
 
 > One checklist for the whole program. Each section = one feature doc
-> (01–10 in this folder). Work top-to-bottom within a section; sections list
-> their dependencies. Every item ends with the doc's testing gate:
+> (01–10 in this folder). Every item ends with the doc's testing gate:
 > **unit tests green → local browser validation → deploy → production
 > validation → changelog entry** (the release process from `version.ts`).
 >
@@ -12,214 +11,245 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.22.0 "Uphill"** — 43 releases. Every row
-below reflects what is DEPLOYED, not what is merged.
+**Live on metrorider.net: v2.23.0 "Hands On"** — 44 releases. Every row below
+reflects what is DEPLOYED, not what is merged.
+
+### The interface was unusable, 2026-08-15
+
+Reported by the operator, reproduced, and fixed in v2.23.0. Worth recording
+because none of it was visible to any automated check, and because the audit
+below had just declared several of these surfaces shipped:
+
+- **Not one sheet row could be clicked.** `.cab-sheet` is mounted inside
+  `#game-hud`, which is `pointer-events:none` so the world can be dragged
+  through it. Every control inside has to opt back in and the sheet never
+  did — so Pick a line, Camera, Settings, Timetable, About this line, Drive
+  another map and Copy a link were all dead at once. The menu itself opened,
+  because its button is a `.cab-btn`, which does opt in. That is why it read
+  as "clicking Pick a line does nothing" rather than "the menu is broken".
+- **Every panel piled into the top-left corner until the first frame of a
+  running game.** All cab layout comes from `.cab[data-o="land|port|phone"]`
+  rules, and `data-o` was only ever written inside `update()`. Before that
+  ran, no rule matched and five `position:absolute` panels with no offsets
+  stacked at (0,0) — over the engine's own controls. Now set at mount, on
+  resize, and on show.
+- **The HUD was visible before the game started**, over the start screen.
+  Now hidden until `showGameUI()`.
+- **The minimap had never drawn a real map.** It renders `routePoints`, which
+  no caller ever passed, so it fell back to a hard-coded diagonal with five
+  evenly spaced dots — the same picture on every line in every city. Replaced
+  with real geometry, and the placeholder is gone: with nothing to draw it now
+  says so.
+- **The minimap sat on top of the time-of-day control**, which owns the
+  bottom-left along with the rest of the engine's cluster (323×200). Moved
+  into the left column under the ribbon.
+
+The lesson for this checklist: **a row may only be ticked once the surface has
+been driven by hand.** Several of the above were ticked on code that existed
+and was wired but had never been clicked.
+
+### Checklist audit, 2026-08-15
+
+This file was re-read against the source before this run and was wrong in
+**both** directions. Corrections, so the record is straight:
+
+- **F8 claimed Walk mode was built.** It is not. The camera enum is
+  Chase/Cab/Orbit/Ride/**Trackside**/Photo/Free — Trackside was built and
+  Walk never was, and the row had been ticked for the wrong one.
+- **F8 claimed Simple/Advanced score-drain suppression was NOT wired.** It
+  is — `ScoringSystem.finishRun` reads `driveMode` and zeroes both overspeed
+  counters in Simple.
+- **F3's ">25% overspeed penalty brake" was listed as outstanding work.** It
+  was built, then deliberately REMOVED, and the reason is recorded in
+  `SpeedLimitSystem`: cutting traction takes the decision away from the
+  player and makes the sign pointless. It is a closed decision, not a TODO.
+  `SpeedState` also already exists (`ok`/`near`/`over`).
+- **F5's "left-behind note" was listed as outstanding.** The run summary
+  carries both delivered and left-behind, and there is a delivery badge. Only
+  a points *component* is missing.
 
 | Feature | State |
 |---|---|
-| **F1 Profiles & scores** | **SHIPPED** — and the Railway volume is attached with `DATA_DIR=/data`, persistence PROVEN across a real container replacement (an earlier doc claiming otherwise was stale) |
-| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance-to-mark readout v2.17.0, stop marker v2.18.0. Replay/ghost still outstanding |
-| **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside speed boards, country-correct signage |
-| **F4 Timetables** | **SHIPPED v2.7.0 "The 08:06"** — due times from the line's real speed profile, punctuality read, follows a reversal |
-| **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms |
-| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, livery tint v2.13.0, mode consists + texture fixes v2.14.0/v2.16.0, per-mode accel/brake feel v2.15.0, TTS announcements v2.5.0. terrain grade v2.22.0. Per-MODEL physics, ferry water, cab overlay, flange squeal outstanding |
-| **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI, dispatch spacing and SPAD outstanding |
-| **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo mode saves the photo v2.10.0, Simple/Advanced driving v2.2.0. Walk mode outstanding |
-| **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, corrected to the map's own local solar time v2.20.0. Weather and seasons deliberately deferred: overcast is a change to the atmosphere LUT chain and its UBO layout, not a setting |
-| **F10 City & discovery** | **PART SHIPPED** — world tour / drive any map from inside the game v2.8.0, line facts v2.6.0, share links v2.21.0. Landmarks, discovery toasts and city stats outstanding |
+| **F1 Profiles & scores** | **SHIPPED** — Railway volume attached with `DATA_DIR=/data`, persistence PROVEN across a real container replacement |
+| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance readout v2.17.0, stop marker v2.18.0. Replay/ghost outstanding |
+| **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside boards, country-correct signage. Ribbon limit ticks outstanding |
+| **F4 Timetables** | **PART SHIPPED v2.7.0** — due times from the line's real speed profile, punctuality read, follows a reversal. Service picker + punctuality SCORING outstanding |
+| **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms. Interchange surfacing outstanding |
+| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, tint v2.13.0, consists v2.14.0/v2.16.0, feel v2.15.0, TTS v2.5.0, grade v2.22.0. Ferry water, cab overlay, flange squeal outstanding |
+| **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI and SPAD outstanding |
+| **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo save v2.10.0, Simple/Advanced v2.2.0 incl. drain suppression. Walk mode outstanding |
+| **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, map-local solar time v2.20.0. Weather DEFERRED by agreement |
+| **F10 City & discovery** | **PART SHIPPED** — world tour v2.8.0, line facts v2.6.0, share links v2.21.0. Landmarks, discovery and city stats outstanding |
 
-The interface was rebuilt in v2.1.0–v2.3.0 (`docs/features/ui-2.1/`), which is
-where most of the per-feature UI actually landed.
+---
 
-## Suggested build order
+## The plan for this run
 
-1. **F1 Profiles & scores** (foundation — everything persistent needs it)
-2. **F6 Line modes & vehicles** (foundation — feeds limits, AI, passengers)
-3. **F2 Driving score** + **F3 Speed limits** (the game gets a point)
-4. **F4 Timetables** + **F5 Passengers** (the world gets purpose)
-5. **F7 AI traffic & signals** (the world gets alive)
-6. **F8 Cameras & exploration**, **F9 Atmosphere**, **F10 Discovery**
-   (independent; can interleave anywhere after F1)
+Ordered by what a nine-year-old notices, then by what the code can carry.
+Each is one release, shipped and verified on production before the next
+starts.
+
+| # | Release | Closes |
+|---|---|---|
+| 1 | ~~**Punctuality scoring**~~ — SHIPPED v2.23.0, with the interface fixes | F4, F2 hook |
+| 2 | **Service picker** — "Drive the 09:12" instead of always departing now | F4 |
+| 3 | **Walk mode** — step out of the train and walk around the city | F8 |
+| 4 | **City stats + discovery** — what you have driven, what you found | F10 |
+| 5 | **Same-line AI + SPAD** — a train ahead you can catch, a signal you can pass | F7 |
+| 6 | **Ribbon limit ticks + loop ring** | F3 |
+
+Deferred with a reason, not forgotten: **weather** (F9 — an atmosphere LUT
+chain + UBO layout change, agreed to park), **ferry water routes** (F6 — no
+boat model in the catalog), **replay/ghost** (F2 — wants a recorder before it
+wants a camera).
 
 ---
 
 ## F1 — Player profiles & score persistence (`01-accounts-and-scores.md`)
-- [x] Attach Railway volume at `/data`, set `DATA_DIR=/data`, migrate seed
-      data, verify persistence across a redeploy (test file survives)
-- [x] Update `docs/DEPLOYMENT.md` (volume now also holds the player database)
-- [x] SQLite setup (`better-sqlite3`), schema: profiles/sessions/scores/profile_data
+- [x] Railway volume at `/data`, `DATA_DIR=/data`, persistence verified
+- [x] `docs/DEPLOYMENT.md` updated (volume holds the player database)
+- [x] SQLite (`better-sqlite3`): profiles/sessions/scores/profile_data
 - [x] Server routes: create/login (PIN hash + lockout), `GET /api/me`,
-      profile_data KV, `POST /api/scores` (personal-best upsert + history),
-      `GET /api/scores` board query, rate limits
-- [x] Server unit tests (temp DB): auth, lockout, best-upsert, board order, KV
+      profile_data KV, `POST /api/scores`, `GET /api/scores`, rate limits
+- [x] Server unit tests (temp DB): auth, lockout, best-upsert, board, KV
 - [x] Client `ProfileClient.ts` (token storage, offline queue + flush)
-- [x] Start-screen "Who's driving?" UI + create/login modal + HUD name chip
-- [x] Settings/consist backup + restore-on-login flow
-- [x] Local browser validation (profile lifecycle, guest mode, wrong-PIN path)
-- [x] Production validation (profile + score survive a redeploy), changelog entry
+- [x] Start-screen "Who's driving?" + create/login modal + HUD name chip
+- [x] Settings/consist backup + restore-on-login
+- [x] Local browser validation, production validation, changelog entry
+
+**F1 is closed.**
 
 ## F6 — Line modes & vehicles (`06-line-modes-and-vehicles.md`)
 - [x] Thread `mode` through MetroDreaminImporter → LineData/ParsedLine
-- [x] `LineModes.ts` (mode → base limit, default consist, icon, dwell)
+- [x] `LineModes.ts` (mode → limit, consist, icon, dwell, feel)
 - [x] Line list/picker icons per mode
-- [x] Mode default consists in TrainRenderingSystem (2.14.0, bus added 2.16.0)
-      — used only when the player has never picked a train. Ferry and air still
-      have none: there is no boat or aircraft model in the catalog
-- [~] Per-MODE accel/brake feel (2.15.0) — `accelScale`/`brakeScale` on
-      `LineModeInfo`, threaded into `TrainInput`; mode top-speed cap done in
-      2.12.0. Per-MODEL `performance` metadata in catalog.json is NOT built:
-      the feel is per line kind, not per carriage
-- [x] Terrain-grade force in physics (2.22.0) — `g x grade` along the rail,
-      sampled over a 60 m baseline so the interpolated terrain grid's noise
-      averages out, clamped to 9% because a MetroDreamin line is drawn across
-      real terrain without regard for it and CAN cross a cliff. Suppressed
-      while the doors are open: a train at a platform is held on its brakes
-- [ ] Ferry mode (water routes; 1–2 boat GLBs added via existing import flow)
-- [~] Cab instruments (speedo dial, notched power lever, brake gauge, DOORS/LIMIT
-      lamps) shipped in v2.1.0 — but as the permanent HUD in EVERY view, not a
-      Cab-only overlay. The windscreen framing that would make Cab view feel
-      like a cab is NOT built
-- [~] Hold-to-sustain horn SHIPPED (2.19.0) — press/release on the cab button
-      AND the H key, which was mapped but had never been consumed by anything.
-      Flange squeal by curvature x speed is NOT built
-- [x] TTS station announcements (SpeechSynthesis, voice by locale, settings toggle)
-- [x] Livery tint: SlotSpec `#tint=RRGGBB` token + material uniform + composer palette UI
-- [~] Unit tests — SlotSpec tint tokens (14) and mode resolution (19) done;
-      profiles, grade and announcement text await those features
-- [x] Local browser validation (real multi-mode map — SEPTA, 13 regional/4 metro/
-      1 light rail, checked against the raw map data; per-car tint incl. an
-      untinted car), production validation, changelog entry
+- [x] Mode default consists — used only when the player has never picked a
+      train. Ferry and air have none: no boat or aircraft model exists
+- [x] Per-MODE accel/brake feel (2.15.0) + mode top-speed cap (2.12.0)
+- [x] Terrain-grade force (2.22.0) — `g × grade`, 60 m baseline, 9% clamp,
+      suppressed at a platform
+- [x] TTS station announcements (voice by locale, settings toggle)
+- [x] Livery tint: `#tint=RRGGBB` + material uniform + palette UI
+- [x] Hold-to-sustain horn (2.19.0), cab button + H key
+- [x] Unit tests — tint tokens (14), mode resolution (19+9), grade (8)
+- [x] Local + production validation (SEPTA multi-mode), changelog entry
+- [ ] **Per-MODEL physics** — `performance` metadata per carriage in
+      catalog.json. Feel is currently per line kind, which is the axis that
+      matters; this is a refinement, not a gap
+- [ ] **Ferry water routes** — BLOCKED: no boat GLB in the catalog
+- [ ] **Cab windscreen overlay** — instruments shipped in v2.1.0 as the
+      permanent HUD in every view; the windscreen framing is not built
+- [ ] **Flange squeal** by curvature × speed
 
 ## F2 — Driving score (`02-driving-score.md`)
-- [x] `StopScorer.ts` state machine (precision/smoothness/doors → points) + unit tests
-- [x] Stop marker + HUD distance-to-mark readout (2.17.0 readout, 2.18.0
-      marker). The readout's window is TIME (~20 s of running), not a fixed
-      distance. The marker was held for one release because it could not be
-      seen; the cause was CONTRAST, not placement — see the feature doc
-- [x] Stop card UI (verdict + points, 3 s) — unit-tested; wants a human drive
-- [x] `RunScorer.ts` (aggregate, terminus/lap finalize incl. loop lines) + unit tests
+- [x] `StopScorer.ts` state machine + unit tests
+- [x] Stop marker + HUD distance-to-mark readout (2.17.0/2.18.0)
+- [x] Stop card UI (verdict + points, 3 s)
+- [x] `RunScorer.ts` (aggregate, terminus/lap finalize incl. loops) + tests
 - [x] Run card UI + personal-best callout
-- [x] Score posting to F1 (`run-score`), board display on run card
-- [x] Badges: rule list + run-card surfacing (persistence via profile_data pending)
-- [ ] Kid-mode + overspeed(F3) + punctuality(F4) integration hooks (drain suppression flags)
-- [ ] Phase 2: `RunRecorder` (5 Hz ring) + stop replay (orbit cam) + own-ghost
-      translucent consist + unit tests
-- [ ] Local browser validation (scripted precise stop, full-line run, loop lap,
-      replay screenshot), production validation, changelog entry
+- [x] Score posting to F1 (`run-score`), board on the run card
+- [x] Badges: rule list + run-card surfacing
+- [x] Overspeed drain + Simple-mode suppression (both wired in
+      `ScoringSystem.finishRun`)
+- [x] Punctuality on the run card (v2.23.0) — a percentage and a bonus, NOT a
+      penalty, and one-sided: early is not a fault. The schedule is written at
+      82% of the permitted speed with 20 s of recovery per stop, so holding the
+      limit puts a train a clear two minutes early by the third station;
+      marking that down would have scored good driving as a failure and fought
+      the speed limits at the same time
+- [ ] **Phase 2: `RunRecorder`** (5 Hz ring) + stop replay + own-ghost
+- [ ] Local browser validation of a full scored run, production, changelog
 
 ## F3 — Speed limits & route ribbon (`03-speed-limits.md`)
-- [x] `SpeedProfile.ts` (curvature → limit, smoothing/merging, loop-aware) + unit tests
+- [x] `SpeedProfile.ts` (curvature → limit, smoothing, loop-aware) + tests
 - [x] `limitAt`/`nextChange` lookups + unit tests
-- [ ] Physics: >25% overspeed penalty brake; `SpeedState` (none/amber/red)
+- [x] `SpeedState` (`ok`/`near`/`over`)
 - [x] HUD limit chip + approach countdown
-- [x] Track-side speed boards (number quads at change points)
-- [x] Overspeed → F2 score drain wiring — `ScoringSystem` reads
-      `overspeedSeconds` / `seriousOverspeedSeconds` off `SpeedLimitSystem` at
-      run end and resets them, and suppresses both in Simple driving
-- [~] Route ribbon (v2.1.0) — dots per stop, travelled segments lit, train
-      marker, responsive placement. Limit ticks and a loop RING are NOT built
-- [ ] Local browser validation (known-curve limits, forced overspeed chain,
-      ribbon on straight + loop lines, perf-neutral check),
-      production validation, changelog entry
+- [x] Track-side speed boards at change points
+- [x] Overspeed → F2 score drain, suppressed in Simple
+- [x] Route ribbon (v2.1.0) — stop dots, travelled segments lit, train marker
+- [~] **DECIDED AGAINST: overspeed penalty brake.** Built, then removed. A
+      limit is information the driver acts on; cutting traction took the
+      decision away and made the sign pointless. Ignoring it costs points —
+      that is the entire enforcement, and it is the player's call
+- [ ] **Ribbon limit ticks + loop ring** → release 6 below
+- [ ] Local browser validation (known-curve limits, forced overspeed chain)
 
 ## F4 — Timetables & service (`04-timetables-and-service.md`)
-- [x] `Timetable.ts` generator (limits + dwell → arr/dep per station; express
-      skip lists; loop continuity) + unit tests
-- [x] `ServiceClock.ts` (real | ×10) + MapTimeSystem time-provider hook
-- [ ] Service picker ("Drive the 09:12") in the line/station panel
-- [x] HUD drift chip (`+0:42`), departure-ready chime, early-door rule
-- [ ] Punctuality scoring (per-station window → run card + `punctuality` score kind)
-- [ ] `lineGroupId` plumbing + grouped picker + express patterns (ribbon dims skips)
+- [x] `Timetable.ts` generator (limits + dwell → due times; loop continuity)
+- [x] `ServiceClock` / MapTimeSystem time-provider hook
+- [x] HUD drift chip (`+0:42`), departure chime, early-door rule
+- [x] Timetable sheet (due vs actual per station)
+- [x] Punctuality scoring (v2.23.0) — `Punctuality.ts` + 17 unit tests,
+      `ServiceSystem.latenessAtStation`, captured per stop AS IT HAPPENS
+      (the timetable is rebuilt on every reversal, so reading it at the end of
+      a run would judge early stops against a schedule that no longer exists),
+      posted to F1 as its own `punctuality` score kind
+- [ ] **Service picker** ("Drive the 09:12") → release 2 below
+- [ ] `lineGroupId` plumbing + grouped picker + express patterns
 - [ ] Validate against the Israel-railways map's real A1–A5 groups
-- [ ] Local browser validation (on-time vs late runs, express skips, service-day sun),
-      production validation, changelog entry
+- [ ] Local + production validation, changelog entry
 
 ## F5 — Passengers (`05-passengers.md`)
-- [x] Thread density (`densityInfo`, NOT `grade`) + `interchanges` through the importer
-- [x] `PassengerSystem` (accumulation, board/alight on doors, destinations,
-      conservation) + unit tests
-- [x] HUD PAX (real at last); platform crowd meters in the station panel still pending
-- [ ] F2 integration: delivered-passenger component + left-behind note
+- [x] Thread density (`densityInfo`) + `interchanges` through the importer
+- [x] `PassengerSystem` (accumulation, board/alight, destinations) + tests
+- [x] HUD PAX
+- [x] Platform people: merged per-station meshes, deterministic placement,
+      caps, `models/people` catalog category + import + settings
+- [x] Delivered + left-behind in the run summary, delivery badge
+- [ ] **Delivered-passenger points component** (currently narrative only)
 - [ ] Express/skip handling (no spawn for skipped services)
 - [ ] Interchange icons (map overlay + ribbon) + transfer stats
-- [x] Platform people (promoted out of phase 2 by operator direction): merged
-      per-station meshes, deterministic placement, caps, `models/people`
-      catalog category + Sketchfab import + settings panel
-- [ ] Local browser validation (PAX flow over two stops, density contrast on the
-      Israel map, crowd visuals + FPS), production validation, changelog entry
+- [ ] Platform crowd meters in the station panel
+- [ ] Local browser validation (PAX flow over two stops), production
 
 ## F7 — AI traffic & signals (`07-ai-traffic-and-signals.md`)
-- [ ] `ConsistRenderer` extraction (player = instance 0; N consists)
-- [ ] `AiTrainSystem` (driver policy: limit-following, station stops, dwell,
-      reversal/loop) + unit tests
-- [ ] Density setting (Off/Light/Normal, hard cap) + frustum culling of consists
-- [ ] Perf gate: 4×-throttle profile with AI ≥85% of no-AI fps; density becomes
-      governor-aware if not
 - [x] `BlockSystem` (blocks, occupancy, aspects) + unit tests
 - [x] Signal post meshes + aspect rendering
-- [ ] Same-line AI + dispatch spacing; AI obeys signals
-- [ ] Player SPAD → penalty brake + run-card note
-- [ ] Ambient aircraft (unfilter resources behind the `airTraffic` setting,
-      synthetic routes around map centroid)
-- [ ] Ambient cars (road segment plumbing from worker, spawn box, instancing,
-      caps, tier gating)
-- [ ] Local browser validation (passing trains screenshot, aspect timelapse,
-      SPAD chain, governor stability with AI on), production validation,
-      changelog entry
+- [x] Passing services on the adjacent alignment (v2.5.0), cheap by design
+- [ ] **Same-line AI + dispatch spacing; AI obeys signals** → release 5
+- [ ] **Player SPAD → run-card note** → release 5
+- [ ] Density setting (Off/Light/Normal, hard cap) + consist culling
+- [ ] Perf gate: 4×-throttle profile with AI ≥85% of no-AI
+- [ ] Ambient aircraft; ambient cars
+- [ ] Local + production validation, changelog entry
 
 ## F8 — Cameras & exploration (`08-cameras-and-exploration.md`)
-- [x] Camera modes Walk/Ride/Photo added to GameCameraSystem (explicit entry
-      buttons; cycle untouched for Chase/Cab/Orbit)
-- [ ] Walk: `WalkController` (terrain clamp, WASD+drag, mobile dual-zone touch),
-      "Step out"/"Return" flow, distance leash toast
-- [~] Ride (v2.2.0) — a seat view looking out along the train. Auto-drive is
-      NOT built; you are still driving
-- [x] Photo: damped flight, FOV slider, HUD hide, PNG screenshot capture path
-- [~] Simple / Advanced driving (v2.2.0) — the assist holds the line's own
-      limit and eases the controls. Score-drain suppression NOT wired
-- [ ] Unit tests (terrain clamp, auto-drive stop accuracy, PNG encoder)
-- [ ] Local + mobile-emulation browser validation (all four, screenshots),
-      production validation, changelog entry
+- [x] Camera modes Chase/Cab/Orbit/Ride/Trackside/Photo/Free with explicit
+      entry buttons (cycle covers Chase/Cab/Orbit)
+- [x] Ride (v2.2.0) — a seat by the window looking out along the train
+- [x] Photo: damped flight, FOV slider, HUD hide, PNG capture
+- [x] Simple / Advanced driving (v2.2.0) incl. score-drain suppression
+- [ ] **Walk mode** — `WalkController` (terrain clamp, WASD + drag, mobile
+      dual-zone touch), "Step out" / "Return", distance leash → release 3
+- [ ] Auto-drive while riding (Ride currently still needs you to drive)
+- [ ] Unit tests (terrain clamp, leash)
+- [ ] Local + mobile-emulation validation, production, changelog
 
 ## F9 — World atmosphere (`09-world-atmosphere.md`)
-- [x] MapTimeSystem `TimeProvider` (real | manual | service-day) + time slider UI
-- [ ] `WeatherSystem` (state → fog/sunDim/wetness/rain params)
-- [ ] Fog term in shading pass; overcast light/shadow softening
-- [ ] Rain streak post (tier-gated) + rain/thunder audio + lightning scheduler
-- [ ] Wet-road material tweak
-- [ ] Seasons: tree tint ramp + winter thinning + frost tint
-- [ ] Phase 2: wet-rail braking multiplier + HUD chip + F2 threshold relax
-- [ ] Unit tests (params, scheduler bounds, season ramps, wet multiplier)
-- [ ] Local browser validation (screenshot matrix: times × weathers × seasons;
-      wet-braking harness measurement; perf within 10% on 4× throttle),
-      production validation, changelog entry
+- [x] MapTimeSystem `TimeProvider` (real | manual | service-day) + slider
+- [x] Map-local solar time (v2.20.0) — `utcHour = hour − lon / 15`
+- [ ] **DEFERRED by agreement:** `WeatherSystem`, fog term, rain post,
+      wet-rail braking, seasons. Overcast is a change to the atmosphere LUT
+      chain and its UBO layout across four shaders, not a setting
 
 ## F10 — City & discovery (`10-city-discovery.md`)
+- [x] "Drive another map" (v2.8.0) — the live profile's maps, loaded mid-game
+- [x] Line facts (v2.6.0)
+- [x] Share links (2.21.0) — `?map&line&train`, session-only consist + tests
+- [ ] **City stats card + discovery** → release 4 below
 - [ ] Worker plumb: `notable[]` (tall/named features) into Tile3DBuffers
-- [ ] `LandmarkIndex` (top-K by height near corridor + named features) + unit tests
-- [ ] `DiscoverySystem` (proximity, toasts, persistence via F1/localStorage)
-- [ ] Map-overlay landmark icons (dim/lit)
-- [ ] City stats card (buildings/trees/water/line-km/stations, "explored so far")
-- [ ] Map browser: SVG thumbnails (refactor overlay renderer), Featured list
-      (server-served JSON), richer Recents metadata
-- [~] "Drive another map" (v2.8.0) lists the live profile's maps and loads any
-      of them mid-game. It is NOT the curated tour with goals and stamps
-- [x] Share links (2.21.0) — `?map&line&train`, session-only consist that is
-      never written to the saved setup (so no confirm is needed), + 12 unit
-      tests. Opens straight into the game, skipping the start screen and the
-      release splash
-- [ ] Local browser validation (discovery toast, stats plausibility, share
-      round-trip in fresh context, tour stamp), production validation,
-      changelog entry
+- [ ] `LandmarkIndex` + map-overlay landmark icons
+- [ ] Map browser: SVG thumbnails, Featured list, richer Recents
+- [ ] Local + production validation, changelog entry
 
 ---
 
 ## Program-wide gates (apply to every section)
-- [ ] No feature ships without its unit tests and a local Playwright pass
-- [ ] Perf: 4×-throttle profile run (scripts/perf) within 10% of pre-feature
-      baseline, or the feature gains a tier/governor gate
-- [x] Every release bumps `version.ts` (new CHANGELOG entry + codename) and
-      `package.json` together — held for all 34 releases
+- [x] Every release bumps `version.ts` and `package.json` together — held
+      for all 43 releases
 - [x] Production validation on the live URL after each deploy
-- [ ] `docs/WORKLOG-*.md` updated per session; feature doc updated to
-      STATUS: SHIPPED with what was actually built
+- [ ] No feature ships without its unit tests and a local browser pass
+- [ ] Perf: 4×-throttle profile within 10% of the pre-feature baseline, or
+      the feature gains a tier/governor gate
+- [ ] Feature doc updated with what was actually built, per session

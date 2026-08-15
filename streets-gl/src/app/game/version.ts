@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.23.0',
+		codename: 'Hands On',
+		date: '2026-08-15',
+		emblem: '👆🗺️',
+		summary: 'The menus can be clicked again, and the little map finally shows where you are.',
+		changes: [
+			'THE MENUS WORK — Pick a line, Camera, Settings, Timetable and every other panel could be opened but nothing inside them could be tapped. They are all live again.',
+			'The controls no longer pile up in the corner before you start driving — the whole console used to land on top of the buttons underneath it.',
+			'THE LITTLE MAP IS A REAL MAP — it shows the streets around you and every line near the train, with you in the middle pointing the way you are going. Before, it drew the same made-up squiggle everywhere.',
+			'The little map moved off the time-of-day button it was sitting on.',
+			'KEEP TO THE TIMETABLE — every stop you reach on time now counts, and the run card tells you how much of the service you kept.',
+		],
+	},
+	{
 		version: '2.22.0',
 		codename: 'Uphill',
 		date: '2026-08-15',

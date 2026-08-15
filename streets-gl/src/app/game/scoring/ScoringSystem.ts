@@ -3,6 +3,7 @@ import TrainSystem from '../TrainSystem';
 import PassengerSystem from '../passengers/PassengerSystem';
 import ProfileClient from '../profiles/ProfileClient';
 import SpeedLimitSystem from '../limits/SpeedLimitSystem';
+import ServiceSystem from '../service/ServiceSystem';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 import SettingsSystem from '~/app/systems/SettingsSystem';
@@ -21,6 +22,15 @@ export default class ScoringSystem extends System {
 	private lastLineKey = '';
 	private lastDist = 0;
 	private lastFrameTime = 0;
+	/**
+	 * How late each scored stop was, captured AS IT HAPPENS.
+	 *
+	 * It has to be read at the stop rather than at the end of the run: the
+	 * timetable is rebuilt from scratch whenever the train reverses or the line
+	 * changes, so by the time a run finishes the schedule those earlier stops
+	 * were judged against no longer exists.
+	 */
+	private stopLateness: (number | null)[] = [];
 
 	/** Set by GameUISystem so cards can be shown without this system knowing the DOM. */
 	public onStopScored: ((result: StopResult, stationName: string) => void) | null = null;
@@ -85,6 +95,7 @@ export default class ScoringSystem extends System {
 	): void {
 		this.stop.reset();
 		this.run.abandon();
+		this.stopLateness = [];
 		this.run.start({
 			mapId: trainSystem.mapName || 'unknown-map',
 			lineId: ls.parsed.id,
@@ -99,6 +110,15 @@ export default class ScoringSystem extends System {
 		ls: {parsed: {stations: {name: string}[]}},
 	): void {
 		this.run.addStop(result);
+
+		// A stop rolled through was never an arrival, so it has no time to keep
+		// and must not count against the timekeeping — it is already scored as
+		// zero for the stop itself.
+		this.stopLateness.push(
+			result.verdict === 'passed'
+				? null
+				: this.systemManager.getSystem(ServiceSystem)?.latenessAtStation(result.stationIndex) ?? null,
+		);
 
 		const stationName = ls.parsed.stations[result.stationIndex]?.name ?? '';
 		this.onStopScored?.(result, stationName);
@@ -115,6 +135,7 @@ export default class ScoringSystem extends System {
 			performance.now(),
 			{delivered: passengers?.delivered ?? 0, leftBehind: passengers?.leftBehind ?? 0},
 			completedLine,
+			this.stopLateness,
 		);
 		if (!result) return;
 
@@ -160,6 +181,20 @@ export default class ScoringSystem extends System {
 				completedLine: result.completedLine,
 			},
 		});
+
+		// Keeping time is its own record, on its own board. It is deliberately a
+		// separate kind rather than folded into the run score: a driver chasing
+		// stopping accuracy and one chasing the timetable are doing different
+		// things, and both are worth being best at.
+		if (result.punctualityPercent !== null) {
+			await client.submitScore({
+				mapId: result.mapId,
+				lineId: result.lineId,
+				kind: 'punctuality',
+				value: result.punctualityPercent,
+				detail: {lineName: result.lineName, stops: result.stops.length},
+			});
+		}
 
 		this.onRunFinished?.(result, badges, posted?.isPersonalBest ?? false, posted?.best ?? null);
 

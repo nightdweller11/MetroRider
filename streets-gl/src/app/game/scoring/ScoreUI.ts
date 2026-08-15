@@ -159,6 +159,27 @@ export default class ScoreUI {
 		summary.style.cssText = 'font-size: 13px; color: #ddd; margin-bottom: 14px;';
 		summary.textContent = run.summary;
 
+		// Timekeeping gets its own line rather than a number buried in the
+		// sentence: it is the one part of the score that is not about the stops.
+		const timing = document.createElement('div');
+		if (run.punctualityPercent !== null) {
+			const good = run.punctualityPercent >= 90;
+			timing.style.cssText = `
+				display: flex; justify-content: space-between; align-items: baseline;
+				font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px;
+				background: ${good ? 'rgba(90,208,122,0.12)' : 'rgba(240,180,41,0.12)'};
+				border: 1px solid ${good ? 'rgba(90,208,122,0.28)' : 'rgba(240,180,41,0.28)'};
+			`;
+			const label = document.createElement('span');
+			label.style.color = good ? '#5ad07a' : '#f0b429';
+			label.textContent = `⏱️ ${run.punctualityPercent}% on time`;
+			const bonus = document.createElement('span');
+			bonus.style.cssText = 'color: #ddd; font-weight: 700;';
+			bonus.textContent = run.punctualityBonus > 0 ? `+${run.punctualityBonus}` : '—';
+			timing.appendChild(label);
+			timing.appendChild(bonus);
+		}
+
 		const stopList = document.createElement('div');
 		stopList.style.cssText = 'display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px;';
 		for (const stop of run.stops) {
@@ -183,6 +204,7 @@ export default class ScoreUI {
 		card.appendChild(totalLabel);
 		card.appendChild(pb);
 		card.appendChild(summary);
+		if (run.punctualityPercent !== null) card.appendChild(timing);
 		card.appendChild(stopList);
 
 		if (badges.length > 0) {
