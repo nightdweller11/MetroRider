@@ -377,6 +377,12 @@ export default class GameUISystem extends System {
 				if (down) audio?.hornDown();
 				else audio?.hornUp();
 			},
+			(kind, down) => {
+				const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+				if (kind === 'power') trainSystem?.setHUDThrottle(down);
+				else trainSystem?.setHUDBrake(down);
+			},
 		);
 		this.cabSheet = new CabSheet(this.container);
 
@@ -698,6 +704,18 @@ export default class GameUISystem extends System {
 				subtitle: `${lineCount} routes across the country`,
 				keepOpen: true,
 				onSelect: (): void => this.showLinePicker(),
+			},
+			{
+				badge: 'STOP',
+				badgeColor: '#4fd996',
+				title: 'Start from another stop',
+				subtitle: 'Join this line part way along instead of at the end',
+				keepOpen: true,
+				onSelect: (): void => {
+					const ts = this.systemManager.getSystem(TrainSystem);
+
+					if (ts) this.showStationChooser(ts, ts.currentLineIdx);
+				},
 			},
 			{
 				badge: 'VIEW',
@@ -1492,9 +1510,62 @@ export default class GameUISystem extends System {
 				title: ls.parsed.isLoop ? `${ls.parsed.name} ⟳` : ls.parsed.name,
 				subtitleIcon: mode.icon,
 				subtitle: `${mode.label} · ${ls.parsed.stations.length} stops`,
-				onSelect: () => this.showStationPanel(trainSystem, idx),
+				// Tapping a line DRIVES that line, from its first stop. It used to
+				// open the old station panel instead, so choosing a line was two
+				// steps and the first one appeared to do nothing to the line you
+				// had actually picked. Where to start is a separate question, and
+				// it gets its own row below.
+				onSelect: () => this.driveLine(trainSystem, idx, 0),
 			};
 		}));
+	}
+
+	/** Put the train on a line and start it, from the given stop. */
+	private driveLine(trainSystem: TrainSystem, lineIdx: number, stationIdx: number, direction: number = 1): void {
+		trainSystem.goToStation(lineIdx, stationIdx, direction);
+
+		if (!trainSystem.gameActive) {
+			trainSystem.startGame();
+			this.systemManager.getSystem(GameCameraSystem)?.activate();
+
+			const startBtnEl = document.getElementById('game-start-btn');
+
+			if (startBtnEl) startBtnEl.style.display = 'none';
+			this.showGameUI();
+			this.rebuildLineList(trainSystem);
+		}
+
+		this.systemManager.getSystem(GameCameraSystem)?.snapToTrain();
+		this.hideStationPanel();
+		this.updateLineColorIndicator(trainSystem);
+
+		const ls = trainSystem.lines[lineIdx];
+
+		this.showToast(`Driving ${ls?.parsed.name ?? 'the line'}`, 1800);
+	}
+
+	/**
+	 * Where to join a line — the same list the old panel showed, as a sheet.
+	 *
+	 * Kept because a long line is worth starting part way along, but demoted:
+	 * it is reached from the line's own sheet rather than standing between the
+	 * player and simply driving.
+	 */
+	private showStationChooser(trainSystem: TrainSystem, lineIdx: number): void {
+		const ls = trainSystem.lines[lineIdx];
+
+		if (!ls || !this.cabSheet) return;
+
+		const rows: SheetRow[] = ls.parsed.stations.map((st: {name: string}, stIdx: number) => ({
+			badge: String(stIdx + 1),
+			badgeColor: ls.parsed.color,
+			title: st.name,
+			subtitle: stIdx === 0 ? 'Start of the line'
+				: stIdx === ls.parsed.stations.length - 1 ? 'End of the line' : 'Join here',
+			onSelect: () => this.driveLine(trainSystem, lineIdx, stIdx),
+		}));
+
+		this.cabSheet.show(ls.parsed.name, rows);
 	}
 
 	/** Feed the cab instruments from real game state. */

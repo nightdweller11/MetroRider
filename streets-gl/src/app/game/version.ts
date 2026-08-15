@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.24.0',
+		codename: 'Take the Handle',
+		date: '2026-08-15',
+		emblem: '🕹️👍',
+		summary: 'You can drive with your finger again — the power lever and the brake are real controls.',
+		changes: [
+			'DRIVE WITH YOUR FINGER — Hold the green lever to go and the orange one to stop. They were drawn like controls but were only pictures, so on an iPad there was no way to move the train at all.',
+			'They work with a mouse too, and holding on and sliding your finger off no longer leaves the power stuck on.',
+			'TAP A LINE AND YOU DRIVE IT — Picking a line used to open another list instead of taking you to the one you tapped.',
+			'Want to start somewhere in the middle of a line? "Start from another stop" in the menu.',
+		],
+	},
+	{
 		version: '2.23.0',
 		codename: 'Hands On',
 		date: '2026-08-15',

@@ -130,6 +130,18 @@ const CSS = `
 .cab-lamp.on-a{background:linear-gradient(180deg,#4a3411,#2a1d09);box-shadow:inset 0 1px 0 rgba(255,215,140,.3),0 0 16px rgba(255,180,58,.42)}
 .cab-lamp.on-a b{color:#ffd28a}
 
+/* Every control in the cab is press-and-hold on a touch screen, so it must
+   opt out of the browser's own gestures. Without touch-action:none an iPad
+   treats a finger held on the power lever as the start of a scroll or a
+   pinch, cancels the press, and the train does not move — which is exactly
+   how this shipped: the lever and the brake were gauges with no handlers at
+   all, and the only way to drive was a keyboard the iPad does not have. */
+.cab-btn,.cab-lever,.cab-brake{touch-action:none;-webkit-tap-highlight-color:transparent;
+  user-select:none;-webkit-user-select:none}
+.cab-lever,.cab-brake{cursor:pointer}
+.cab-lever.held,.cab-brake.held{box-shadow:inset 0 1px 0 rgba(255,255,255,.16),inset 0 0 18px rgba(0,0,0,.9),0 0 0 2px rgba(87,182,255,.55)}
+.cab-btn.held{filter:brightness(1.25)}
+
 .cab-brake{width:48px;height:132px;border-radius:9px;position:relative;overflow:hidden;
   background:linear-gradient(180deg,#141a22,#0c1016);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 14px rgba(0,0,0,.8)}
 .cab-brake .f{position:absolute;left:5px;right:5px;bottom:5px;border-radius:6px;
@@ -247,6 +259,15 @@ export default class CabHud {
 		private readonly onAction: (action: 'map' | 'camera' | 'menu' | 'doors' | 'horn') => void,
 		/** Held down or released — the horn sounds for as long as it is held. */
 		private readonly onHorn: (down: boolean) => void,
+		/**
+		 * The power lever and the brake, held rather than tapped.
+		 *
+		 * These are the only way to drive on a tablet: there is no keyboard, and
+		 * the old on-screen accelerate/brake buttons went away with the legacy
+		 * chrome. Shipping the console without them made the game unplayable on
+		 * the device it was built for.
+		 */
+		private readonly onLever: (kind: 'power' | 'brake', down: boolean) => void = (): void => undefined,
 	) {
 		this.mount();
 	}
@@ -309,23 +330,51 @@ export default class CabHud {
 			if (btn && btn.dataset.a !== 'horn') this.onAction(btn.dataset.a as never);
 		});
 
-		// Press-and-hold for the horn. `mouseleave` and `touchcancel` are not
-		// optional: a finger sliding off the button, or a call arriving
-		// mid-blast, must not leave it stuck on.
-		const hornEl = root.querySelector('[data-a="horn"]');
+		// Press-and-hold, for anything that is held rather than tapped.
+		//
+		// Pointer events, not mouse+touch pairs: one path covers a mouse, a
+		// finger and a pencil, and `setPointerCapture` means the press keeps
+		// following that finger even when it slides off the control — which is
+		// what a thumb on a moving train actually does. The release is bound on
+		// every way a press can end (up, cancel, and the window losing focus),
+		// because a stuck throttle is worse than an unresponsive one.
+		const hold = (el: Element | null, onChange: (down: boolean) => void): void => {
+			if (!el) return;
 
-		if (hornEl) {
-			const down = (e: Event): void => { e.preventDefault(); this.onHorn(true); };
-			const up = (): void => this.onHorn(false);
+			let active = false;
+			const start = (e: Event): void => {
+				e.preventDefault();
+				if (active) return;
+				active = true;
+				el.classList.add('held');
+				const pe = e as PointerEvent;
 
-			hornEl.addEventListener('mousedown', down);
-			hornEl.addEventListener('mouseup', up);
-			hornEl.addEventListener('mouseleave', up);
-			hornEl.addEventListener('touchstart', down);
-			hornEl.addEventListener('touchend', (e) => { e.preventDefault(); up(); });
-			hornEl.addEventListener('touchcancel', up);
-			window.addEventListener('blur', up);
-		}
+				if (pe.pointerId !== undefined) {
+					try { (el as HTMLElement).setPointerCapture(pe.pointerId); } catch { /* not captureable */ }
+				}
+				onChange(true);
+			};
+			const end = (): void => {
+				if (!active) return;
+				active = false;
+				el.classList.remove('held');
+				onChange(false);
+			};
+
+			el.addEventListener('pointerdown', start);
+			el.addEventListener('pointerup', end);
+			el.addEventListener('pointercancel', end);
+			// With pointer capture the press ends on release rather than on
+			// leaving, but an uncaptured pointer (an old browser) still needs it.
+			el.addEventListener('pointerleave', end);
+			window.addEventListener('blur', end);
+		};
+
+		hold(root.querySelector('[data-a="horn"]'), down => this.onHorn(down));
+		// The two that had no handlers at all. The lever and the brake were
+		// drawn as instruments and read as controls, and were neither.
+		hold(root.querySelector('.cab-lever'), down => this.onLever('power', down));
+		hold(root.querySelector('.cab-brake'), down => this.onLever('brake', down));
 
 		// EVERY panel's position comes from a `.cab[data-o="…"]` rule, so the
 		// attribute has to exist before the element is on screen. It used to be
