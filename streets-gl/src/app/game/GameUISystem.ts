@@ -48,6 +48,24 @@ const STOP_MARK_READOUT_FLOOR_M = 250;
  * is one you have to re-read every time you look at it.
  */
 const MINI_SPAN_M = 2000;
+
+/**
+ * A line's name, short enough for a caption.
+ *
+ * Prefers the code the name starts with ("A1 - A2 Sharon Local" → "A1"),
+ * because that is what the line is called on a map and it fits. Falls back to
+ * the opening words rather than an id: these names come from other people's
+ * maps and run to a paragraph in places.
+ */
+function lineShortName(name: string | undefined): string {
+	if (!name) return '';
+
+	const code = name.match(/^([A-Z]{1,2}\d{1,2})/)?.[1];
+
+	if (code) return code;
+
+	return name.length > 14 ? `${name.slice(0, 13).trimEnd()}…` : name;
+}
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -1593,7 +1611,12 @@ export default class GameUISystem extends System {
 		this.cabHud.update({
 			speedKmh: speed,
 			limitKmh: limit,
-			dialMax: Math.max(120, Math.ceil((limit || 100) * 1.6 / 20) * 20),
+			// Scaled to what the TRAIN can do, not to the posted limit. Scaling
+			// from the limit meant a 60 sign produced a 120 dial while the train
+			// ran to 200 — the needle simply sat pinned past the last mark, and
+			// the one instrument whose whole job is showing your margin showed
+			// nothing at all.
+			dialMax: Math.max(120, Math.ceil((limits?.lineCeiling ?? 0) * 3.6 * 1.1 / 20) * 20),
 			stationName: name,
 			// The board says what the stop IS, then when it is due. Two separate
 			// facts in one line, in that order, because the name is what you
@@ -1610,7 +1633,9 @@ export default class GameUISystem extends System {
 			// and everything.
 			power: physics?.powerNotch ?? 0,
 			brake: physics?.brakeNotch ?? 0,
-			lineName: ls?.parsed.id ?? 'LINE',
+			// The line's NAME, never its index. This read "0" on screen — a raw
+			// id is meaningless to whoever is driving.
+			lineName: lineShortName(ls?.parsed.name) || 'LINE',
 			simpleMode: this.systemManager.getSystem(SettingsSystem)
 				?.settings.get('driveMode')?.statusValue === 'simple',
 			miniView: this.miniView,

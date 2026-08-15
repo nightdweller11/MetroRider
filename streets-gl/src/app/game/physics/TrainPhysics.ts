@@ -1,13 +1,16 @@
 import type {TrackData} from '../data/TrackBuilder';
 
 /**
- * The fastest anything may go, m/s — 201.6 km/h.
+ * The fastest ANYTHING may go, m/s — 310 km/h.
  *
- * A whisker over 200 rather than a whisker under, so a train that is supposed
- * to reach two hundred actually shows two hundred on the dial rather than
- * stopping at 198 and looking throttled.
+ * This is the backstop, not the ceiling a player meets. What a train can
+ * actually do comes from its kind (`LineModes.topKmh`) and arrives here as
+ * `vehicleMaxMs`: a tram tops out at 60, a regional train at 200, a
+ * high-speed train at 300. This number only has to sit above the fastest of
+ * those — it was 198, which quietly made the high-speed mode's stated 300 a
+ * fiction no train could reach.
  */
-const MAX_SPEED = 56;
+const MAX_SPEED = 86;
 const ACCEL = 5.0;
 const BRAKE_FORCE = 6.0;
 /** How firmly Simple driving pulls back toward the limit, m/s². */
@@ -117,6 +120,20 @@ export interface TrainInput {
 	 */
 	powerLevel?: number;
 	brakeLevel?: number;
+	/**
+	 * The fastest THIS train can go, m/s — its own capability, not the line's
+	 * posted limit.
+	 *
+	 * These are two different things and conflating them is what made the game
+	 * feel locked: the posted limit is a rule the driver may break and pay for,
+	 * while a tram simply cannot do 200. Without this every vehicle ran to the
+	 * same global backstop, so `LineModes.topKmh` described speeds no train was
+	 * held to — a tram would do 200 and a high-speed train could not reach the
+	 * 300 its own entry claimed.
+	 *
+	 * Absent means the global backstop, so existing callers are unchanged.
+	 */
+	vehicleMaxMs?: number;
 }
 
 export function createTrainPhysicsState(initialDist: number = 60): TrainPhysicsState {
@@ -151,6 +168,12 @@ export function updateTrainPhysics(
 	// leaving it live meant assisted acceleration (3.0 m/s²) simply outran the
 	// ease (1.4 m/s²) and the train still reached 132 km/h against a 55 limit —
 	// the assist looked applied and did nothing.
+	// What this particular train can do, as opposed to what the line permits.
+	// A tram cannot reach 200 however long you hold the handle open.
+	const vehicleMax = input.vehicleMaxMs && input.vehicleMaxMs > 0
+		? Math.min(MAX_SPEED, input.vehicleMaxMs)
+		: MAX_SPEED;
+
 	// The keyboard is all-or-nothing while a key is held; the controller handle
 	// asks for a fraction and holds it. A held key wins, so a player can grab
 	// the keyboard mid-run without first returning the handle to neutral.
@@ -192,7 +215,7 @@ export function updateTrainPhysics(
 		state.trainSpeed -= FRICTION * dt;
 	}
 
-	state.trainSpeed = Math.max(0, Math.min(MAX_SPEED, state.trainSpeed));
+	state.trainSpeed = Math.max(0, Math.min(vehicleMax, state.trainSpeed));
 
 	// Ease back rather than snap: a hard clamp feels like the game grabbing
 	// the controls, a gentle pull feels like the train settling. This also
@@ -217,7 +240,7 @@ export function updateTrainPhysics(
 		state.trainSpeed -= GRAVITY * grade * dt;
 	}
 
-	state.trainSpeed = Math.max(0, Math.min(MAX_SPEED, state.trainSpeed));
+	state.trainSpeed = Math.max(0, Math.min(vehicleMax, state.trainSpeed));
 
 	if (state.doorsOpen && state.trainSpeed > 0.1) {
 		state.trainSpeed = 0;

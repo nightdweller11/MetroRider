@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.27.0',
+		codename: 'Read the Dial',
+		date: '2026-08-15',
+		emblem: '🎛️🚄',
+		summary: 'The speedo goes up to where the train actually goes, and each kind of train has its own top speed.',
+		changes: [
+			'THE SPEEDO FITS THE TRAIN — It used to stop at 120 while the train did 200, so the needle just sat pinned past the last mark. It now runs up to what your train can really do.',
+			'EVERY TRAIN HAS ITS OWN TOP SPEED — A tram does 60, a metro 90, a big main-line train 200, and a high-speed train 300. Before, every one of them could do the same 200 no matter what it was.',
+			'The little map says which line you are on instead of showing a number like "0".',
+		],
+	},
+	{
 		version: '2.26.0',
 		codename: 'Let It Run',
 		date: '2026-08-15',

@@ -398,6 +398,9 @@ export default class TrainSystem extends System {
 			emergency: this.input.isHeld('emergency'),
 			powerLevel: this.controllerPower,
 			brakeLevel: this.controllerBrake,
+			// What this train can do, from its kind — separate from the posted
+			// limit, which is a rule it is free to break and pay for.
+			vehicleMaxMs: this.systemManager.getSystem(SpeedLimitSystem)?.lineCeiling || undefined,
 		};
 
 		if (this.input.wasPressed('doors')) {
