@@ -60,7 +60,33 @@ export interface CabHudState {
 const STYLE_ID = 'cab-hud-style';
 
 /** Notch labels top-to-bottom, power above neutral, brake below. */
+/**
+ * The controller scale, top to bottom: full power down through neutral to full
+ * brake. One handle for both, the way a train's master controller works — and
+ * the way this panel has always been LABELLED, long before it was wired.
+ */
 const NOTCHES = ['P4', 'P3', 'P2', 'P1', 'N', 'B1', 'B2'];
+/** Where neutral sits in that list. */
+const NEUTRAL_INDEX = 4;
+
+/** Where a notch sits down the lever, as a percentage of its height. */
+function notchPercent(i: number): number {
+	return 17 + i * 11.5;
+}
+
+/**
+ * What a notch asks the train for.
+ *
+ * Power is quartered so P1 is a gentle start rather than everything at once —
+ * the whole reason a real controller has steps. The brake has two: enough to
+ * hold a stop, and everything.
+ */
+export function notchDemand(i: number): {power: number; brake: number} {
+	if (i < NEUTRAL_INDEX) return {power: (NEUTRAL_INDEX - i) / NEUTRAL_INDEX, brake: 0};
+	if (i > NEUTRAL_INDEX) return {power: 0, brake: i === NEUTRAL_INDEX + 1 ? 0.55 : 1};
+
+	return {power: 0, brake: 0};
+}
 
 const CSS = `
 .cab{position:fixed;inset:0;pointer-events:none;z-index:40;
@@ -148,13 +174,40 @@ const CSS = `
   background:linear-gradient(180deg,#ff8a5c,#c73f13);box-shadow:0 0 14px rgba(255,120,70,.35),inset 0 1px 0 rgba(255,255,255,.3)}
 .cab-brake .cap{position:absolute;left:0;right:0;top:5px;text-align:center}
 
-.cab-lever{width:80px;height:168px;border-radius:11px;position:relative;overflow:hidden;
+.cab-lever{width:94px;height:180px;border-radius:11px;position:relative;overflow:hidden;
   background:linear-gradient(180deg,#161d25,#0c1116);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),inset 0 0 16px rgba(0,0,0,.75)}
 .cab-lever .n{position:absolute;left:7px;right:7px;height:1px;background:rgba(255,255,255,.1)}
 .cab-lever .n b{position:absolute;left:2px;top:-6px;font-family:var(--tech);font-size:8px;color:#5a6b7d;letter-spacing:.08em}
+.cab-lever .n.at b{color:#e8f0f8}
 .cab-lever .f{position:absolute;left:6px;right:24px;bottom:6px;border-radius:8px;
   background:linear-gradient(180deg,rgba(72,230,160,.95),rgba(20,128,88,.95));box-shadow:0 0 20px rgba(61,220,154,.35),inset 0 1px 0 rgba(255,255,255,.4)}
 .cab-lever .cap{position:absolute;left:0;right:0;top:7px;text-align:center}
+/* A handle you can see and grab, running in a slot.
+   The scale has always read P4·P3·P2·P1·N·B1·B2 — a real combined controller,
+   where you SET a notch and leave it. It was wired as a dead-man button you
+   had to hold instead, with nothing drawn to grab: a tap moved the notch about
+   six percent and let it fall straight back, so tapping it did visibly
+   nothing, and there was no lever on the screen to explain why. */
+.cab-lever .slot{position:absolute;left:50%;top:26px;bottom:10px;width:11px;transform:translateX(-50%);
+  border-radius:5px;background:linear-gradient(90deg,#05080c,#0e141b 45%,#05080c);
+  box-shadow:inset 0 0 6px rgba(0,0,0,.95),inset 0 1px 0 rgba(0,0,0,.9)}
+.cab-lever .knob{position:absolute;left:50%;width:70px;height:30px;
+  transform:translate(-50%,-50%);transition:top .08s ease-out;pointer-events:none}
+/* the grip */
+.cab-lever .knob i{position:absolute;inset:0;border-radius:7px;display:block;
+  background:linear-gradient(180deg,#fdfefe 0%,#cfdae6 38%,#8ea1b5 62%,#5c6d80 100%);
+  box-shadow:0 4px 9px rgba(0,0,0,.75),0 1px 0 rgba(255,255,255,.95) inset,
+    0 -3px 5px rgba(0,0,0,.35) inset,0 0 0 1px rgba(0,0,0,.55)}
+/* the milling on the grip */
+.cab-lever .knob i::after{content:'';position:absolute;left:9px;right:9px;top:50%;height:9px;
+  transform:translateY(-50%);border-radius:2px;
+  background:repeating-linear-gradient(180deg,rgba(50,63,77,.85) 0 1.5px,transparent 1.5px 3.5px)}
+/* the stem that ties the grip to the slot, so it reads as a lever and not a chip */
+.cab-lever .knob u{position:absolute;left:50%;top:50%;width:17px;height:40px;
+  transform:translate(-50%,-50%);border-radius:4px;background:linear-gradient(90deg,#4a5a6b,#93a5b8 45%,#41505f);
+  box-shadow:0 0 0 1px rgba(0,0,0,.6),0 2px 6px rgba(0,0,0,.6);z-index:-1}
+.cab-lever.held .knob i{box-shadow:0 4px 9px rgba(0,0,0,.75),0 1px 0 rgba(255,255,255,.95) inset,
+  0 -3px 5px rgba(0,0,0,.35) inset,0 0 0 2px rgba(87,182,255,.95),0 0 16px rgba(87,182,255,.6)}
 
 .cab-btn{min-width:62px;min-height:62px;display:grid;place-items:center;border-radius:11px;cursor:pointer;
   background:linear-gradient(180deg,#39434f,#161d25);box-shadow:var(--milled),var(--ring),var(--lift);color:var(--ink)}
@@ -194,7 +247,7 @@ const CSS = `
 .cab.simple .cab-btn.lg{min-width:98px;min-height:98px;border-radius:18px}
 .cab.simple .cab-btn.lg svg{width:38px;height:38px}
 .cab.simple .cab-btn{min-width:70px;min-height:70px}
-.cab.simple .cab-lever{width:96px}
+.cab.simple .cab-lever{width:108px}
 
 /* ---- phone: tighter, minimap stands down ---- */
 .cab[data-o="phone"] .cab-dest{left:11px;right:11px;top:11px}
@@ -203,7 +256,7 @@ const CSS = `
 .cab[data-o="phone"] .cab-con{left:11px;right:11px;bottom:11px}
 .cab[data-o="phone"] .cab-mini{display:none}
 .cab[data-o="phone"] .cab-btn.lg{min-width:66px;min-height:66px}
-.cab[data-o="phone"] .cab-lever{width:66px;height:132px}
+.cab[data-o="phone"] .cab-lever{width:78px;height:148px}
 .cab[data-o="phone"] .cab-brake{width:40px;height:104px}
 `;
 
@@ -253,6 +306,8 @@ export default class CabHud {
 	private lastRibbonStops = -1;
 	private lastOrientation = '';
 	private onResize: (() => void) | null = null;
+	/** Where the master controller handle is sitting. Starts at neutral. */
+	private notch = NEUTRAL_INDEX;
 
 	public constructor(
 		private readonly parent: HTMLElement,
@@ -267,7 +322,11 @@ export default class CabHud {
 		 * chrome. Shipping the console without them made the game unplayable on
 		 * the device it was built for.
 		 */
-		private readonly onLever: (kind: 'power' | 'brake', down: boolean) => void = (): void => undefined,
+		/**
+		 * What the master controller is asking for: power 0–1 and brake 0–1,
+		 * never both. Called when the handle moves, not every frame.
+		 */
+		private readonly onLever: (power: number, brake: number) => void = (): void => undefined,
 	) {
 		this.mount();
 	}
@@ -311,9 +370,9 @@ export default class CabHud {
 						</div>
 						<div style="display:flex;gap:10px;align-items:flex-end">
 							<div class="cab-brake"><div class="cap"><span class="micro">BRK</span></div><div class="f"></div></div>
-							<div class="cab-lever"><div class="cap"><span class="micro">Power</span></div>${
-								NOTCHES.map((n, i) => `<div class="n" style="top:${26 + i * 19}px"><b>${n}</b></div>`).join('')
-							}<div class="f"></div></div>
+							<div class="cab-lever"><div class="cap"><span class="micro">Drive</span></div><div class="slot"></div>${
+								NOTCHES.map((n, i) => `<div class="n" data-i="${i}" style="top:${notchPercent(i)}%"><b>${n}</b></div>`).join('')
+							}<div class="knob"><u></u><i></i></div></div>
 							<div style="display:flex;flex-direction:column;gap:9px">
 								<div class="cab-btn lg horn" data-a="horn">${icon('horn')}</div>
 								<div class="cab-btn lg doors" data-a="doors">${icon('doors')}</div>
@@ -371,10 +430,55 @@ export default class CabHud {
 		};
 
 		hold(root.querySelector('[data-a="horn"]'), down => this.onHorn(down));
-		// The two that had no handlers at all. The lever and the brake were
-		// drawn as instruments and read as controls, and were neither.
-		hold(root.querySelector('.cab-lever'), down => this.onLever('power', down));
-		hold(root.querySelector('.cab-brake'), down => this.onLever('brake', down));
+
+		// The master controller: grab the handle and move it, or tap the notch
+		// you want. It STAYS where you put it — that is the difference between a
+		// controller and a button, and it is why a tap on the old one did
+		// nothing you could see.
+		const lever = root.querySelector('.cab-lever') as HTMLElement | null;
+
+		if (lever) {
+			const notchAt = (clientY: number): number => {
+				const r = lever.getBoundingClientRect();
+				const frac = ((clientY - r.top) / r.height) * 100;
+				let best = 0;
+				let bestGap = Infinity;
+
+				for (let i = 0; i < NOTCHES.length; i++) {
+					const gap = Math.abs(notchPercent(i) - frac);
+
+					if (gap < bestGap) { bestGap = gap; best = i; }
+				}
+
+				return best;
+			};
+
+			let dragging = false;
+
+			lever.addEventListener('pointerdown', (e: Event) => {
+				const pe = e as PointerEvent;
+
+				pe.preventDefault();
+				dragging = true;
+				lever.classList.add('held');
+				try { lever.setPointerCapture(pe.pointerId); } catch { /* not captureable */ }
+				this.setNotch(notchAt(pe.clientY));
+			});
+			lever.addEventListener('pointermove', (e: Event) => {
+				if (!dragging) return;
+				this.setNotch(notchAt((e as PointerEvent).clientY));
+			});
+
+			const release = (): void => { dragging = false; lever.classList.remove('held'); };
+
+			lever.addEventListener('pointerup', release);
+			lever.addEventListener('pointercancel', release);
+			window.addEventListener('blur', release);
+		}
+
+		// The brake gauge beside it stays a gauge — it reads what the controller
+		// is asking for. Two handles for one decision is how you end up applying
+		// power and brake together.
 
 		// EVERY panel's position comes from a `.cab[data-o="…"]` rule, so the
 		// attribute has to exist before the element is on screen. It used to be
@@ -400,6 +504,11 @@ export default class CabHud {
 
 		this.parent.appendChild(root);
 		this.root = root;
+
+		// Put the handle at neutral before anyone looks at it. Without this the
+		// knob has no `top` at all and sits at the very top of the slot — over
+		// the label, and reading as full power on a train that is stationary.
+		this.renderNotch();
 		this.dialEl = root.querySelector('.cab-dial');
 		this.destName = root.querySelector('.cab-dest .nm');
 		this.destMeta = root.querySelector('.cab-dest .mt');
@@ -421,6 +530,43 @@ export default class CabHud {
 		if (w < 520) return 'phone';
 
 		return w >= h ? 'land' : 'port';
+	}
+
+	/**
+	 * Move the handle to a notch and tell the train what that means.
+	 *
+	 * The handle position is the truth: it does not spring back, and nothing
+	 * else moves it, so what the player set is what the train is doing.
+	 */
+	private setNotch(index: number): void {
+		const i = Math.max(0, Math.min(NOTCHES.length - 1, Math.round(index)));
+
+		if (i === this.notch) return;
+
+		this.notch = i;
+		this.renderNotch();
+
+		const demand = notchDemand(i);
+
+		this.onLever(demand.power, demand.brake);
+	}
+
+	/** Put the handle where the notch says, and light that notch's label. */
+	private renderNotch(): void {
+		const knob = this.root?.querySelector<HTMLElement>('.cab-lever .knob');
+
+		if (knob) knob.style.top = `${notchPercent(this.notch)}%`;
+
+		this.root?.querySelectorAll<HTMLElement>('.cab-lever .n').forEach(n => {
+			n.classList.toggle('at', Number(n.dataset.i) === this.notch);
+		});
+	}
+
+	/** Back to neutral — used when a run is reset rather than by the player. */
+	public resetNotch(): void {
+		this.notch = NEUTRAL_INDEX;
+		this.renderNotch();
+		this.onLever(0, 0);
 	}
 
 	/** Put the layout the viewport currently calls for onto the root. */

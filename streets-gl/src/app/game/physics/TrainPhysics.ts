@@ -100,6 +100,16 @@ export interface TrainInput {
 	throttle: boolean;
 	braking: boolean;
 	emergency: boolean;
+	/**
+	 * What the master controller handle is set to, 0–1 each.
+	 *
+	 * A notched controller asks for a FRACTION of full power and stays there —
+	 * P1 is a gentle start, P4 is everything. The booleans above are the
+	 * keyboard, which is all-or-nothing while a key is down; when a key is held
+	 * it wins, so both ways of driving work without fighting each other.
+	 */
+	powerLevel?: number;
+	brakeLevel?: number;
 }
 
 export function createTrainPhysicsState(initialDist: number = 60): TrainPhysicsState {
@@ -134,27 +144,43 @@ export function updateTrainPhysics(
 	// leaving it live meant assisted acceleration (3.0 m/s²) simply outran the
 	// ease (1.4 m/s²) and the train still reached 132 km/h against a 55 limit —
 	// the assist looked applied and did nothing.
-	const wantsPower = input.throttle && state.trainSpeed < ceiling;
+	// The keyboard is all-or-nothing while a key is held; the controller handle
+	// asks for a fraction and holds it. A held key wins, so a player can grab
+	// the keyboard mid-run without first returning the handle to neutral.
+	const handlePower = Math.max(0, Math.min(1, input.powerLevel ?? 0));
+	const handleBrake = Math.max(0, Math.min(1, input.brakeLevel ?? 0));
+	const powerDemand = input.throttle ? 1 : handlePower;
+	const brakeDemand = input.emergency ? 1 : input.braking ? 1 : handleBrake;
+
+	const wantsPower = powerDemand > 0 && state.trainSpeed < ceiling;
+	const powerTarget = wantsPower ? powerDemand : 0;
 
 	// Wind the handles toward where the driver is asking, rather than snapping.
 	// Coming off is quicker than going on, as it is in a cab: you can always
 	// drop power immediately, but you cannot slam to full.
-	state.powerNotch = approach(state.powerNotch, wantsPower ? 1 : 0, wantsPower ? NOTCH_ON_RATE : NOTCH_OFF_RATE, dt);
+	state.powerNotch = approach(
+		state.powerNotch, powerTarget,
+		powerTarget > state.powerNotch ? NOTCH_ON_RATE : NOTCH_OFF_RATE, dt,
+	);
 	state.brakeNotch = approach(
 		state.brakeNotch,
-		input.emergency ? 1 : input.braking ? 1 : 0,
+		brakeDemand,
 		input.emergency ? 1 / EMERGENCY_APPLY_S : NOTCH_ON_RATE,
 		dt,
 	);
 
-	if (state.powerNotch > 0 && !input.braking && !input.emergency) {
+	// Power and brake cannot both be applied: the controller is one handle, and
+	// a keyboard brake overrides whatever the handle is asking for.
+	if (state.powerNotch > 0 && state.brakeNotch <= 0 && !input.braking && !input.emergency) {
 		state.trainSpeed += ACCEL * accelScale * assistScale * state.powerNotch * dt;
 	}
 
-	if (input.emergency) {
-		state.trainSpeed -= BRAKE_FORCE * brakeScale * 2 * state.brakeNotch * dt;
-	} else if (input.braking) {
-		state.trainSpeed -= BRAKE_FORCE * brakeScale * state.brakeNotch * dt;
+	// Driven by where the brake handle IS, not by whether a key is down —
+	// otherwise a controller set to B1 winds the gauge up and stops nothing.
+	if (state.brakeNotch > 0) {
+		const emergencyFactor = input.emergency ? 2 : 1;
+
+		state.trainSpeed -= BRAKE_FORCE * brakeScale * emergencyFactor * state.brakeNotch * dt;
 	} else {
 		state.trainSpeed -= FRICTION * dt;
 	}

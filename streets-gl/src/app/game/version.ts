@@ -20,16 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
-		version: '2.24.0',
-		codename: 'Take the Handle',
+		version: '2.25.0',
+		codename: 'The Real Lever',
 		date: '2026-08-15',
-		emblem: '🕹️👍',
-		summary: 'You can drive with your finger again — the power lever and the brake are real controls.',
+		emblem: '🎚️🚆',
+		summary: 'There is a proper driving lever in the cab now — move it and leave it, like a real train.',
 		changes: [
-			'DRIVE WITH YOUR FINGER — Hold the green lever to go and the orange one to stop. They were drawn like controls but were only pictures, so on an iPad there was no way to move the train at all.',
-			'They work with a mouse too, and holding on and sliding your finger off no longer leaves the power stuck on.',
+			'A REAL LEVER — A metal handle in a slot that you slide up for power and down to brake. Put it where you want and it stays there, the way a train driver does it. Before this there was no lever on the screen at all.',
+			'The steps are marked: P1 to P4 to go faster and faster, N for nothing, B1 and B2 to brake. Tap a step or drag the handle to it.',
+			'Works with a finger and with a mouse. That matters, because on an iPad there was no way to move the train at all.',
 			'TAP A LINE AND YOU DRIVE IT — Picking a line used to open another list instead of taking you to the one you tapped.',
-			'Want to start somewhere in the middle of a line? "Start from another stop" in the menu.',
+			'Want to start in the middle of a line? "Start from another stop" in the menu.',
 		],
 	},
 	{

@@ -65,6 +65,9 @@ export default class TrainSystem extends System {
 	public trainPosition: TrainWorldPosition | null = null;
 	public stationState: StationState | null = null;
 	public gameActive: boolean = false;
+	/** Where the cab's master controller handle is set. Persists until moved. */
+	private controllerPower: number = 0;
+	private controllerBrake: number = 0;
 	/**
 	 * Bumped every time a different map is loaded.
 	 *
@@ -306,6 +309,17 @@ export default class TrainSystem extends System {
 		this.input.setHeld('brake', value);
 	}
 
+	/**
+	 * Where the master controller handle is set, 0–1 each and never both.
+	 *
+	 * This persists: a notched controller stays where it was put, which is the
+	 * whole point of it. Nothing here springs back on its own.
+	 */
+	public setController(power: number, brake: number): void {
+		this.controllerPower = Math.max(0, Math.min(1, power));
+		this.controllerBrake = Math.max(0, Math.min(1, brake));
+	}
+
 	public setStationArrivalCallback(
 		cb: (stationName: string, index: number, total: number) => void
 	): void {
@@ -382,6 +396,8 @@ export default class TrainSystem extends System {
 			throttle: this.input.isHeld('throttle'),
 			braking: this.input.isHeld('brake'),
 			emergency: this.input.isHeld('emergency'),
+			powerLevel: this.controllerPower,
+			brakeLevel: this.controllerBrake,
 		};
 
 		if (this.input.wasPressed('doors')) {

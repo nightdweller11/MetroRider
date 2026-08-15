@@ -377,11 +377,8 @@ export default class GameUISystem extends System {
 				if (down) audio?.hornDown();
 				else audio?.hornUp();
 			},
-			(kind, down) => {
-				const trainSystem = this.systemManager.getSystem(TrainSystem);
-
-				if (kind === 'power') trainSystem?.setHUDThrottle(down);
-				else trainSystem?.setHUDBrake(down);
+			(power, brake) => {
+				this.systemManager.getSystem(TrainSystem)?.setController(power, brake);
 			},
 		);
 		this.cabSheet = new CabSheet(this.container);
