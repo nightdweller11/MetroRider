@@ -123,6 +123,7 @@ const CSS = `
 .cab-mini .cap{display:flex;align-items:center;padding:7px 10px 5px}
 .cab-mini .plot{position:relative;flex:1;background:linear-gradient(180deg,#080d13,#050a0f);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.05),inset 0 0 18px rgba(0,0,0,.8)}
+.cab-mini .plot canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:auto}
 .cab-mini .plot svg{position:absolute;inset:0;width:100%;height:100%}
 /* A wedge, not a dot: the map is north-up and does not turn, so the marker is
    the only thing that can say which way the train is facing. */
@@ -351,7 +352,7 @@ export default class CabHud {
 			<div class="panel cab-rib"></div>
 			<div class="panel cab-mini">
 				<div class="cap"><span class="micro"></span></div>
-				<div class="plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="you"></div></div>
+				<div class="plot"><canvas class="ground"></canvas><svg viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="you"></div></div>
 				<div class="foot"></div>
 			</div>
 			<div class="cab-util">
@@ -567,6 +568,17 @@ export default class CabHud {
 		this.notch = NEUTRAL_INDEX;
 		this.renderNotch();
 		this.onLever(0, 0);
+	}
+
+	/**
+	 * The canvas the surrounding streets are painted onto.
+	 *
+	 * Handed out rather than fed through `update()` because the ground is a
+	 * bitmap the size of the panel: passing it as state would mean copying it
+	 * every frame to draw the same thing.
+	 */
+	public groundCanvas(): HTMLCanvasElement | null {
+		return this.root?.querySelector<HTMLCanvasElement>('.cab-mini .plot canvas') ?? null;
 	}
 
 	/** Put the layout the viewport currently calls for onto the root. */

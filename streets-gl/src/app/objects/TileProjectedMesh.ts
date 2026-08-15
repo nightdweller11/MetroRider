@@ -8,7 +8,7 @@ import Vec3 from "~/lib/math/Vec3";
 export default class TileProjectedMesh extends RenderableObject3D {
 	public mesh: AbstractMesh = null;
 
-	public constructor(private buffers: Tile3DBuffersProjected) {
+	public constructor(public readonly buffers: Tile3DBuffersProjected) {
 		super();
 
 		const box = buffers.boundingBox;

@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.28.0',
+		codename: 'The Streets Around You',
+		date: '2026-08-15',
+		emblem: '🗺️🛣️',
+		summary: 'The little map is a real map now — the streets, parks and junctions you are driving through.',
+		changes: [
+			'A REAL MAP IN THE CORNER — It shows the actual roads, junctions, parks and fields around the train, with your line drawn over the top and you in the middle. Before, it was just a coloured line on black with nothing around it.',
+			'It is the same ground the game is drawing out of the windscreen, so what you see beside the track is what you see on the map.',
+			'North stays up and the world slides under you, so the map never spins while you are trying to read it.',
+		],
+	},
+	{
 		version: '2.27.0',
 		codename: 'Read the Dial',
 		date: '2026-08-15',

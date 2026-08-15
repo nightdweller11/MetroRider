@@ -23,6 +23,8 @@ import CabSheet, {type SheetRow} from './ui/CabSheet';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
 import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
+import {bakeTileGround, drawGround, type BakedTile} from './ui/MiniMapGround';
+import TileSystem from '../systems/TileSystem';
 import {getPositionAtDistance} from './data/TrackBuilder';
 import MathUtils from '~/lib/math/MathUtils';
 
@@ -102,6 +104,8 @@ export default class GameUISystem extends System {
 	private miniHeading = 0;
 	private miniBuiltAt = -1e9;
 	private miniLineKey = '';
+	/** One baked ground plan per loaded tile, keyed 'x,y'. */
+	private bakedTiles: Map<string, BakedTile> = new Map();
 	/** What photo mode the interface is currently dressed for. */
 	private photoModeApplied: boolean = false;
 	private stationPanelEl: HTMLElement | null = null;
@@ -1705,6 +1709,59 @@ export default class GameUISystem extends System {
 		this.miniLines.forEach((line, i) => { line.isCurrent = i === current; });
 
 		this.miniView = buildMiniMapView(this.miniLines, this.miniStations, centre, MINI_SPAN_M);
+		this.drawMiniGround(centre);
+	}
+
+	/**
+	 * Paint the streets around the train under the route overlay.
+	 *
+	 * Each tile's ground plan is baked once into its own small canvas and kept;
+	 * this only composites the two-to-nine tiles the window touches. Baking on
+	 * demand rather than up front matters because tiles stream in as the train
+	 * moves, and a tile that never comes near the window is never drawn.
+	 */
+	private drawMiniGround(centre: {x: number; y: number}): void {
+		const canvas = this.cabHud?.groundCanvas();
+		const tileSystem = this.systemManager.getSystem(TileSystem);
+
+		if (!canvas || !tileSystem) return;
+
+		const size = Math.max(64, Math.round(canvas.clientWidth || 200));
+
+		if (canvas.width !== size) {
+			canvas.width = size;
+			canvas.height = size;
+		}
+
+		const ctx = canvas.getContext('2d');
+
+		if (!ctx) return;
+
+		for (const tile of tileSystem.tiles.values()) {
+			const key = `${tile.x},${tile.y}`;
+
+			if (this.bakedTiles.has(key)) continue;
+
+			const buffers = tile.projectedMesh?.buffers;
+
+			// A tile with no ground data (open water, or still loading) is
+			// recorded as baked-with-nothing so it is not re-examined every pass.
+			if (!buffers?.positionBuffer?.length) continue;
+
+			const origin = MathUtils.tile2meters(tile.x, tile.y + 1);
+			const baked = bakeTileGround(buffers, origin.x, origin.y);
+
+			if (baked) this.bakedTiles.set(key, baked);
+		}
+
+		// Tiles the world has evicted should not be held onto here either.
+		if (this.bakedTiles.size > 96) {
+			for (const key of this.bakedTiles.keys()) {
+				if (!tileSystem.tiles.has(key)) this.bakedTiles.delete(key);
+			}
+		}
+
+		drawGround(ctx, [...this.bakedTiles.values()], {x: centre.x, z: centre.y}, MINI_SPAN_M, size);
 	}
 
 	private applyLineListVisibility(): void {
