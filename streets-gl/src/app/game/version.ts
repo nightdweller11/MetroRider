@@ -20,6 +20,20 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.32.0',
+		codename: 'Every Line Its Own Name',
+		date: '2026-08-15',
+		emblem: '🏷️🗺️',
+		summary: 'Lines are labelled properly again, the built-in map can be shared, and the game keeps a record of everywhere you have driven.',
+		changes: [
+			'LINE LABELS ARE RIGHT AGAIN — Four different routes on the Israel map were all labelled "A1", and two more were both "C6". A service is named by BOTH its codes, so they now read A1-A2, A1-A3, A1-A4 and A1-A5 — each one different.',
+			'The line names are tidier too: the code is on the badge, so the name beside it just says "Sharon Local - Ayalon Local".',
+			'EVERYWHERE YOU HAVE DRIVEN — A new page in the menu keeps your totals: how far you have driven altogether, how long at the controls, how many cities, stations, lines and passengers, and your top speed ever. It is saved, so it adds up over weeks.',
+			'You get a little cheer when you pass a round number, like your first 100 km.',
+			'"Copy a link to this ride" works on the map the game opens on. Before, it only worked for cities picked from "Drive another map".',
+		],
+	},
+	{
 		version: '2.31.0',
 		codename: 'Someone to Be',
 		date: '2026-08-15',

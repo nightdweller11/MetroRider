@@ -22,8 +22,11 @@ import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
 import WalkPad from './ui/WalkPad';
 import {distanceFromTrain, leashNotice} from './WalkController';
+import JourneySystem from './JourneySystem';
+import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
+import {lineBadge, lineNameWithoutCode, lineShortLabel} from './data/LineLabel';
 import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
 import {bakeTileGround, drawGround, type BakedTile} from './ui/MiniMapGround';
 import TileSystem from '../systems/TileSystem';
@@ -53,23 +56,6 @@ const STOP_MARK_READOUT_FLOOR_M = 250;
  */
 const MINI_SPAN_M = 2000;
 
-/**
- * A line's name, short enough for a caption.
- *
- * Prefers the code the name starts with ("A1 - A2 Sharon Local" → "A1"),
- * because that is what the line is called on a map and it fits. Falls back to
- * the opening words rather than an id: these names come from other people's
- * maps and run to a paragraph in places.
- */
-function lineShortName(name: string | undefined): string {
-	if (!name) return '';
-
-	const code = name.match(/^([A-Z]{1,2}\d{1,2})/)?.[1];
-
-	if (code) return code;
-
-	return name.length > 14 ? `${name.slice(0, 13).trimEnd()}…` : name;
-}
 import {
 	releaseLabel,
 	RELEASE_VERSION,
@@ -408,6 +394,11 @@ export default class GameUISystem extends System {
 			},
 		);
 		this.cabSheet = new CabSheet(this.container);
+
+		// Something to be pleased about, when a round number goes by.
+		const journey = this.systemManager.getSystem(JourneySystem);
+
+		if (journey) journey.onMilestone = (text): void => this.showToast(`🎉 ${text}`, 3200);
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
@@ -776,6 +767,14 @@ export default class GameUISystem extends System {
 				onSelect: (): void => this.openTimetableSheet(),
 			},
 			{
+				badge: 'ME',
+				badgeColor: '#4fd996',
+				title: 'Everywhere you have driven',
+				subtitle: 'How far, how long, how many cities and stations',
+				keepOpen: true,
+				onSelect: (): void => this.openTravelsSheet(),
+			},
+			{
 				badge: 'INFO',
 				badgeColor: '#4fb6ef',
 				title: 'About this line',
@@ -967,6 +966,44 @@ export default class GameUISystem extends System {
 		});
 
 		this.cabSheet.show('Which service?', rows);
+	}
+
+	/**
+	 * Everything you have driven, ever.
+	 *
+	 * The run card grades one trip and then it is gone. This is the number a
+	 * child actually asks after a fortnight: how far have I driven?
+	 */
+	private openTravelsSheet(): void {
+		const journey = this.systemManager.getSystem(JourneySystem);
+
+		if (!journey || !this.cabSheet) return;
+
+		const log = journey.snapshot();
+		const fact = (badge: string, colour: string, title: string, subtitle: string): SheetRow => ({
+			badge, badgeColor: colour, title, subtitle,
+			readOnly: true, onSelect: (): void => undefined,
+		});
+
+		this.cabSheet.show('Everywhere you have driven', [
+			fact('FAR', '#4fb6ef', describeDistance(log.metres), 'Driven altogether'),
+			fact('TIME', '#4fd996', describeDuration(log.drivingSeconds), 'At the controls'),
+			fact('CITY', '#ef7b9c',
+				log.maps.length === 1 ? '1 city' : `${log.maps.length} cities`,
+				log.maps.slice(-3).reverse().join(' · ') || 'Nowhere yet'),
+			fact('STOP', '#f0a63f',
+				`${log.stops.toLocaleString()} stops made`,
+				`${log.stations.length} different stations served`),
+			fact('LINE', '#8b7bef',
+				log.lines.length === 1 ? '1 line driven' : `${log.lines.length} lines driven`,
+				'Across every map you have visited'),
+			fact('PAX', '#4fb6ef',
+				`${log.delivered.toLocaleString()} passengers`,
+				'Carried to the stop they wanted'),
+			fact('TOP', '#ff5346',
+				`${Math.round(log.topSpeedMs * 3.6)} km/h`,
+				'The fastest you have ever gone'),
+		]);
 	}
 
 	/** The whole working timetable, due against actual. */
@@ -1637,12 +1674,16 @@ export default class GameUISystem extends System {
 			);
 
 			return {
-				// The line CODE, which is the leading token of the name ("A1 - A2
-				// Sharon Local"). parsed.id is a numeric index and means nothing
-				// to a player.
-				badge: (ls.parsed.name.match(/^([A-Z]{1,2}\d{1,2})/)?.[1]) ?? String(idx + 1),
+				// BOTH codes — a service is the A1 to A2, and taking only the
+				// first badged four different routes on the built-in map "A1".
+				// parsed.id is a numeric index and means nothing to a player.
+				badge: lineBadge(ls.parsed.name, idx),
 				badgeColor: ls.parsed.color,
-				title: ls.parsed.isLoop ? `${ls.parsed.name} ⟳` : ls.parsed.name,
+				// The name without the code it is already badged with, so the
+				// row is not "A1-A2 · A1 - A2 Sharon Local - Ayalon Local".
+				title: ls.parsed.isLoop
+					? `${lineNameWithoutCode(ls.parsed.name)} ⟳`
+					: lineNameWithoutCode(ls.parsed.name),
 				subtitleIcon: mode.icon,
 				subtitle: `${mode.label} · ${ls.parsed.stations.length} stops`,
 				// Tapping a line DRIVES that line, from its first stop. It used to
@@ -1756,7 +1797,7 @@ export default class GameUISystem extends System {
 			brake: physics?.brakeNotch ?? 0,
 			// The line's NAME, never its index. This read "0" on screen — a raw
 			// id is meaningless to whoever is driving.
-			lineName: lineShortName(ls?.parsed.name) || 'LINE',
+			lineName: lineShortLabel(ls?.parsed.name) || 'LINE',
 			simpleMode: this.systemManager.getSystem(SettingsSystem)
 				?.settings.get('driveMode')?.statusValue === 'simple',
 			miniView: this.miniView,
@@ -2322,10 +2363,19 @@ export default class GameUISystem extends System {
 			playBtn.style.display = 'none';
 
 			try {
-				const {fetchMetroDreaminMap} = await import('./data/MetroDreaminImporter');
+				const {fetchMetroDreaminMap, extractMapId} = await import('./data/MetroDreaminImporter');
 				const mapData = await fetchMetroDreaminMap(url);
 				trainSystem.loadMap(mapData);
 				this.currentMapUrl = url;
+				// The id, not just the url — a shared link is built from the id,
+				// and only the world-tour path was recording one. Every map
+				// reached any other way, INCLUDING the built-in one the game
+				// opens on, answered "this map cannot be linked to yet".
+				try {
+					this.currentMapId = extractMapId(url);
+				} catch {
+					this.currentMapId = null;
+				}
 				this.closeMetroMapOverlay();
 				this.saveMapEntry(url, mapData.name);
 				statusEl.textContent = `Loaded: ${mapData.name}`;

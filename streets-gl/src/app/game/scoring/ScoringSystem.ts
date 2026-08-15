@@ -4,6 +4,7 @@ import PassengerSystem from '../passengers/PassengerSystem';
 import ProfileClient from '../profiles/ProfileClient';
 import SpeedLimitSystem from '../limits/SpeedLimitSystem';
 import ServiceSystem from '../service/ServiceSystem';
+import JourneySystem from '../JourneySystem';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 import SettingsSystem from '~/app/systems/SettingsSystem';
@@ -31,6 +32,8 @@ export default class ScoringSystem extends System {
 	 * were judged against no longer exists.
 	 */
 	private stopLateness: (number | null)[] = [];
+	/** Passengers delivered as of the previous stop, to take a difference from. */
+	private deliveredAtLastStop = 0;
 
 	/** Set by GameUISystem so cards can be shown without this system knowing the DOM. */
 	public onStopScored: ((result: StopResult, stationName: string) => void) | null = null;
@@ -96,6 +99,7 @@ export default class ScoringSystem extends System {
 		this.stop.reset();
 		this.run.abandon();
 		this.stopLateness = [];
+		this.deliveredAtLastStop = 0;
 		this.run.start({
 			mapId: trainSystem.mapName || 'unknown-map',
 			lineId: ls.parsed.id,
@@ -119,6 +123,20 @@ export default class ScoringSystem extends System {
 				? null
 				: this.systemManager.getSystem(ServiceSystem)?.latenessAtStation(result.stationIndex) ?? null,
 		);
+
+		// The lifetime record counts the same stop, once, from the same place —
+		// rather than a second detector that could disagree with this one about
+		// what a stop is.
+		if (result.verdict !== 'passed') {
+			// The DELTA since the last stop, not the running total: passing the
+			// cumulative figure would add the whole run's deliveries again at
+			// every station and the lifetime count would climb quadratically.
+			const delivered = this.systemManager.getSystem(PassengerSystem)?.getSnapshot()?.delivered ?? 0;
+			const sinceLastStop = Math.max(0, delivered - this.deliveredAtLastStop);
+
+			this.deliveredAtLastStop = delivered;
+			this.systemManager.getSystem(JourneySystem)?.recordStop(result.stationIndex, sinceLastStop);
+		}
 
 		const stationName = ls.parsed.stations[result.stationIndex]?.name ?? '';
 		this.onStopScored?.(result, stationName);
