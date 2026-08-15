@@ -13,12 +13,6 @@ export interface StationState {
 
 export class StationManager {
   private lastArrivedIdx: number | null = null;
-  private onArrival: ((station: StationData, index: number, totalStations: number) => void) | null = null;
-
-  public setArrivalCallback(cb: (station: StationData, index: number, totalStations: number) => void): void {
-    this.onArrival = cb;
-  }
-
   public reset(): void {
     this.lastArrivedIdx = null;
   }
@@ -65,9 +59,6 @@ export class StationManager {
 
     if (arriving && this.lastArrivedIdx !== nearestStIdx) {
       this.lastArrivedIdx = nearestStIdx;
-      if (this.onArrival && nearestStIdx >= 0 && nearestStIdx < stations.length) {
-        this.onArrival(stations[nearestStIdx], nearestStIdx, stations.length);
-      }
     }
 
     if (!arriving) {

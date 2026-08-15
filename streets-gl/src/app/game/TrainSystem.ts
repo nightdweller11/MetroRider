@@ -93,8 +93,6 @@ export default class TrainSystem extends System {
 	private stationManager: StationManager = new StationManager();
 	private input: InputHandler = new InputHandler();
 	private pendingCameraMove: {lat: number; lng: number} | null = null;
-	private onStationArrival: ((stationName: string, index: number, total: number) => void) | null = null;
-	private onDirectionChangeCallback: (() => void) | null = null;
 
 	public postInit(): void {
 		this.loadDefaultMap();
@@ -141,6 +139,10 @@ export default class TrainSystem extends System {
 		this.physicsState = createTrainPhysicsState(
 			ls.realStationDists[0] + 60
 		);
+		// Same as being set down at a stop: held, and a different journey.
+		this.controllerPower = 0;
+		this.controllerBrake = 1;
+		this.journeyGeneration++;
 		this.stationManager.reset();
 
 		this.updateCorridorSegments();
@@ -287,6 +289,15 @@ export default class TrainSystem extends System {
 		this.physicsState.trainSpeed = 0;
 		this.physicsState.direction = dir;
 		this.physicsState.doorsOpen = false;
+		// Set down ON THE BRAKE. A master controller staying where it was put is
+		// the whole point of one — but the train has just been picked up and
+		// put at a platform, and leaving the handle at full power meant it
+		// drove straight off on its own. Neutral is not enough either: with
+		// nothing applied it rolls down any bank (20 m in 8 seconds, measured),
+		// so a minute in the menu left the train a long way from where it was
+		// put. `CabHud.parkNotch` was written for this and never called.
+		this.controllerPower = 0;
+		this.controllerBrake = 1;
 		this.stationManager.reset();
 		this.journeyGeneration++;
 
@@ -297,14 +308,12 @@ export default class TrainSystem extends System {
 	public reverseDirection(): void {
 		this.physicsState.direction *= -1;
 		this.journeyGeneration++;
-		this.onDirectionChangeCallback?.();
 	}
 
 	public setDirection(dir: number): void {
 		if (dir !== this.physicsState.direction) this.journeyGeneration++;
 
 		this.physicsState.direction = dir;
-		this.onDirectionChangeCallback?.();
 	}
 
 	public toggleDoors(): void {
@@ -328,14 +337,6 @@ export default class TrainSystem extends System {
 		return this.input;
 	}
 
-	public setHUDThrottle(value: boolean): void {
-		this.input.setHeld('throttle', value);
-	}
-
-	public setHUDBrake(value: boolean): void {
-		this.input.setHeld('brake', value);
-	}
-
 	/**
 	 * Where the master controller handle is set, 0–1 each and never both.
 	 *
@@ -345,16 +346,6 @@ export default class TrainSystem extends System {
 	public setController(power: number, brake: number): void {
 		this.controllerPower = Math.max(0, Math.min(1, power));
 		this.controllerBrake = Math.max(0, Math.min(1, brake));
-	}
-
-	public setStationArrivalCallback(
-		cb: (stationName: string, index: number, total: number) => void
-	): void {
-		this.onStationArrival = cb;
-	}
-
-	public setDirectionChangeCallback(cb: () => void): void {
-		this.onDirectionChangeCallback = cb;
 	}
 
 	public getCurrentLine(): LineState | null {
@@ -672,13 +663,6 @@ export default class TrainSystem extends System {
 				}
 			}
 
-			if (this.onStationArrival) {
-				this.onStationArrival(
-					this.stationState.stationName,
-					this.stationState.nearestStationIdx,
-					ls.parsed.stations.length,
-				);
-			}
 		} else {
 			// The moment the arriving flag drops is departure — the one point
 			// where naming the stop ahead is useful rather than noise.

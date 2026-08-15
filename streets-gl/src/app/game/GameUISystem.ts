@@ -27,6 +27,7 @@ import {distanceFromTrain, leashNotice} from './WalkController';
 import JourneySystem from './JourneySystem';
 import GhostSystem from './replay/GhostSystem';
 import {ghostChip} from './replay/GhostTrace';
+import AmbientTrainSystem from './AmbientTrainSystem';
 import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
@@ -99,6 +100,8 @@ export default class GameUISystem extends System {
 	private miniStations: MiniMapPoint[] = [];
 	private miniView: MiniMapView | undefined = undefined;
 	private miniHeading = 0;
+	/** So the drawn handle can follow the train being set down somewhere else. */
+	private lastJourneyGeneration = -1;
 	private miniBuiltAt = -1e9;
 	private miniLineKey = '';
 	private ribbonLegsKey = '';
@@ -1805,6 +1808,15 @@ export default class GameUISystem extends System {
 		const name = ss?.stationName ?? '—';
 		const waiting = passengers && nextIdx >= 0 ? passengers.waitingAt(nextIdx) : null;
 
+		// Jumping to another stop puts the train back on a platform at a stand.
+		// The lever is the one control that persists by design, so it has to be
+		// told — otherwise the drawn handle still reads P4 over a stationary
+		// train, and the physics agrees with the drawing rather than the sight.
+		if (trainSystem.journeyGeneration !== this.lastJourneyGeneration) {
+			this.lastJourneyGeneration = trainSystem.journeyGeneration;
+			this.cabHud.parkNotch();
+		}
+
 		this.cabHud.update({
 			speedKmh: speed,
 			limitKmh: limit,
@@ -1843,6 +1855,13 @@ export default class GameUISystem extends System {
 			// the chip stays hidden rather than claiming a dead heat with a
 			// ghost that does not exist.
 			ghost: ghostChip(this.systemManager.getSystem(GhostSystem)?.delta() ?? null),
+			// Both of these were already being computed and shown nowhere: the
+			// run's points only ever appeared on the card after the run was
+			// over, and the gap to the train in front only ever as a red
+			// signal.
+			runPoints: this.systemManager.getSystem(ScoringSystem)?.getRunTotal() ?? null,
+			trainAheadM: this.systemManager.getSystem(AmbientTrainSystem)
+				?.leadingGap(physics?.trainDist ?? 0, physics?.direction ?? 1) ?? null,
 		});
 
 		this.updateMiniMap(trainSystem);

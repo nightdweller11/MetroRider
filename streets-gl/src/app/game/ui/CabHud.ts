@@ -69,9 +69,33 @@ export interface CabHudState {
 	power: number;
 	brake: number;
 	lineName: string;
+	/**
+	 * Points on this run so far, or null before anything has been scored.
+	 *
+	 * A run is graded stop by stop and the total was only ever shown on the
+	 * card at the very end — which is the one moment it can no longer change
+	 * anything. Watching it climb is most of the reason to care about it.
+	 */
+	runPoints?: number | null;
+	/**
+	 * Metres to the train in front, or null when there is nothing ahead.
+	 *
+	 * The gap has been computed since the same-line traffic shipped and shown
+	 * nowhere: the signals turned red, which is the railway's answer, but the
+	 * driver had no way to tell "just round the corner" from "half a mile off".
+	 */
+	trainAheadM?: number | null;
 }
 
 const STYLE_ID = 'cab-hud-style';
+
+/**
+ * Inside this the tell-tale lights, metres.
+ *
+ * Roughly the distance a train at line speed needs to stop, so the lamp comes
+ * on while there is still something the driver can do about it.
+ */
+const AHEAD_WARN_M = 900;
 
 /** Notch labels top-to-bottom, power above neutral, brake below. */
 /**
@@ -149,6 +173,11 @@ const CSS = `
 /* Too many stations to draw one dot each: the strip is a proportion now, and
    saying so is better than letting it be miscounted. */
 .cab-rib .more{margin-left:7px;font-family:var(--tech);font-size:9px;letter-spacing:.1em;color:var(--ink-3)}
+/* Points on this run, climbing as you drive it. */
+.cab-rib .pts{margin-left:9px;padding:3px 7px;border-radius:7px;font-family:var(--tech);font-size:11px;
+  font-weight:700;letter-spacing:.06em;color:#ffe2a8;white-space:nowrap;
+  background:linear-gradient(180deg,rgba(255,180,58,.2),rgba(255,180,58,.06));
+  box-shadow:inset 0 0 0 1px rgba(255,180,58,.3)}
 .cab-rib .st{width:8px;height:8px;border-radius:50%;background:#b9c9d9;margin:0 -3px;box-shadow:0 0 0 2px #0c1219}
 .cab-rib .st.now{width:14px;height:14px;background:radial-gradient(circle at 50% 35%,#ffd489,var(--amber));
   box-shadow:0 0 0 3px #0c1219,0 0 14px rgba(255,180,58,.9)}
@@ -338,6 +367,8 @@ export default class CabHud {
 	private miniFoot: HTMLElement | null = null;
 	private lampDoors: HTMLElement | null = null;
 	private lampLimit: HTMLElement | null = null;
+	private lampAhead: HTMLElement | null = null;
+	private ribPoints: HTMLElement | null = null;
 	private leverFill: HTMLElement | null = null;
 	private brakeFill: HTMLElement | null = null;
 	private lastRibbonKey = '';
@@ -404,6 +435,7 @@ export default class CabHud {
 						<div class="cab-lamps">
 							<span class="cab-lamp" data-l="doors"><b>DOORS</b></span>
 							<span class="cab-lamp" data-l="limit"><b>LIMIT</b></span>
+							<span class="cab-lamp" data-l="ahead"><b>AHEAD</b></span>
 						</div>
 						<div style="display:flex;gap:10px;align-items:flex-end">
 							<div class="cab-brake"><div class="cap"><span class="micro">BRK</span></div><div class="f"></div></div>
@@ -556,6 +588,7 @@ export default class CabHud {
 		this.miniFoot = root.querySelector('.cab-mini .foot');
 		this.lampDoors = root.querySelector('[data-l="doors"]');
 		this.lampLimit = root.querySelector('[data-l="limit"]');
+		this.lampAhead = root.querySelector('[data-l="ahead"]');
 		this.leverFill = root.querySelector('.cab-lever .f');
 		this.brakeFill = root.querySelector('.cab-brake .f');
 	}
@@ -601,10 +634,20 @@ export default class CabHud {
 	}
 
 	/** Back to neutral — used when a run is reset rather than by the player. */
-	public resetNotch(): void {
-		this.notch = NEUTRAL_INDEX;
+	/**
+	 * Put the handle where a train that has just been set down belongs: hard on
+	 * the brake.
+	 *
+	 * NOT neutral. A stationary train with nothing applied rolls — measured at
+	 * 20 m in 8 seconds and still gaining on a gentle bank — so jumping to a
+	 * stop and reading the timetable for a minute left the train hundreds of
+	 * metres down the line with nobody driving it. The physics already knows a
+	 * train at a platform is held on its brakes; this is what puts it there.
+	 */
+	public parkNotch(): void {
+		this.notch = NOTCHES.length - 1;
 		this.renderNotch();
-		this.onLever(0, 0);
+		this.onLever(0, 1);
 	}
 
 	/**
@@ -683,6 +726,25 @@ export default class CabHud {
 
 		this.lampDoors?.classList.toggle('on-g', s.doorsOpen);
 		this.lampLimit?.classList.toggle('on-a', s.overLimit);
+
+		// The train in front, in metres, inside the tell-tale that names it —
+		// so the lamp says how close rather than only that something is there.
+		if (this.lampAhead) {
+			const gap = s.trainAheadM;
+			const near = gap !== null && gap !== undefined && Number.isFinite(gap) && gap >= 0;
+			const label = this.lampAhead.querySelector('b');
+
+			this.lampAhead.classList.toggle('on-a', near && gap < AHEAD_WARN_M);
+			if (label) label.textContent = near ? `${Math.round(gap)}m` : 'AHEAD';
+		}
+
+		if (this.ribPoints) {
+			const pts = s.runPoints;
+			const show = pts !== null && pts !== undefined && pts > 0;
+
+			this.ribPoints.style.display = show ? '' : 'none';
+			this.ribPoints.textContent = show ? `${pts} PTS` : '';
+		}
 
 		if (this.leverFill) this.leverFill.style.height = `${Math.max(4, s.power * 100).toFixed(0)}%`;
 		if (this.brakeFill) this.brakeFill.style.height = `${Math.max(4, s.brake * 100).toFixed(0)}%`;
@@ -832,7 +894,11 @@ export default class CabHud {
 			if (s.isLoop) html += '<span class="loop">⟳</span>';
 			else if (view.compressed) html += `<span class="more">${s.stopCount} STOPS</span>`;
 
+			// The run's score lives on the strip because the strip IS the run.
+			html += '<span class="pts"></span>';
+
 			this.ribbonEl.innerHTML = html;
+			this.ribPoints = this.ribbonEl.querySelector('.pts');
 		}
 
 		const dots = this.ribbonEl.querySelectorAll('.st');

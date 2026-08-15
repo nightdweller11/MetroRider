@@ -11,12 +11,12 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.35.0 "Somewhere New"** — 56 releases. Every row
+**Live on metrorider.net: v2.41.0 "Hold It There"** — 62 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 ### What shipped on 2026-08-15
 
-Thirteen releases in one session, and eleven of them were CORRECTIONS rather
+Nineteen releases in one session, and thirteen of them were CORRECTIONS rather
 than features — things that existed in code and did nothing, or did the wrong
 thing. The pattern is worth naming because it recurred every single time: a
 surface that looked built, wired to nothing or to the wrong source. Reading
@@ -37,6 +37,12 @@ the code showed a lever; running the game showed a green bar.
 | 2.33.0 The Train in Front | Block signals protected only the other track — a red meant nothing |
 | 2.34.0 Count the Stops | The route strip drew 12 dots for 21 stations, marker between them |
 | 2.35.0 Somewhere New | Discovery had been parked on worker plumbing it never needed |
+| 2.36.0 Cast Off | Ferry was a line mode with no boat and rails laid under the water |
+| 2.37.0 Inside the Cab | Cab view was a camera at the front, not a cab; curves were silent |
+| 2.38.0 Pin It on the Map | Finds were counted and had nowhere to be seen |
+| 2.39.0 Race Yourself | A best time you could never chase — and the clock ran before the race started |
+| 2.40.0 Show Your Working | "Good stop, 65" is a grade with no mark scheme; the ghost row could come up empty |
+| 2.41.0 Hold It There | A train jumped to a stop kept full power and drove off; in neutral it rolled away. Score and train-ahead were computed and shown nowhere |
 
 **The habit that found all of it: open the game and use it.** Not one of these
 was visible to a passing test suite, and several had passing tests around
@@ -168,6 +174,49 @@ wants a camera).
 - [ ] **Cab windscreen overlay** — instruments shipped in v2.1.0 as the
       permanent HUD in every view; the windscreen framing is not built
 - [ ] **Flange squeal** by curvature × speed
+
+## The dead-surface sweep (v2.41.0)
+
+Eleven of the thirteen releases before it were corrections to surfaces that
+existed in code and did nothing, or the wrong thing. None were visible to the
+test suite. So the sweep was made mechanical: walk every `public` member
+declared under `src/app/game/` and count its references across the whole of
+`src/`. Anything referenced ONCE is its own declaration and nothing else.
+
+222 public members; 15 came back lonely. They sorted into three kinds, and
+only the first is what people mean by dead code:
+
+**Hooks with no subscriber — deleted, both ends.** `TrainSystem`'s
+`setStationArrivalCallback` and `setDirectionChangeCallback`, and
+`StationManager.setArrivalCallback`, were never called, so the guarded
+invocations (`this.onStationArrival?.(…)`) could never fire. A null-check that
+can never pass is worse than nothing: it reads as a feature. Arrival is
+already handled directly — the chime plays, the announcement fires on
+departure — so nothing was lost. `setHUDThrottle`/`setHUDBrake` were the old
+hold-to-drive buttons, superseded by the notched `setController`.
+
+**Numbers computed and shown nowhere — SHIPPED, because they were features.**
+`ScoringSystem.getRunTotal()` had no caller: a run is graded stop by stop and
+the total only ever appeared on the card at the end, which is the one moment
+it can no longer change anything. It is now a chip on the route strip that
+climbs while you drive. `AmbientTrainSystem.leadingGap()` had no caller
+either: the same-line traffic that shipped in 2.33.0 turned signals red but
+never told the driver how far the train in front was. It is now the third cab
+tell-tale, in metres, lit inside 900.
+
+**One that was a bug.** `CabHud.resetNotch()` existed, was correct, and was
+called by nothing — so a train jumped to another stop kept whatever the handle
+was set to. At P4 it drove off on its own. Wiring it revealed the real
+problem underneath: neutral is not enough either, because a train with nothing
+applied rolls (measured, 20 m in 8 seconds on a gentle bank, still gaining).
+A train set down at a platform is now HELD ON THE BRAKE — which is what the
+physics already assumed, in a comment about doors that this path never
+reached. Same for selecting a new line.
+
+Sweep script: `/tmp/sweep.mjs` shape is four lines of `readdirSync` +
+`matchAll(/^\s*public\s+…/gm)` + a reference count. Worth re-running whenever
+a batch of features lands; it costs seconds and has now found more real
+defects than the 824-test suite has.
 
 ## F2 — Driving score (`02-driving-score.md`)
 - [x] `StopScorer.ts` state machine + unit tests

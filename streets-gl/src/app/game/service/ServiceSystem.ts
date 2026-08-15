@@ -70,10 +70,6 @@ export default class ServiceSystem extends System {
 		this.builtForLine = -1;
 	}
 
-	public departedAt(): number {
-		return this.builtAt;
-	}
-
 	public actualFor(stationIndex: number): number | undefined {
 		return this.actuals.get(stationIndex);
 	}

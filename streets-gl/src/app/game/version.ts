@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.41.0',
+		codename: 'Hold It There',
+		date: '2026-08-15',
+		emblem: '🛑🏆',
+		summary: 'The train stays where you put it, your score shows while you drive, and the train in front has a distance.',
+		changes: [
+			'THE TRAIN STAYS PUT — Jump to another stop and the brake goes on. It used to be left with the handle wherever you had it: at full power it drove straight off on its own, and even in neutral it rolled 20 metres down a slope in 8 seconds while you were reading the timetable.',
+			'YOUR SCORE, WHILE IT STILL MATTERS — Points on this run now show on the route strip and climb as you drive. They only ever appeared on the card at the end, which is the one moment they can no longer change anything.',
+			'HOW CLOSE IS THE TRAIN IN FRONT — A third cab light says how many metres to the train ahead, and comes on inside 900. Before, the only clue was a signal turning red.',
+		],
+	},
+	{
 		version: '2.40.0',
 		codename: 'Show Your Working',
 		date: '2026-08-15',

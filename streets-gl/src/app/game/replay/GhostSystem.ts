@@ -58,11 +58,6 @@ export default class GhostSystem extends System {
 		return this.departed ? this.deltaS : null;
 	}
 
-	/** Whether this journey has a record to race, and the race has begun. */
-	public hasGhost(): boolean {
-		return this.departed && isUsableTrace(this.racing);
-	}
-
 	/**
 	 * Start recording, and load the record for this exact journey.
 	 *
