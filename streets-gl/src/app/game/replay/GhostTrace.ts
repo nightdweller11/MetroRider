@@ -221,6 +221,42 @@ export function describeGhostDelta(delta: number | null): string {
 }
 
 /**
+ * Seconds up on the record at the last point BOTH runs reached.
+ *
+ * Measured at the shorter of the two distances, never at this run's own. Two
+ * runs never end on exactly the same metre — a stop five metres short of the
+ * mark is five metres shorter — so asking the record how long it took to reach
+ * ground it never covered returns nothing, and the comparison vanished on
+ * almost every run that went even slightly further than the record.
+ *
+ * `metres`/`seconds` are where THIS run has got to, which may be past its own
+ * last checkpoint (mid-run) — so the trace is given that end for the lookup
+ * rather than being asked about ground it has not yet filled in.
+ */
+export function deltaAtCommonDistance(
+	mine: GhostTrace,
+	best: GhostTrace | null | undefined,
+	metres: number,
+	seconds: number,
+): number | null {
+	if (!isUsableTrace(best)) return null;
+	if (!Number.isFinite(metres) || !Number.isFinite(seconds) || metres < 0) return null;
+
+	const common = Math.min(metres, best.totalMetres || metres);
+	const theirs = ghostSecondsAt(best, common);
+
+	if (theirs === null) return null;
+
+	const ours = common >= metres
+		? seconds
+		: ghostSecondsAt({...mine, totalMetres: metres, totalSeconds: seconds}, common);
+
+	if (ours === null) return null;
+
+	return theirs - ours;
+}
+
+/**
  * Whether this run beats the one being kept.
  *
  * Compared at the distance BOTH runs reached, not by total time: a run that

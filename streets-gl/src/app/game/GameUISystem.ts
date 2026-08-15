@@ -2318,8 +2318,8 @@ export default class GameUISystem extends System {
 		if (!scoring) return;
 
 		this.scoreUI = new ScoreUI(this.container);
-		scoring.onStopScored = (result, stationName): void => {
-			this.scoreUI?.showStopCard(result, stationName);
+		scoring.onStopScored = (result, stationName, approach): void => {
+			this.scoreUI?.showStopCard(result, stationName, approach);
 		};
 		scoring.onRunFinished = (run, badges, isPersonalBest, best, ghost): void => {
 			void this.scoreUI?.showRunCard(run, badges, isPersonalBest, best, ghost);

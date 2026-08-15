@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.40.0',
+		codename: 'Show Your Working',
+		date: '2026-08-15',
+		emblem: '📉🎯',
+		summary: 'The stop card draws how you drove the last three hundred metres.',
+		changes: [
+			'HOW YOU BRAKED — Every stop card now shows a little graph of the run in: speed going up the box, distance across it, the mark as a dashed line and a dot where you came to a stand.',
+			'Late braking is a cliff. A creep is a long flat tail. A good stop is a smooth curve into the line. "Good stop, 65" never told you which one you did.',
+			'A stop past the mark is drawn past the mark, because that is the bit worth seeing.',
+			'FIXED — the ghost row on the run card could come up empty. Any run that went even slightly further than your record — which is nearly all of them — got no comparison at all. Your time is now measured against the record at the last point you both reached.',
+		],
+	},
+	{
 		version: '2.39.0',
 		codename: 'Race Yourself',
 		date: '2026-08-15',

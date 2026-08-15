@@ -1,6 +1,6 @@
 import {
 	emptyTrace, recordProgress, finishTrace, ghostSecondsAt, ghostDelta, ghostChip,
-	describeGhostDelta, isFaster, isUsableTrace, packTrace, parseTrace, pruneTraces,
+	describeGhostDelta, isFaster, isUsableTrace, packTrace, parseTrace, pruneTraces, deltaAtCommonDistance,
 	traceKey, CHECKPOINT_M, DEAD_BAND_S, MAX_CHECKPOINTS, MAX_KEPT, type GhostTrace,
 } from '../app/game/replay/GhostTrace';
 
@@ -138,6 +138,49 @@ describe('ghostDelta', () => {
 
 	test('no ghost, no number', () => {
 		expect(ghostDelta(null, 500, 20)).toBeNull();
+	});
+});
+
+describe('deltaAtCommonDistance', () => {
+	const best = steady(20, 1000);   // 50 s over a kilometre
+
+	test('a run that goes FURTHER than the record still gets a number', () => {
+		// The bug this exists for: two runs never end on the same metre, so
+		// asking the record about ground it never covered returned nothing and
+		// the card drew an empty row where a sentence should have been.
+		const mine = finishTrace(steady(25, 1200), 1200, 48, 1);
+
+		const delta = deltaAtCommonDistance(mine, best, 1200, 48);
+
+		expect(delta).not.toBeNull();
+		// Compared at 1000 m, where the record took 50 s and this run took 40.
+		expect(delta!).toBeCloseTo(10, 0);
+	});
+
+	test('a run cut short is compared over the ground it did cover', () => {
+		const mine = finishTrace(steady(25, 500), 500, 20, 1);
+
+		expect(deltaAtCommonDistance(mine, best, 500, 20)).toBeCloseTo(5, 0);
+	});
+
+	test('mid-run, past our own last checkpoint, still reads', () => {
+		// A live chip asks this every frame, and the answer must not blink out
+		// between one checkpoint and the next.
+		let mine = emptyTrace('k');
+
+		for (let m = 0; m <= 620; m += 10) mine = recordProgress(mine, m, m / 25);
+
+		// 637 m is past the last 50 m checkpoint at 600.
+		expect(deltaAtCommonDistance(mine, best, 637, 25.5)).not.toBeNull();
+	});
+
+	test('no record, no number', () => {
+		expect(deltaAtCommonDistance(steady(20, 500), null, 500, 25)).toBeNull();
+	});
+
+	test('nonsense in, nothing out', () => {
+		expect(deltaAtCommonDistance(steady(20, 500), best, NaN, 25)).toBeNull();
+		expect(deltaAtCommonDistance(steady(20, 500), best, 500, NaN)).toBeNull();
 	});
 });
 

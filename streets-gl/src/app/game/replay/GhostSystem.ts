@@ -2,7 +2,7 @@ import System from '~/app/System';
 import TrainSystem from '../TrainSystem';
 import ProfileClient from '../profiles/ProfileClient';
 import {
-	emptyTrace, finishTrace, ghostDelta, isFaster, isUsableTrace, packTrace,
+	deltaAtCommonDistance, emptyTrace, finishTrace, isFaster, isUsableTrace, packTrace,
 	parseTrace, pruneTraces, recordProgress, traceKey, type GhostTrace,
 } from './GhostTrace';
 
@@ -97,10 +97,7 @@ export default class GhostSystem extends System {
 		const done = finishTrace(run, this.travelledM, this.elapsedS, Date.now());
 		const previous = this.racing;
 		const hadGhost = this.departed && isUsableTrace(previous);
-		// Measured at the distance THIS run reached, so a run cut short is
-		// compared over the ground it covered rather than credited with a lead
-		// it got by stopping early.
-		const delta = hadGhost ? ghostDelta(previous, this.travelledM, this.elapsedS) : null;
+		const delta = hadGhost ? deltaAtCommonDistance(done, previous, this.travelledM, this.elapsedS) : null;
 		const improved = isFaster(done, previous);
 
 		if (improved) {
@@ -141,8 +138,12 @@ export default class GhostSystem extends System {
 
 		this.current = recordProgress(this.current, this.travelledM, this.elapsedS);
 
-		if (isUsableTrace(this.racing)) {
-			this.deltaS = ghostDelta(this.racing, this.travelledM, this.elapsedS);
+		if (isUsableTrace(this.racing) && this.current) {
+			// Held at the record's own finish line once you run past it, rather
+			// than blanking: driving beyond where the ghost ever reached is
+			// winning the race, and the chip should say by how much, not
+			// disappear in the last few metres of every run.
+			this.deltaS = deltaAtCommonDistance(this.current, this.racing, this.travelledM, this.elapsedS);
 		}
 	}
 

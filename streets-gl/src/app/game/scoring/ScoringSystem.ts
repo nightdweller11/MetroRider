@@ -7,6 +7,10 @@ import ServiceSystem from '../service/ServiceSystem';
 import SignalRenderingSystem from '../limits/SignalRenderingSystem';
 import JourneySystem from '../JourneySystem';
 import GhostSystem from '../replay/GhostSystem';
+import {
+	approachSamples, createRecorder, resetRecorder, tickRecorder, type RunSample,
+} from '../replay/RunRecorder';
+import {TRACE_WINDOW_M} from '../replay/ApproachTrace';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 import SettingsSystem from '~/app/systems/SettingsSystem';
@@ -31,6 +35,17 @@ export interface GhostOutcome {
 export default class ScoringSystem extends System {
 	private readonly stop = new StopScorer();
 	private readonly run = new RunScorer();
+	/**
+	 * The last minute of driving, so a stop card can show HOW the approach was
+	 * driven rather than only what it scored.
+	 *
+	 * Kept here rather than in its own system because this is the one place
+	 * that knows when a stop happened and which marker it was aimed at — and
+	 * a second detector would eventually disagree with this one.
+	 */
+	private readonly recorder = createRecorder();
+	/** The marker the current approach is aimed at, for slicing the recording. */
+	private approachMarker = 0;
 
 	private lastLineKey = '';
 	private lastDist = 0;
@@ -48,7 +63,11 @@ export default class ScoringSystem extends System {
 	private deliveredAtLastStop = 0;
 
 	/** Set by GameUISystem so cards can be shown without this system knowing the DOM. */
-	public onStopScored: ((result: StopResult, stationName: string) => void) | null = null;
+	public onStopScored: ((
+		result: StopResult,
+		stationName: string,
+		approach: {samples: RunSample[]; markerDist: number; direction: number},
+	) => void) | null = null;
 	public onRunFinished: ((
 		result: RunResult,
 		badges: Badge[],
@@ -82,6 +101,21 @@ export default class ScoringSystem extends System {
 		const dist = trainSystem.physicsState.trainDist;
 		const speed = trainSystem.physicsState.trainSpeed;
 		const direction = trainSystem.physicsState.direction;
+		const where = trainSystem.trainPosition;
+
+		tickRecorder(this.recorder, deltaTime, {
+			dist,
+			speed,
+			x: where?.x ?? 0,
+			// `y` on a world position is the second GROUND axis, not height —
+			// the recorder calls it `z` because that is what it is in the scene.
+			z: where?.y ?? 0,
+			// Already radians (`π/2 − toRad(bearing)`), not degrees. Converting
+			// it again would store a heading 57 times too small, and nothing
+			// today reads it, so it would have sat there wrong until the first
+			// camera tried to use it.
+			heading: where?.heading ?? 0,
+		});
 
 		// Start scoring an approach once the next station is close enough that
 		// braking has begun to matter.
@@ -95,6 +129,7 @@ export default class ScoringSystem extends System {
 			const marker = ls.realStationDists[targetIdx];
 			if (marker !== undefined) {
 				this.stop.beginApproach(targetIdx, marker, speed);
+				this.approachMarker = marker;
 			}
 		}
 
@@ -122,6 +157,10 @@ export default class ScoringSystem extends System {
 		this.run.abandon();
 		this.stopLateness = [];
 		this.deliveredAtLastStop = 0;
+		// A new journey's first approach must not be drawn over the tail of the
+		// last one — the train has been picked up and put down somewhere else,
+		// so the track distances in the ring mean nothing here.
+		resetRecorder(this.recorder);
 		this.run.start({
 			mapId: trainSystem.mapName || 'unknown-map',
 			lineId: ls.parsed.id,
@@ -172,7 +211,13 @@ export default class ScoringSystem extends System {
 		}
 
 		const stationName = ls.parsed.stations[result.stationIndex]?.name ?? '';
-		this.onStopScored?.(result, stationName);
+		const direction = this.systemManager.getSystem(TrainSystem)?.physicsState.direction ?? 1;
+
+		this.onStopScored?.(result, stationName, {
+			samples: approachSamples(this.recorder, this.approachMarker, direction, TRACE_WINDOW_M),
+			markerDist: this.approachMarker,
+			direction,
+		});
 
 		if (result.verdict !== 'passed' && this.run.isComplete(result.stationIndex)) {
 			void this.finishRun(true);

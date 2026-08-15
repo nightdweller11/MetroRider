@@ -204,9 +204,31 @@ wants a camera).
       "from the first station, forwards" and "from halfway, backwards" were the
       same key, and the game would have compared a run to a journey it never
       made — and scored a run over ground it never covered
-- [ ] **Stop replay** — watch the last approach again from outside. Needs a
-      5 Hz `RunRecorder` ring and a replay camera; the ghost did NOT need one,
-      which is why it shipped first
+- [x] **`RunRecorder` — the 5 Hz ring (v2.40.0).** A minute of driving kept at
+      5 Hz in a fixed-size ring, carrying position and heading as well as speed
+      so the same recording can later drive a camera. 23 unit tests, the
+      load-bearing one being that it hands samples back in TIME order after the
+      ring has wrapped — storage order would put a jump in the middle of every
+      graph drawn from it
+- [x] **The approach, drawn, on the stop card (v2.40.0).** Speed up the box,
+      distance across it, the mark as a dashed line, a dot where the train came
+      to a stand. Late braking reads as a cliff, a creep as a long flat tail, a
+      good stop as a curve into the line — three different lessons that "Good
+      stop, 65" cannot tell apart. 12 unit tests; a stop PAST the mark is drawn
+      past it, because clamping the overshoot onto the line would hide exactly
+      the mistake the picture is for
+- [~] **DECIDED: a picture before a camera.** The original phase-2 note said
+      "stop replay (orbit cam) + own-ghost translucent consist". The ghost
+      needed no camera at all, and the approach needed a graph rather than a
+      fly-past: the point of watching it again is finding out WHY it scored what
+      it did, and a shape shows that in a glance where a camera move shows it
+      once, slowly. A camera replay is still worth building — the recorder now
+      carries what it needs — but it is a second way of seeing the same thing,
+      not the first
+- [ ] **Camera replay** — fly the recorded approach from outside. The ring
+      already carries `x`/`z`/`heading` and `sampleAt` interpolates them; what
+      is missing is a replay consist registered in `GBufferPass`'s explicit
+      draw list and a camera mode
 - [x] Local browser validation of two full scored runs on C6-C5 (2026-08-15):
       first run recorded (`::14::2::r`, 261.5 s / 3 677 m), second driven
       faster, chip tracked live from "4.0s up" through "level" to "3.4s down"

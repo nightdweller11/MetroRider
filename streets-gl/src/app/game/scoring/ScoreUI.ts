@@ -2,6 +2,8 @@ import {StopResult, verdictLabel} from './StopScorer';
 import {RunResult, Badge} from './RunScorer';
 import ProfileClient, {BoardEntry} from '../profiles/ProfileClient';
 import {describeGhostDelta} from '../replay/GhostTrace';
+import {buildApproachTrace} from '../replay/ApproachTrace';
+import type {RunSample} from '../replay/RunRecorder';
 
 /**
  * The two cards the player actually sees: a quick verdict after each stop, and
@@ -38,7 +40,108 @@ export default class ScoreUI {
 
 	// ---- stop card ----
 
-	public showStopCard(result: StopResult, stationName: string): void {
+	/**
+	 * The approach, drawn.
+	 *
+	 * Speed up the box, distance across it, the marker as a dashed line, and a
+	 * dot where the train came to a stand. Late braking reads as a cliff, a
+	 * creep as a long flat tail, a good stop as a curve into the line — three
+	 * different lessons that "Good stop, 65" cannot tell apart.
+	 *
+	 * Returns null when there is nothing honest to draw, and the card simply
+	 * has no graph rather than an empty pair of axes.
+	 */
+	private buildApproachGraph(
+		approach: {samples: RunSample[]; markerDist: number; direction: number} | undefined,
+		accent: string,
+	): SVGSVGElement | null {
+		if (!approach) return null;
+
+		const W = 244;
+		const H = 62;
+		const trace = buildApproachTrace(approach.samples, approach.markerDist, approach.direction, W, H);
+
+		if (!trace) return null;
+
+		const ns = 'http://www.w3.org/2000/svg';
+		const svg = document.createElementNS(ns, 'svg');
+
+		svg.setAttribute('viewBox', `0 0 ${W} ${H + 14}`);
+		svg.setAttribute('width', String(W));
+		svg.setAttribute('height', String(H + 14));
+		svg.style.cssText = 'display: block; margin: 10px auto 0; overflow: visible;';
+
+		const add = (tag: string, attrs: Record<string, string>): SVGElement => {
+			const el = document.createElementNS(ns, tag);
+
+			for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+			svg.appendChild(el);
+
+			return el;
+		};
+
+		add('rect', {
+			x: '0', y: '0', width: String(W), height: String(H),
+			rx: '6', fill: 'rgba(255,255,255,0.05)',
+		});
+		// The floor is a stand-still, so it is drawn as one.
+		add('line', {
+			x1: '0', y1: String(H), x2: String(W), y2: String(H),
+			stroke: 'rgba(255,255,255,0.22)', 'stroke-width': '1',
+		});
+		add('line', {
+			x1: trace.markerX.toFixed(1), y1: '0', x2: trace.markerX.toFixed(1), y2: String(H),
+			stroke: 'rgba(255,255,255,0.5)', 'stroke-width': '1', 'stroke-dasharray': '3 3',
+		});
+		add('path', {
+			d: trace.path, fill: 'none', stroke: accent, 'stroke-width': '2',
+			'stroke-linejoin': 'round', 'stroke-linecap': 'round',
+		});
+
+		if (trace.stop) {
+			add('circle', {
+				cx: trace.stop.x.toFixed(1), cy: trace.stop.y.toFixed(1), r: '3.5',
+				fill: accent, stroke: '#000', 'stroke-width': '1',
+			});
+		}
+
+		const label = (x: string, y: string, anchor: string, text: string): void => {
+			const el = add('text', {
+				x, y, 'text-anchor': anchor,
+				fill: 'rgba(255,255,255,0.5)', 'font-size': '9',
+				'font-family': 'system-ui, sans-serif',
+			});
+
+			// textContent, never innerHTML: station names come off other
+			// people's maps.
+			el.textContent = text;
+		};
+
+		// The speed ceiling belongs to the UP axis, so it is written up there.
+		// Along the bottom it sat next to "the mark" and the two overlapped
+		// whenever the stop was close to the mark — which is every good stop.
+		label('4', '11', 'start', `${trace.topKmh} km/h`);
+		label('0', String(H + 11), 'start', `${trace.fromM} m out`);
+
+		// Nudged off the right edge when the mark is near it, rather than
+		// centred underneath and clipped.
+		const markNearEdge = trace.markerX > W - 34;
+
+		label(
+			(markNearEdge ? W : trace.markerX).toFixed(1),
+			String(H + 11),
+			markNearEdge ? 'end' : 'middle',
+			'the mark',
+		);
+
+		return svg;
+	}
+
+	public showStopCard(
+		result: StopResult,
+		stationName: string,
+		approach?: {samples: RunSample[]; markerDist: number; direction: number},
+	): void {
 		this.hideStopCard();
 
 		const card = document.createElement('div');
@@ -83,16 +186,27 @@ export default class ScoreUI {
 		card.appendChild(headline);
 		card.appendChild(where);
 		card.appendChild(detail);
+
+		// Rolled through: there was no approach to show, and drawing one would
+		// invent a stop that never happened.
+		const graph = result.verdict === 'passed'
+			? null
+			: this.buildApproachGraph(approach, VERDICT_COLOR[result.verdict] ?? '#9ad');
+
+		if (graph) card.appendChild(graph);
+
 		card.appendChild(points);
 		this.container.appendChild(card);
 		this.stopCardEl = card;
 
 		requestAnimationFrame(() => { card.style.opacity = '1'; });
 
+		// A graph needs longer on screen than a verdict does — you read a word
+		// in an instant and a shape in a second or two.
 		this.stopCardTimer = window.setTimeout(() => {
 			card.style.opacity = '0';
 			window.setTimeout(() => this.hideStopCard(), 400);
-		}, 3200);
+		}, graph ? 5200 : 3200);
 	}
 
 	private hideStopCard(): void {
@@ -187,8 +301,16 @@ export default class ScoreUI {
 		// Racing yourself gets its own row for the same reason timekeeping does:
 		// it is not a component of the score, it is a different question about
 		// the same run — was that quicker than last time?
+		// A row is drawn only when there is a sentence to put in it. A ghost that
+		// exists but produced no comparable number rendered as a bare 👻 on an
+		// empty bar — a row that says nothing, which reads as something broken
+		// rather than as nothing to report.
+		const raceText = ghost.hadGhost
+			? describeGhostDelta(ghost.delta)
+			: (ghost.improved ? 'First run on this journey — a time to beat' : '');
 		const race = document.createElement('div');
-		if (ghost.hadGhost || ghost.improved) {
+
+		if (raceText) {
 			const won = ghost.improved;
 			race.style.cssText = `
 				display: flex; justify-content: space-between; align-items: baseline;
@@ -198,9 +320,7 @@ export default class ScoreUI {
 			`;
 			const label = document.createElement('span');
 			label.style.color = won ? '#5ad07a' : '#ddd';
-			label.textContent = ghost.hadGhost
-				? `👻 ${describeGhostDelta(ghost.delta)}`
-				: '👻 First run on this journey — a time to beat';
+			label.textContent = `👻 ${raceText}`;
 			const mark = document.createElement('span');
 			mark.style.cssText = 'color: #ddd; font-weight: 700;';
 			mark.textContent = won ? 'NEW BEST' : '';
@@ -233,7 +353,7 @@ export default class ScoreUI {
 		card.appendChild(pb);
 		card.appendChild(summary);
 		if (run.punctualityPercent !== null) card.appendChild(timing);
-		if (ghost.hadGhost || ghost.improved) card.appendChild(race);
+		if (raceText) card.appendChild(race);
 		card.appendChild(stopList);
 
 		if (badges.length > 0) {
