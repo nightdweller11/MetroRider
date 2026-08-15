@@ -20,6 +20,8 @@ import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
+import WalkPad from './ui/WalkPad';
+import {distanceFromTrain, leashNotice} from './WalkController';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
 import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
@@ -97,6 +99,8 @@ export default class GameUISystem extends System {
 	private lineListExpanded: boolean = true;
 	private cabHud: CabHud | null = null;
 	private cabSheet: CabSheet | null = null;
+	private walkPad: WalkPad | null = null;
+	private walkModeApplied = false;
 	/** Every line on the map, projected to metres once and reused. */
 	private miniLines: MiniMapLineInput[] = [];
 	private miniStations: MiniMapPoint[] = [];
@@ -863,6 +867,9 @@ export default class GameUISystem extends System {
 				onSelect: (): void => this.setCameraMode(GameCameraMode.Ride)},
 			{badge: 'SIDE', badgeColor: '#ef7b9c', title: 'Trackside', subtitle: 'Stand by the line and watch your train go past',
 				onSelect: (): void => this.setCameraMode(GameCameraMode.Trackside)},
+			{badge: 'WALK', badgeColor: '#4fd996', title: 'Step out and walk',
+				subtitle: 'Get off the train and wander around the city on foot',
+				onSelect: (): void => this.setCameraMode(GameCameraMode.Walk)},
 			{badge: 'PHO', badgeColor: '#dfe6ee', title: 'Photo', subtitle: 'Free look with the controls out of the way',
 				onSelect: (): void => this.setCameraMode(GameCameraMode.Photo)},
 			{
@@ -1449,6 +1456,7 @@ export default class GameUISystem extends System {
 
 		cam.setMode(target);
 		this.applyPhotoMode();
+		this.applyWalkMode();
 	}
 
 	/**
@@ -1456,6 +1464,53 @@ export default class GameUISystem extends System {
 	 * — but a control that hides every control has to leave a way back, or the
 	 * only exit is reloading the page.
 	 */
+	/**
+	 * Stepping out and back.
+	 *
+	 * Walking has no keyboard on the device this is played on, so it brings its
+	 * own controls: a thumbstick to walk, a drag to look, and a way back to the
+	 * train that never leaves the screen. The driving console goes away — you
+	 * are not driving — and comes back when you return.
+	 */
+	private applyWalkMode(): void {
+		const cam = this.systemManager.getSystem(GameCameraSystem);
+		const walking = cam?.isWalkMode() ?? false;
+
+		if (walking !== this.walkModeApplied) {
+			this.walkModeApplied = walking;
+			this.cabHud?.setVisible(!walking);
+
+			if (walking) {
+				if (!this.walkPad && this.container) {
+					this.walkPad = new WalkPad(
+						this.container,
+						(forward, strafe) => cam?.setWalkInput(forward, strafe),
+						(yaw, pitch) => cam?.lookWalk(yaw, pitch),
+						() => this.setCameraMode(GameCameraMode.Chase),
+					);
+				}
+				this.walkPad?.show();
+			} else {
+				this.walkPad?.hide();
+			}
+		}
+
+		if (!walking || !this.walkPad) return;
+
+		// How far the train is, said only once it is worth saying.
+		const walker = cam?.walkPosition();
+		const train = cam?.trainGroundPosition();
+
+		if (!walker || !train) return;
+
+		const distance = distanceFromTrain(walker, train);
+		const notice = leashNotice(distance);
+
+		if (notice === 'none') this.walkPad.setNotice(null);
+		else if (notice === 'warn') this.walkPad.setNotice(`Your train is ${Math.round(distance)} m away`, false);
+		else this.walkPad.setNotice(`Your train is ${(distance / 1000).toFixed(1)} km away — tap to go back`, true);
+	}
+
 	private applyPhotoMode(): void {
 		const photo = this.systemManager.getSystem(GameCameraSystem)?.isPhotoMode() ?? false;
 
@@ -1646,9 +1701,10 @@ export default class GameUISystem extends System {
 	private updateCabHud(trainSystem: TrainSystem, deltaTime: number): void {
 		if (!this.cabHud) return;
 
-		// The C key cycles views without going through the sheet, so photo mode
-		// is reconciled here rather than only where it is chosen.
+		// The C key cycles views without going through the sheet, so photo and
+		// walk modes are reconciled here rather than only where they are chosen.
 		this.applyPhotoMode();
+		this.applyWalkMode();
 
 		const limits = this.systemManager.getSystem(SpeedLimitSystem);
 		const passengers = this.systemManager.getSystem(PassengerSystem);

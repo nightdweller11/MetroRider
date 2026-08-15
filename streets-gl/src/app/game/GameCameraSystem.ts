@@ -4,6 +4,38 @@ import ControlsSystem from '../systems/ControlsSystem';
 import TrainSystem from './TrainSystem';
 import Vec3 from '~/lib/math/Vec3';
 import PerspectiveCamera from '~/lib/core/PerspectiveCamera';
+import TerrainSystem from '../systems/TerrainSystem';
+import {
+	createWalkState, stepWalk, look, EYE_HEIGHT,
+	type WalkState, type WalkInput,
+} from './WalkController';
+
+/**
+ * How far to the side of the train you land when you step out, metres.
+ *
+ * Clear of the rail corridor, which is cleared out of the terrain to a 10 m
+ * radius (`TrainSystem.CORRIDOR_RADIUS`). Stepping out at 7 m put the walker
+ * inside that hole, looking at the dark inside of the cutting rather than at
+ * the city — the ground simply is not there.
+ */
+const WALK_STEP_OUT_M = 15;
+/**
+ * Near clip while on foot, metres.
+ *
+ * The scene's near plane is 10 m, which is sensible for a camera sixty metres
+ * behind a train and absurd for a person: standing at eye height it clipped
+ * away everything within ten metres, so the bottom third of the screen — the
+ * ground you are standing on — simply was not drawn.
+ */
+const WALK_NEAR = 0.4;
+/**
+ * Far clip while on foot, metres.
+ *
+ * Pulled in with the near plane to keep the depth buffer's precision ratio in
+ * the same place it was; twenty kilometres is well past anything a walker can
+ * make out anyway.
+ */
+const WALK_FAR = 20000;
 
 export enum GameCameraMode {
 	Chase = 'chase',
@@ -13,6 +45,8 @@ export enum GameCameraMode {
 	Ride = 'ride',
 	/** Standing beside the line, watching your own train go past. */
 	Trackside = 'trackside',
+	/** On the ground, on foot — the train is something to walk back to. */
+	Walk = 'walk',
 	/** Free look with the interface out of the way, for a clean picture. */
 	Photo = 'photo',
 	Free = 'free',
@@ -86,6 +120,12 @@ export default class GameCameraSystem extends System {
 	private lastMouseY: number = 0;
 	private inputListenersAdded: boolean = false;
 	private pendingSnap: boolean = false;
+
+	/** Where the walker is, once they have stepped off the train. */
+	private walk: WalkState | null = null;
+	private walkInput: WalkInput = {forward: 0, strafe: 0, running: false};
+	private savedNear: number | null = null;
+	private savedFar: number | null = null;
 
 	/** Where Trackside is standing, in world space, until it re-plants. */
 	private tracksideX: number = 0;
@@ -226,6 +266,7 @@ export default class GameCameraSystem extends System {
 			GameCameraMode.Orbit,
 			GameCameraMode.Ride,
 			GameCameraMode.Trackside,
+			GameCameraMode.Walk,
 			GameCameraMode.Photo,
 		];
 	}
@@ -237,6 +278,12 @@ export default class GameCameraSystem extends System {
 		// last used the view — otherwise switching to it drops you at a spot
 		// the train left several stations ago.
 		if (mode === GameCameraMode.Trackside) this.plantTrackside();
+
+		// Stepping out puts you beside the train, facing it — not at whatever
+		// spot you wandered to last time, which after a few stations is open
+		// country with no train in sight.
+		if (mode === GameCameraMode.Walk) this.stepOut();
+		else this.restoreClipPlanes();
 	}
 
 	public getModeLabel(): string {
@@ -246,6 +293,7 @@ export default class GameCameraSystem extends System {
 			case GameCameraMode.Orbit: return 'Orbit';
 			case GameCameraMode.Ride: return 'Ride';
 			case GameCameraMode.Trackside: return 'Trackside';
+			case GameCameraMode.Walk: return 'Walk';
 			case GameCameraMode.Photo: return 'Photo';
 			case GameCameraMode.Free: return 'Free';
 		}
@@ -254,6 +302,101 @@ export default class GameCameraSystem extends System {
 	/** Photo hides the interface, so the rest of the UI needs to know. */
 	public isPhotoMode(): boolean {
 		return this.mode === GameCameraMode.Photo;
+	}
+
+	public isWalkMode(): boolean {
+		return this.mode === GameCameraMode.Walk;
+	}
+
+	public walkPosition(): WalkState | null {
+		return this.walk;
+	}
+
+	/** Where the train is standing, for the leash and the way back. */
+	public trainGroundPosition(): {x: number; z: number} | null {
+		const pos = this.systemManager.getSystem(TrainSystem)?.trainPosition;
+
+		return pos ? {x: pos.x, z: pos.y} : null;
+	}
+
+	/** Put the walker on the ground beside the train, looking at it. */
+	private stepOut(): void {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const pos = trainSystem?.trainPosition;
+
+		if (!pos) return;
+
+		// Off to the side of the train rather than on the track, and turned to
+		// face it, so the first thing you see having stepped out is your train.
+		const side = pos.heading + Math.PI / 2;
+		const x = pos.x + Math.sin(side) * WALK_STEP_OUT_M;
+		const z = pos.y - Math.cos(side) * WALK_STEP_OUT_M;
+
+		this.walk = createWalkState(x, z, side + Math.PI, this.groundAt(x, z));
+	}
+
+	/** Give the scene back the clip planes it had before anyone stepped out. */
+	private restoreClipPlanes(): void {
+		if (this.savedNear === null || !this.camera) return;
+
+		this.camera.near = this.savedNear;
+		this.camera.far = this.savedFar ?? this.camera.far;
+		this.camera.updateProjectionMatrix();
+		this.savedNear = null;
+		this.savedFar = null;
+	}
+
+	/** Ground height under a point, falling back to the train's own height. */
+	private groundAt(x: number, z: number): number {
+		const terrain = this.systemManager.getSystem(TerrainSystem)?.terrainHeightProvider;
+		const height = terrain?.getHeightGlobalInterpolated(x, z, true);
+
+		if (Number.isFinite(height)) return height as number;
+
+		return this.systemManager.getSystem(TrainSystem)?.trainPosition?.height ?? 0;
+	}
+
+	/** Move the walker for this frame and place the camera at eye height. */
+	private updateWalk(dt: number): void {
+		if (!this.walk) {
+			this.stepOut();
+			if (!this.walk) return;
+		}
+
+		if (this.camera.near !== WALK_NEAR) {
+			this.savedNear = this.camera.near;
+			this.savedFar = this.camera.far;
+			this.camera.near = WALK_NEAR;
+			this.camera.far = WALK_FAR;
+			this.camera.updateProjectionMatrix();
+		}
+
+		stepWalk(this.walk, this.walkInput, dt, (x, z) => this.groundAt(x, z));
+
+		const eye = this.walk.groundY + EYE_HEIGHT;
+		const cosPitch = Math.cos(this.walk.pitch);
+
+		this.camera.position.set(this.walk.x, eye, this.walk.z);
+		// position + lookAt and nothing else, exactly as the other planted views
+		// do it. Calling updateMatrix() after lookAt recomputes the matrix from
+		// position and rotation and throws the orientation lookAt just set away:
+		// the camera kept pointing wherever it already pointed, so turning did
+		// nothing at all.
+		this.camera.lookAt(new Vec3(
+			this.walk.x + Math.sin(this.walk.heading) * cosPitch,
+			eye + Math.sin(this.walk.pitch),
+			this.walk.z - Math.cos(this.walk.heading) * cosPitch,
+		), false);
+	}
+
+	/** What the on-screen thumbstick and keys are asking for. */
+	public setWalkInput(forward: number, strafe: number, running: boolean = false): void {
+		this.walkInput = {forward, strafe, running};
+	}
+
+	/** Turn the head, in radians. */
+	public lookWalk(deltaYaw: number, deltaPitch: number): void {
+		if (this.walk) look(this.walk, deltaYaw, deltaPitch);
 	}
 
 	public update(deltaTime: number): void {
@@ -314,6 +457,9 @@ export default class GameCameraSystem extends System {
 				break;
 			case GameCameraMode.Trackside:
 				this.updateTrackside();
+				break;
+			case GameCameraMode.Walk:
+				this.updateWalk(dt);
 				break;
 			case GameCameraMode.Photo:
 				this.updatePhoto();

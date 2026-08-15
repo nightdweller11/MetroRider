@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.30.0',
+		codename: 'Step Out',
+		date: '2026-08-15',
+		emblem: '🚶🚆',
+		summary: 'Get off the train and walk around the city on foot.',
+		changes: [
+			'WALK AROUND — "Step out and walk" in the Camera menu puts you on the ground beside your train. Walk anywhere you like, look at the buildings, then come back.',
+			'You step out onto the side of the track facing your train, so the first thing you see is the train you were just driving.',
+			'Use the stick at the bottom-left to walk and drag anywhere to look around — it works with a finger or a mouse. "Back to the train" is always on screen.',
+			'Wander far enough and the game tells you how far your train is, so you can always find your way back.',
+		],
+	},
+	{
 		version: '2.29.0',
 		codename: 'Drive the 18:30',
 		date: '2026-08-15',
