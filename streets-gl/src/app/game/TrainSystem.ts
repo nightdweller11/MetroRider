@@ -23,6 +23,9 @@ import {
 	getMaxSpeed,
 } from './physics/TrainPhysics';
 import {InputHandler} from './physics/InputHandler';
+import {
+	NEUTRAL_INDEX, PARKED_INDEX, clampNotch, notchDemand, steppedNotch,
+} from './physics/MasterController';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
@@ -67,9 +70,19 @@ export default class TrainSystem extends System {
 	public trainPosition: TrainWorldPosition | null = null;
 	public stationState: StationState | null = null;
 	public gameActive: boolean = false;
-	/** Where the cab's master controller handle is set. Persists until moved. */
-	private controllerPower: number = 0;
-	private controllerBrake: number = 0;
+	/**
+	 * Where the master controller handle is, as a notch index.
+	 *
+	 * The TRAIN owns this, not the panel that draws it. It lived in `CabHud`
+	 * for eleven releases, which meant nothing outside the panel could move the
+	 * handle — the keyboard therefore drove the physics directly, and once a
+	 * train was parked on the brake a keyboard player could hold the throttle
+	 * for ever and never move. Measured: 0 km/h at full power demand.
+	 *
+	 * Persists until moved: a notched controller stays where it was put, which
+	 * is the whole point of one.
+	 */
+	public controllerNotch: number = NEUTRAL_INDEX;
 	/**
 	 * Bumped every time a different map is loaded.
 	 *
@@ -151,8 +164,7 @@ export default class TrainSystem extends System {
 			ls.realStationDists[0] + 60
 		);
 		// Same as being set down at a stop: held, and a different journey.
-		this.controllerPower = 0;
-		this.controllerBrake = 1;
+		this.controllerNotch = PARKED_INDEX;
 		this.journeyGeneration++;
 		this.stationManager.reset();
 
@@ -305,10 +317,8 @@ export default class TrainSystem extends System {
 		// put at a platform, and leaving the handle at full power meant it
 		// drove straight off on its own. Neutral is not enough either: with
 		// nothing applied it rolls down any bank (20 m in 8 seconds, measured),
-		// so a minute in the menu left the train a long way from where it was
-		// put. `CabHud.parkNotch` was written for this and never called.
-		this.controllerPower = 0;
-		this.controllerBrake = 1;
+		// so a minute in the menu left the train a long way from where it was.
+		this.controllerNotch = PARKED_INDEX;
 		this.stationManager.reset();
 		this.journeyGeneration++;
 
@@ -354,9 +364,14 @@ export default class TrainSystem extends System {
 	 * This persists: a notched controller stays where it was put, which is the
 	 * whole point of it. Nothing here springs back on its own.
 	 */
-	public setController(power: number, brake: number): void {
-		this.controllerPower = Math.max(0, Math.min(1, power));
-		this.controllerBrake = Math.max(0, Math.min(1, brake));
+	/** Put the handle at a notch — from the panel, the keyboard, or the game. */
+	public setNotch(index: number): void {
+		this.controllerNotch = clampNotch(index);
+	}
+
+	/** One step: −1 towards power, +1 towards brake. */
+	public stepNotch(towards: number): void {
+		this.controllerNotch = steppedNotch(this.controllerNotch, towards);
 	}
 
 	public getCurrentLine(): LineState | null {
@@ -422,15 +437,30 @@ export default class TrainSystem extends System {
 			brakeScale: lineModeInfo(this.systemManager.getSystem(SpeedLimitSystem)?.lineMode).brakeScale,
 			// Gravity acts whether or not the driver is doing anything.
 			grade: this.currentGrade(ls),
-			throttle: this.input.isHeld('throttle'),
-			braking: this.input.isHeld('brake'),
+			// Not the arrow keys any more: those move the handle above, and the
+			// handle is the only thing that asks for power or service brake.
+			// Emergency stays a HELD override, because that is what it is.
+			throttle: false,
+			braking: false,
 			emergency: this.input.isHeld('emergency'),
-			powerLevel: this.controllerPower,
-			brakeLevel: this.controllerBrake,
+			powerLevel: notchDemand(this.controllerNotch).power,
+			brakeLevel: notchDemand(this.controllerNotch).brake,
 			// What this train can do, from its kind — separate from the posted
 			// limit, which is a rule it is free to break and pay for.
 			vehicleMaxMs: this.systemManager.getSystem(SpeedLimitSystem)?.lineCeiling || undefined,
 		};
+
+		// The arrow keys move the HANDLE, one notch a press, rather than talking
+		// to the physics behind it. They used to do the latter, which is why a
+		// parked train could not be started from the keyboard at all — power
+		// wound to full against a brake the key had no way to release — and why
+		// the drawn knob could sit at B2 over a train under power.
+		if (this.input.wasPressed('throttle')) {
+			this.stepNotch(-1);
+		}
+		if (this.input.wasPressed('brake')) {
+			this.stepNotch(1);
+		}
 
 		if (this.input.wasPressed('doors')) {
 			this.toggleDoors();

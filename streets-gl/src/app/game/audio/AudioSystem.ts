@@ -425,10 +425,14 @@ export default class AudioSystem extends System {
 		}
 
 		const speed = trainSystem.physicsState.trainSpeed;
-		const input = trainSystem.getInput();
-		const throttle = input.isHeld('throttle');
-		const braking = input.isHeld('brake');
-		const emergency = input.isHeld('emergency');
+		// What the TRAIN is doing, not what a key is doing. These read the
+		// keyboard, which stopped being how anyone drives when the master
+		// controller shipped — so a player working the lever heard no traction
+		// and no brake at all, and one working the keys heard them only for the
+		// instant a key was down.
+		const throttle = trainSystem.physicsState.powerNotch > 0.02;
+		const braking = trainSystem.physicsState.brakeNotch > 0.02;
+		const emergency = trainSystem.getInput().isHeld('emergency');
 
 		const t = this.ctx.currentTime;
 		const speedPct = Math.min(speed / MAX_SPEED_REF, 1);

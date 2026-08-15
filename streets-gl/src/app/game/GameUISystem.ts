@@ -101,8 +101,6 @@ export default class GameUISystem extends System {
 	private miniStations: MiniMapPoint[] = [];
 	private miniView: MiniMapView | undefined = undefined;
 	private miniHeading = 0;
-	/** So the drawn handle can follow the train being set down somewhere else. */
-	private lastJourneyGeneration = -1;
 	private miniBuiltAt = -1e9;
 	private miniLineKey = '';
 	private ribbonLegsKey = '';
@@ -402,8 +400,8 @@ export default class GameUISystem extends System {
 				if (down) audio?.hornDown();
 				else audio?.hornUp();
 			},
-			(power, brake) => {
-				this.systemManager.getSystem(TrainSystem)?.setController(power, brake);
+			(index: number) => {
+				this.systemManager.getSystem(TrainSystem)?.setNotch(index);
 			},
 		);
 		this.cabSheet = new CabSheet(this.container);
@@ -1839,15 +1837,6 @@ export default class GameUISystem extends System {
 		const name = ss?.stationName ?? '—';
 		const waiting = passengers && nextIdx >= 0 ? passengers.waitingAt(nextIdx) : null;
 
-		// Jumping to another stop puts the train back on a platform at a stand.
-		// The lever is the one control that persists by design, so it has to be
-		// told — otherwise the drawn handle still reads P4 over a stationary
-		// train, and the physics agrees with the drawing rather than the sight.
-		if (trainSystem.journeyGeneration !== this.lastJourneyGeneration) {
-			this.lastJourneyGeneration = trainSystem.journeyGeneration;
-			this.cabHud.parkNotch();
-		}
-
 		this.cabHud.update({
 			speedKmh: speed,
 			limitKmh: limit,
@@ -1873,6 +1862,10 @@ export default class GameUISystem extends System {
 			// and everything.
 			power: physics?.powerNotch ?? 0,
 			brake: physics?.brakeNotch ?? 0,
+			// Where the handle IS — from the train, which owns it, so the drawn
+			// knob follows the keyboard and the game parking it just as it
+			// follows a drag.
+			notch: trainSystem.controllerNotch,
 			// The line's NAME, never its index. This read "0" on screen — a raw
 			// id is meaningless to whoever is driving.
 			lineName: lineShortLabel(ls?.parsed.name) || 'LINE',

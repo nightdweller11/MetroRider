@@ -11,12 +11,12 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.42.0 "Change Here"** — 63 releases. Every row
+**Live on metrorider.net: v2.43.0 "One Handle"** — 64 releases. Every row
 below reflects what is DEPLOYED, not what is merged.
 
 ### What shipped on 2026-08-15
 
-Twenty releases in one session, and fourteen of them were CORRECTIONS rather
+Twenty-one releases in one session, and fifteen of them were CORRECTIONS rather
 than features — things that existed in code and did nothing, or did the wrong
 thing. The pattern is worth naming because it recurred every single time: a
 surface that looked built, wired to nothing or to the wrong source. Reading
@@ -44,6 +44,7 @@ the code showed a lever; running the game showed a green bar.
 | 2.40.0 Show Your Working | "Good stop, 65" is a grade with no mark scheme; the ghost row could come up empty |
 | 2.41.0 Hold It There | A train jumped to a stop kept full power and drove off; in neutral it rolled away. Score and train-ahead were computed and shown nowhere |
 | 2.42.0 Change Here | Nothing said a map was a network — and the flag that looked like it meant "you can change here" answers a different question, true at 3 stations out of 70 |
+| 2.43.0 One Handle | Keyboard driving was dead: 2.41.0's parked brake had no key that could release it. The handle lived in the DRAWING, so nothing else could move it — and the engine sound was listening to the keyboard, not the train |
 
 **The habit that found all of it: open the game and use it.** Not one of these
 was visible to a passing test suite, and several had passing tests around

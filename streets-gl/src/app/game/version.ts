@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.43.0',
+		codename: 'One Handle',
+		date: '2026-08-16',
+		emblem: '🎚️⌨️',
+		summary: 'The arrow keys move the real lever, so keyboard and cab can never disagree — and the train sounds like it is working.',
+		changes: [
+			'FIXED — you could not drive from the keyboard at all. Since the last release a train is set down with the brake on, and the arrow keys asked the engine for power without any way to let the brake off: full power demanded, nothing happening, for as long as you cared to hold it.',
+			'The arrow keys now move the lever itself, one notch a press, up through the brake and on into power. The handle you see is the handle the train obeys, whichever way you moved it.',
+			'THE TRAIN SOUNDS LIKE IT IS WORKING — the engine and brake noise was listening to the KEYBOARD, not the train, so anyone driving with the lever heard neither.',
+		],
+	},
+	{
 		version: '2.42.0',
 		codename: 'Change Here',
 		date: '2026-08-16',

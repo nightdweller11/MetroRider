@@ -1,4 +1,6 @@
-import {notchDemand} from '../app/game/ui/CabHud';
+import {
+	notchDemand, steppedNotch, clampNotch, NEUTRAL_INDEX, PARKED_INDEX,
+} from '../app/game/physics/MasterController';
 import {createTrainPhysicsState, updateTrainPhysics, type TrainInput} from '../app/game/physics/TrainPhysics';
 import type {TrackData} from '../app/game/data/TrackBuilder';
 
@@ -106,22 +108,55 @@ describe('a notch the driver set stays set', () => {
 });
 
 describe('the keyboard and the handle do not fight', () => {
-	test('a held key wins over a handle left at neutral', () => {
-		const state = createTrainPhysicsState();
-
-		run(state, {...idle, throttle: true, powerLevel: 0}, 5);
-
-		expect(state.trainSpeed).toBeGreaterThan(5);
-	});
-
-	test('a keyboard brake overrides a handle asking for power', () => {
+	test('an emergency application overrides a handle asking for power', () => {
+		// Emergency is the one input that still reaches past the handle, because
+		// that is what an emergency brake IS. The arrow keys no longer do: they
+		// move the handle itself (see `steppedNotch`), so there is nothing left
+		// that can ask for power and brake from two different places at once.
 		const state = createTrainPhysicsState();
 
 		run(state, {...idle, powerLevel: 1}, 6);
 		const cruising = state.trainSpeed;
 
-		run(state, {...idle, powerLevel: 1, braking: true}, 4);
+		run(state, {...idle, powerLevel: 1, emergency: true}, 4);
 
 		expect(state.trainSpeed).toBeLessThan(cruising);
+	});
+});
+
+describe('steppedNotch', () => {
+	test('one press, one notch, in the direction pressed', () => {
+		expect(steppedNotch(NEUTRAL_INDEX, -1)).toBe(NEUTRAL_INDEX - 1);
+		expect(steppedNotch(NEUTRAL_INDEX, 1)).toBe(NEUTRAL_INDEX + 1);
+	});
+
+	test('cannot be walked off either end of the scale', () => {
+		expect(steppedNotch(0, -1)).toBe(0);
+		expect(steppedNotch(PARKED_INDEX, 1)).toBe(PARKED_INDEX);
+	});
+
+	test('a parked train can be driven away on the keyboard alone', () => {
+		// The regression this whole change exists for: a train set down on the
+		// brake could not be started from the keyboard at all, because the keys
+		// asked the physics for power while the handle held the brake on. Three
+		// presses is B2 → B1 → N → P1.
+		let notch = PARKED_INDEX;
+
+		for (let i = 0; i < 3; i++) notch = steppedNotch(notch, -1);
+
+		expect(notchDemand(notch)).toEqual({power: 0.25, brake: 0});
+
+		const state = createTrainPhysicsState();
+		const demand = notchDemand(notch);
+
+		run(state, {...idle, powerLevel: demand.power, brakeLevel: demand.brake}, 6);
+
+		expect(state.trainSpeed).toBeGreaterThan(1);
+	});
+
+	test('nonsense lands on neutral rather than off the scale', () => {
+		expect(clampNotch(NaN)).toBe(NEUTRAL_INDEX);
+		expect(clampNotch(-99)).toBe(0);
+		expect(clampNotch(99)).toBe(PARKED_INDEX);
 	});
 });

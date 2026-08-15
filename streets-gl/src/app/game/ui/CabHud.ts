@@ -22,6 +22,7 @@
  */
 
 import {describeSpan, type MiniMapView} from './MiniMap';
+import {NOTCHES, notchDemand, notchPercent} from '../physics/MasterController';
 import {buildRibbon, type RibbonLeg} from './RouteRibbon';
 
 export interface CabHudState {
@@ -65,9 +66,18 @@ export interface CabHudState {
 	/** Simple driving: bigger targets and a calmer console. */
 	simpleMode: boolean;
 	overLimit: boolean;
-	/** Power 0..1 and brake 0..1, for the lever and the gauge. */
+	/** Power 0..1 and brake 0..1, for the gauges. */
 	power: number;
 	brake: number;
+	/**
+	 * Where the master controller handle is, as a notch index.
+	 *
+	 * Owned by the train, drawn here. It used to be the other way round, which
+	 * meant nothing outside this panel could move the handle — so the keyboard
+	 * talked to the physics directly, and once a train was parked on the brake
+	 * a keyboard player could hold the throttle for ever and never move.
+	 */
+	notch: number;
 	lineName: string;
 	/**
 	 * Points on this run so far, or null before anything has been scored.
@@ -89,6 +99,10 @@ export interface CabHudState {
 
 const STYLE_ID = 'cab-hud-style';
 
+// Re-exported because the panel is where these were first written and other
+// modules still name this file; the law itself now lives with the physics.
+export {notchDemand} from '../physics/MasterController';
+
 /**
  * Inside this the tell-tale lights, metres.
  *
@@ -96,35 +110,6 @@ const STYLE_ID = 'cab-hud-style';
  * on while there is still something the driver can do about it.
  */
 const AHEAD_WARN_M = 900;
-
-/** Notch labels top-to-bottom, power above neutral, brake below. */
-/**
- * The controller scale, top to bottom: full power down through neutral to full
- * brake. One handle for both, the way a train's master controller works — and
- * the way this panel has always been LABELLED, long before it was wired.
- */
-const NOTCHES = ['P4', 'P3', 'P2', 'P1', 'N', 'B1', 'B2'];
-/** Where neutral sits in that list. */
-const NEUTRAL_INDEX = 4;
-
-/** Where a notch sits down the lever, as a percentage of its height. */
-function notchPercent(i: number): number {
-	return 17 + i * 11.5;
-}
-
-/**
- * What a notch asks the train for.
- *
- * Power is quartered so P1 is a gentle start rather than everything at once —
- * the whole reason a real controller has steps. The brake has two: enough to
- * hold a stop, and everything.
- */
-export function notchDemand(i: number): {power: number; brake: number} {
-	if (i < NEUTRAL_INDEX) return {power: (NEUTRAL_INDEX - i) / NEUTRAL_INDEX, brake: 0};
-	if (i > NEUTRAL_INDEX) return {power: 0, brake: i === NEUTRAL_INDEX + 1 ? 0.55 : 1};
-
-	return {power: 0, brake: 0};
-}
 
 const CSS = `
 .cab{position:fixed;inset:0;pointer-events:none;z-index:40;
@@ -374,8 +359,15 @@ export default class CabHud {
 	private lastRibbonKey = '';
 	private lastOrientation = '';
 	private onResize: (() => void) | null = null;
-	/** Where the master controller handle is sitting. Starts at neutral. */
-	private notch = NEUTRAL_INDEX;
+	/**
+	 * The notch last DRAWN, so the knob is only moved when it changes.
+	 *
+	 * Not where the handle is — the train owns that. Starts at −1 so the first
+	 * frame always paints, whatever the train says: without a paint the knob
+	 * has no `top` at all and sits at the very top of the slot, over the label,
+	 * reading as full power on a stationary train.
+	 */
+	private notch = -1;
 
 	public constructor(
 		private readonly parent: HTMLElement,
@@ -394,7 +386,7 @@ export default class CabHud {
 		 * What the master controller is asking for: power 0–1 and brake 0–1,
 		 * never both. Called when the handle moves, not every frame.
 		 */
-		private readonly onLever: (power: number, brake: number) => void = (): void => undefined,
+		private readonly onNotch: (index: number) => void = (): void => undefined,
 	) {
 		this.mount();
 	}
@@ -574,10 +566,6 @@ export default class CabHud {
 		this.parent.appendChild(root);
 		this.root = root;
 
-		// Put the handle at neutral before anyone looks at it. Without this the
-		// knob has no `top` at all and sits at the very top of the slot — over
-		// the label, and reading as full power on a train that is stationary.
-		this.renderNotch();
 		this.dialEl = root.querySelector('.cab-dial');
 		this.destName = root.querySelector('.cab-dest .nm');
 		this.destMeta = root.querySelector('.cab-dest .mt');
@@ -609,45 +597,35 @@ export default class CabHud {
 	 * The handle position is the truth: it does not spring back, and nothing
 	 * else moves it, so what the player set is what the train is doing.
 	 */
+	/**
+	 * Ask for a notch.
+	 *
+	 * The panel does NOT decide the handle has moved — the train does, and the
+	 * drawing follows on the next frame. One owner means the handle drawn and
+	 * the handle obeyed can never disagree, which is what went wrong when the
+	 * keyboard changed the demand and the knob stayed where it was.
+	 */
 	private setNotch(index: number): void {
-		const i = Math.max(0, Math.min(NOTCHES.length - 1, Math.round(index)));
+		const i = Math.max(0, Math.min(NOTCHES.length - 1, index));
 
 		if (i === this.notch) return;
 
-		this.notch = i;
-		this.renderNotch();
-
-		const demand = notchDemand(i);
-
-		this.onLever(demand.power, demand.brake);
+		this.onNotch(i);
 	}
 
-	/** Put the handle where the notch says, and light that notch's label. */
-	private renderNotch(): void {
+	/** Draw the handle where the train says it is. */
+	private renderNotch(index: number): void {
+		if (index === this.notch) return;
+
+		this.notch = index;
+
 		const knob = this.root?.querySelector<HTMLElement>('.cab-lever .knob');
 
-		if (knob) knob.style.top = `${notchPercent(this.notch)}%`;
+		if (knob) knob.style.top = `${notchPercent(index)}%`;
 
 		this.root?.querySelectorAll<HTMLElement>('.cab-lever .n').forEach(n => {
-			n.classList.toggle('at', Number(n.dataset.i) === this.notch);
+			n.classList.toggle('at', Number(n.dataset.i) === index);
 		});
-	}
-
-	/** Back to neutral — used when a run is reset rather than by the player. */
-	/**
-	 * Put the handle where a train that has just been set down belongs: hard on
-	 * the brake.
-	 *
-	 * NOT neutral. A stationary train with nothing applied rolls — measured at
-	 * 20 m in 8 seconds and still gaining on a gentle bank — so jumping to a
-	 * stop and reading the timetable for a minute left the train hundreds of
-	 * metres down the line with nobody driving it. The physics already knows a
-	 * train at a platform is held on its brakes; this is what puts it there.
-	 */
-	public parkNotch(): void {
-		this.notch = NOTCHES.length - 1;
-		this.renderNotch();
-		this.onLever(0, 1);
 	}
 
 	/**
@@ -745,6 +723,10 @@ export default class CabHud {
 			this.ribPoints.style.display = show ? '' : 'none';
 			this.ribPoints.textContent = show ? `${pts} PTS` : '';
 		}
+
+		// The handle, wherever the train is holding it — including when it was
+		// moved by the keyboard or parked by the game rather than dragged here.
+		this.renderNotch(s.notch);
 
 		if (this.leverFill) this.leverFill.style.height = `${Math.max(4, s.power * 100).toFixed(0)}%`;
 		if (this.brakeFill) this.brakeFill.style.height = `${Math.max(4, s.brake * 100).toFixed(0)}%`;
