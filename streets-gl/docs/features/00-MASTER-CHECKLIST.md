@@ -11,8 +11,36 @@
 
 ## Progress (2026-08-15)
 
-**Live on metrorider.net: v2.23.0 "Hands On"** — 44 releases. Every row below
-reflects what is DEPLOYED, not what is merged.
+**Live on metrorider.net: v2.35.0 "Somewhere New"** — 56 releases. Every row
+below reflects what is DEPLOYED, not what is merged.
+
+### What shipped on 2026-08-15
+
+Thirteen releases in one session, and eleven of them were CORRECTIONS rather
+than features — things that existed in code and did nothing, or did the wrong
+thing. The pattern is worth naming because it recurred every single time: a
+surface that looked built, wired to nothing or to the wrong source. Reading
+the code showed a lever; running the game showed a green bar.
+
+| Release | What was actually wrong |
+|---|---|
+| 2.23.0 Hands On | Every sheet row in the game was dead (`pointer-events`); panels piled at (0,0) before the first frame; the minimap had never drawn a map |
+| 2.24.0 Take the Handle | No way to drive on a tablet at all — lever and brake were pictures |
+| 2.25.0 The Real Lever | The cab had a controller SCALE and no controller; a tap did nothing visible |
+| 2.26.0 Let It Run | Everyone started in Simple, pinned to the posted limit with nothing saying why |
+| 2.27.0 Read the Dial | Speedo scaled to the limit not the train; mode top speeds held nothing; a raw id on screen |
+| 2.28.0 The Streets Around You | The minimap was a route diagram, not a map |
+| 2.29.0 Drive the 18:30 | The timetable was always "leaving now" — the clock face was decoration |
+| 2.30.0 Step Out | Walk mode had never been built (Trackside had, and was ticked as it) |
+| 2.31.0 Someone to Be | Walking had nobody doing the walking |
+| 2.32.0 Every Line Its Own Name | Four routes shared the badge "A1"; the built-in map could not be shared |
+| 2.33.0 The Train in Front | Block signals protected only the other track — a red meant nothing |
+| 2.34.0 Count the Stops | The route strip drew 12 dots for 21 stations, marker between them |
+| 2.35.0 Somewhere New | Discovery had been parked on worker plumbing it never needed |
+
+**The habit that found all of it: open the game and use it.** Not one of these
+was visible to a passing test suite, and several had passing tests around
+them.
 
 ### The interface was unusable, 2026-08-15
 
@@ -237,9 +265,15 @@ wants a camera).
 - [x] "Drive another map" (v2.8.0) — the live profile's maps, loaded mid-game
 - [x] Line facts (v2.6.0)
 - [x] Share links (2.21.0) — `?map&line&train`, session-only consist + tests
-- [ ] **City stats card + discovery** → release 4 below
-- [ ] Worker plumb: `notable[]` (tall/named features) into Tile3DBuffers
-- [ ] `LandmarkIndex` + map-overlay landmark icons
+- [x] Journey record (v2.32.0) — distance, time, cities, stations, lines,
+      passengers, top speed; localStorage-first so a guest keeps theirs
+- [x] Discovery (v2.35.0) — named places found while driving OR walking, with
+      milestones. **The `notable[]` worker plumbing was never needed**: every
+      loaded tile already carries the map's own labels, in world metres, with
+      a priority. Radius and threshold set from measurement, not taste — at
+      140 m a whole run found nothing, because a railway runs through open
+      country and the places are in the towns
+- [ ] Map-overlay landmark icons
 - [ ] Map browser: SVG thumbnails, Featured list, richer Recents
 - [ ] Local + production validation, changelog entry
 

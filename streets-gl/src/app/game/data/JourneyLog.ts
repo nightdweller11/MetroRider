@@ -27,12 +27,14 @@ export interface JourneyLog {
 	delivered: number;
 	/** Fastest speed reached, m/s. */
 	topSpeedMs: number;
+	/** Named places found, in the order they were come across. */
+	places: string[];
 }
 
 export function emptyJourney(): JourneyLog {
 	return {
 		metres: 0, drivingSeconds: 0, stations: [], lines: [], maps: [],
-		stops: 0, delivered: 0, topSpeedMs: 0,
+		stops: 0, delivered: 0, topSpeedMs: 0, places: [],
 	};
 }
 
@@ -85,6 +87,13 @@ export function addStop(
 		delivered: log.delivered + Math.max(0, delivered),
 		stations: remember(log.stations, `${mapId}::${lineId}::${stationIndex}`),
 	};
+}
+
+/** Record a named place come across. Ignores one already found. */
+export function addPlace(log: JourneyLog, name: string): JourneyLog {
+	if (!name || log.places.includes(name)) return log;
+
+	return {...log, places: remember(log.places, name)};
 }
 
 /** Record that a line, on a map, is being driven. */
@@ -145,6 +154,10 @@ export function milestoneCrossed(before: JourneyLog, after: JourneyLog): string 
 
 	if (after.stations.length > before.stations.length && after.stations.length % 25 === 0) {
 		return `${after.stations.length} different stations served`;
+	}
+
+	if (after.places.length > before.places.length && after.places.length % 10 === 0) {
+		return `${after.places.length} places found`;
 	}
 
 	return null;

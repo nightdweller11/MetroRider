@@ -24,6 +24,7 @@ import SignalRenderingSystem from './limits/SignalRenderingSystem';
 import WalkPad from './ui/WalkPad';
 import {distanceFromTrain, leashNotice} from './WalkController';
 import JourneySystem from './JourneySystem';
+import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
@@ -409,6 +410,10 @@ export default class GameUISystem extends System {
 		const signals = this.systemManager.getSystem(SignalRenderingSystem);
 
 		if (signals) signals.onSpad = (): void => this.showToast('🛑 You passed a red signal', 3000);
+
+		const discovery = this.systemManager.getSystem(DiscoverySystem);
+
+		if (discovery) discovery.onFind = (text): void => this.showToast(text, 2600);
 
 		this.speedEl = document.getElementById('hud-speed-val') ?? this.infoPanelEl;
 		this.fpsEl = document.getElementById('hud-fps-val') ?? this.infoPanelEl;
@@ -1013,6 +1018,9 @@ export default class GameUISystem extends System {
 			fact('TOP', '#ff5346',
 				`${Math.round(log.topSpeedMs * 3.6)} km/h`,
 				'The fastest you have ever gone'),
+			fact('FIND', '#4fd996',
+				log.places.length === 1 ? '1 place found' : `${log.places.length} places found`,
+				log.places.slice(-3).reverse().join(' · ') || 'Drive or walk around to find places'),
 		]);
 	}
 

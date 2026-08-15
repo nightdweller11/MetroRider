@@ -2,7 +2,7 @@ import System from '../System';
 import TrainSystem from './TrainSystem';
 import ProfileClient from './profiles/ProfileClient';
 import {
-	addDriving, addLine, addStop, emptyJourney, milestoneCrossed, type JourneyLog,
+	addDriving, addLine, addPlace, addStop, emptyJourney, milestoneCrossed, type JourneyLog,
 } from './data/JourneyLog';
 
 /**
@@ -56,6 +56,7 @@ export default class JourneySystem extends System {
 				stations: Array.isArray(parsed.stations) ? parsed.stations : [],
 				lines: Array.isArray(parsed.lines) ? parsed.lines : [],
 				maps: Array.isArray(parsed.maps) ? parsed.maps : [],
+				places: Array.isArray(parsed.places) ? parsed.places : [],
 			};
 		} catch {
 			return emptyJourney();
@@ -70,6 +71,25 @@ export default class JourneySystem extends System {
 		}
 
 		void ProfileClient.get().setData?.(STORAGE_KEY, this.log);
+	}
+
+	/** Every place found so far, for the discovery check and the sheet. */
+	public placesFound(): ReadonlySet<string> {
+		return new Set(this.log.places);
+	}
+
+	/** Record a named place come across, and say so if it is new. */
+	public recordPlace(name: string): boolean {
+		const before = this.log;
+
+		this.log = addPlace(before, name);
+
+		if (this.log === before) return false;
+
+		this.dirty = true;
+		this.announce(before, this.log);
+
+		return true;
 	}
 
 	/** Called by the scorer when a stop is made, so it counts once. */

@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.35.0',
+		codename: 'Somewhere New',
+		date: '2026-08-15',
+		emblem: '📍🔎',
+		summary: 'The game notices the places you go past, and keeps a list of everywhere you have found.',
+		changes: [
+			'FIND PLACES — Drive or walk near somewhere with a name and the game tells you what it is, and adds it to your list. Real places off the map, not made-up ones.',
+			'It works on foot too, which is half the reason to get off the train.',
+			'"Everywhere you have driven" in the menu now counts the places you have found as well.',
+			'A little cheer every tenth place.',
+		],
+	},
+	{
 		version: '2.34.0',
 		codename: 'Count the Stops',
 		date: '2026-08-15',
