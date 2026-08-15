@@ -5,10 +5,17 @@ import {
 	countryForLocation, signNumber, signStyleFor, SignStyle, TransportMode, unitLabel,
 } from './SignStyle';
 import {
-	buildSpeedProfile, limitAt, nextChange, speedState,
+	buildSpeedProfile, curveRadius, limitAt, limitForRadius, nextChange, speedState,
 	SpeedSegment, SpeedState, NextChange, SERIOUS_OVERSPEED, toSignKmh,
 } from './SpeedProfile';
 import {inferLineMode, lineModeInfo, type LineMode} from '../data/LineModes';
+
+/**
+ * Distance the curve is measured over, metres — the same baseline the speed
+ * profile uses, for the same reason: the spline points are close enough that
+ * three adjacent ones read position noise as a tight bend.
+ */
+const CURVE_BASELINE_M = 60;
 
 /**
  * Speed limits, in force.
@@ -34,6 +41,9 @@ export default class SpeedLimitSystem extends System {
 	public change: NextChange | null = null;
 	/** Seconds spent above the limit this run — the score reads this. */
 	public overspeedSeconds = 0;
+	/** The line's geometry in metres, kept so curvature can be asked for. */
+	private projected: {x: number; y: number}[] = [];
+	private cumDist: number[] = [];
 	/** Of that, seconds spent MORE than 25% over — the expensive kind. */
 	public seriousOverspeedSeconds = 0;
 
@@ -65,6 +75,13 @@ export default class SpeedLimitSystem extends System {
 			const ceiling = Math.min(modeInfo.topKmh, trainSystem.getMaxSpeedKmH());
 
 			this.lineCeiling = ceiling / 3.6;
+
+			this.projected = ls.track.spline.points.map((p: [number, number]) => {
+				const m = MathUtils.degrees2meters(p[1], p[0]);
+
+				return {x: m.x, y: m.y};
+			});
+			this.cumDist = ls.track.cumDist;
 
 			this.segments = buildSpeedProfile(
 				// The spline stores [lng, lat] DEGREES. Curvature has to be
@@ -146,5 +163,48 @@ export default class SpeedLimitSystem extends System {
 
 	public getSegments(): SpeedSegment[] {
 		return this.segments;
+	}
+
+	/**
+	 * The comfortable speed for the curve the train is ON, m/s — with no floor
+	 * applied.
+	 *
+	 * The posted limit cannot answer this. It carries the line's FLOOR (40 km/h
+	 * by default, or the mode's), so on the built-in map it reads 60 for
+	 * kilometres of dead-straight track and anything reading it as curvature
+	 * concludes the whole line is a bend. Measured directly off the geometry
+	 * instead, over the same baseline the profile uses so the noise averages
+	 * out rather than reading every wobble as a curve.
+	 *
+	 * `Infinity` on genuinely straight track.
+	 */
+	public curveSpeedAt(dist: number): number {
+		const points = this.projected;
+
+		if (points.length < 3 || this.cumDist.length !== points.length) return Infinity;
+
+		const half = CURVE_BASELINE_M / 2;
+		const at = this.indexAtDistance(dist);
+		const back = this.indexAtDistance(dist - half);
+		const fwd = this.indexAtDistance(dist + half);
+
+		if (back === at || fwd === at || back === fwd) return Infinity;
+
+		return limitForRadius(
+			curveRadius(points[back], points[at], points[fwd]),
+			// No floor: the question is what the CURVE allows, not what the
+			// line posts.
+			{floor: 0, lineMax: Infinity, step: 1 / 3.6},
+		);
+	}
+
+	/** Nearest spline point to a distance along the line. */
+	private indexAtDistance(dist: number): number {
+		const total = this.cumDist[this.cumDist.length - 1] || 1;
+		const d = ((dist % total) + total) % total;
+		// The points are near enough evenly spaced that a proportional guess is
+		// within a point or two, which is well inside the baseline.
+		return Math.max(0, Math.min(this.cumDist.length - 1,
+			Math.round((d / total) * (this.cumDist.length - 1))));
 	}
 }

@@ -43,6 +43,10 @@ export default class AudioSystem extends System {
 	private engineSampleSource: AudioBufferSourceNode | null = null;
 	private engineSampleGain: GainNode | null = null;
 
+	private squealSource: AudioBufferSourceNode | null = null;
+	private squealFilter: BiquadFilterNode | null = null;
+	private squealGain: GainNode | null = null;
+
 	public postInit(): void {
 		const handler = (): void => {
 			this.unlock();
@@ -221,6 +225,78 @@ export default class AudioSystem extends System {
 	}
 
 	/** A short press, for callers that have no press/release to give. */
+	/**
+	 * Flange squeal — the noise a train makes leaning into a tight curve.
+	 *
+	 * A continuous voice whose loudness follows how hard the curve is being
+	 * taken, rather than a sample fired at a threshold: the sound of a curve is
+	 * that it builds and falls away, and a clip that starts at a trigger line
+	 * announces the curve instead of being it.
+	 *
+	 * Synthesised, because it is a narrow band of noise around 2 kHz and that
+	 * is cheaper to make than to ship.
+	 */
+	public setFlangeSqueal(intensity: number): void {
+		if (!this.ctx || !this.masterGain) return;
+
+		const level = Math.max(0, Math.min(1, Number.isFinite(intensity) ? intensity : 0));
+
+		if (level <= 0.01) {
+			// Faded, not cut: silence arriving in one frame is a click.
+			if (this.squealGain) {
+				this.squealGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
+			}
+
+			return;
+		}
+
+		if (!this.squealGain) this.startSqueal();
+		if (!this.squealGain || !this.squealFilter) return;
+
+		// Quiet even at its loudest. This is a detail heard over the ride, not
+		// an effect played at the player.
+		this.squealGain.gain.setTargetAtTime(level * 0.06, this.ctx.currentTime, 0.09);
+		// Tighter curves ring higher, which is the part that reads as a flange
+		// rather than as wind.
+		this.squealFilter.frequency.setTargetAtTime(1500 + level * 1400, this.ctx.currentTime, 0.2);
+	}
+
+	/** Build the squeal voice once, and leave it running silently. */
+	private startSqueal(): void {
+		if (!this.ctx || !this.masterGain) return;
+
+		// Two seconds of noise, looped. Long enough not to hear the seam.
+		const frames = Math.floor(this.ctx.sampleRate * 2);
+		const buffer = this.ctx.createBuffer(1, frames, this.ctx.sampleRate);
+		const data = buffer.getChannelData(0);
+
+		for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+
+		const src = this.ctx.createBufferSource();
+
+		src.buffer = buffer;
+		src.loop = true;
+
+		const filter = this.ctx.createBiquadFilter();
+
+		filter.type = 'bandpass';
+		filter.Q.value = 14;
+		filter.frequency.value = 2000;
+
+		const gain = this.ctx.createGain();
+
+		gain.gain.value = 0;
+
+		src.connect(filter);
+		filter.connect(gain);
+		gain.connect(this.masterGain);
+		src.start();
+
+		this.squealSource = src;
+		this.squealFilter = filter;
+		this.squealGain = gain;
+	}
+
 	public playHorn(): void {
 		this.hornDown();
 		setTimeout((): void => this.hornUp(), AudioSystem.HornMinS * 1000);

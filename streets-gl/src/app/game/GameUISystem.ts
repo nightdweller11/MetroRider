@@ -20,6 +20,7 @@ import TrainRenderingSystem from './rendering/TrainRenderingSystem';
 import SettingsSystem from '../systems/SettingsSystem';
 import CabHud from './ui/CabHud';
 import CabSheet, {type SheetRow} from './ui/CabSheet';
+import CabWindscreen from './ui/CabWindscreen';
 import SignalRenderingSystem from './limits/SignalRenderingSystem';
 import WalkPad from './ui/WalkPad';
 import {distanceFromTrain, leashNotice} from './WalkController';
@@ -89,6 +90,7 @@ export default class GameUISystem extends System {
 	private cabHud: CabHud | null = null;
 	private cabSheet: CabSheet | null = null;
 	private walkPad: WalkPad | null = null;
+	private windscreen: CabWindscreen | null = null;
 	private walkModeApplied = false;
 	/** Every line on the map, projected to metres once and reused. */
 	private miniLines: MiniMapLineInput[] = [];
@@ -399,6 +401,7 @@ export default class GameUISystem extends System {
 			},
 		);
 		this.cabSheet = new CabSheet(this.container);
+		this.windscreen = new CabWindscreen(this.container);
 
 		// Something to be pleased about, when a round number goes by.
 		const journey = this.systemManager.getSystem(JourneySystem);
@@ -1512,6 +1515,12 @@ export default class GameUISystem extends System {
 		cam.setMode(target);
 		this.applyPhotoMode();
 		this.applyWalkMode();
+		// Only in the cab, and only while driving: a windscreen over the map or
+		// over a walk is a frame around nothing.
+		this.windscreen?.setVisible(
+			(this.systemManager.getSystem(GameCameraSystem)?.isCabMode() ?? false)
+			&& !(this.systemManager.getSystem(GameCameraSystem)?.isWalkMode() ?? false),
+		);
 	}
 
 	/**
@@ -1770,6 +1779,12 @@ export default class GameUISystem extends System {
 		// walk modes are reconciled here rather than only where they are chosen.
 		this.applyPhotoMode();
 		this.applyWalkMode();
+		// Only in the cab, and only while driving: a windscreen over the map or
+		// over a walk is a frame around nothing.
+		this.windscreen?.setVisible(
+			(this.systemManager.getSystem(GameCameraSystem)?.isCabMode() ?? false)
+			&& !(this.systemManager.getSystem(GameCameraSystem)?.isWalkMode() ?? false),
+		);
 
 		const limits = this.systemManager.getSystem(SpeedLimitSystem);
 		const passengers = this.systemManager.getSystem(PassengerSystem);

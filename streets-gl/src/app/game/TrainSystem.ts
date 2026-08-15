@@ -26,6 +26,7 @@ import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {TEL_AVIV_METRO} from './data/SampleRoutes';
 import {WorkerMessage} from '~/app/world/worker/WorkerMessage';
 import AudioSystem from './audio/AudioSystem';
+import {squealIntensity} from './audio/FlangeSqueal';
 import AnnouncementSystem from './audio/AnnouncementSystem';
 import GameCameraSystem from './GameCameraSystem';
 import {debugLog} from './debug';
@@ -441,6 +442,30 @@ export default class TrainSystem extends System {
 		this.updateStationState(ls);
 
 		this.input.consumePressed();
+		this.updateFlangeSqueal();
+	}
+
+	/**
+	 * The noise of leaning into a curve.
+	 *
+	 * Driven from the line's own speed profile, which already knows what each
+	 * stretch permits — so the sound follows how hard the curve is being taken
+	 * rather than announcing that one exists.
+	 */
+	private updateFlangeSqueal(): void {
+		const limits = this.systemManager.getSystem(SpeedLimitSystem);
+		const audio = this.systemManager.getSystem(AudioSystem);
+
+		if (!limits || !audio) return;
+
+		// The CURVE's own speed, not the posted limit: the posted limit carries
+		// the line's floor and reads 60 for kilometres of straight track, so
+		// using it made the squeal a constant drone at any speed over the sign.
+		const curveSpeed = limits.curveSpeedAt(this.physicsState.trainDist);
+
+		audio.setFlangeSqueal(
+			squealIntensity(this.physicsState.trainSpeed, curveSpeed, Infinity),
+		);
 	}
 
 	private updateTrainPosition(ls: LineState): void {

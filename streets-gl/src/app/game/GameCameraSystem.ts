@@ -327,6 +327,10 @@ export default class GameCameraSystem extends System {
 		return this.mode === GameCameraMode.Walk;
 	}
 
+	public isCabMode(): boolean {
+		return this.mode === GameCameraMode.Cab;
+	}
+
 	public isThirdPerson(): boolean {
 		return this.walkThirdPerson;
 	}

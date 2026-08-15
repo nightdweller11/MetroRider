@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.37.0',
+		codename: 'Inside the Cab',
+		date: '2026-08-15',
+		emblem: '🪟🎧',
+		summary: 'Cab view is a cab now — you are looking out of a window — and the wheels squeal in tight curves.',
+		changes: [
+			'A REAL WINDOW — In Cab view you now look out through a windscreen, with pillars either side, the roof above, a wiper and the top of the desk. Before it was just a camera at the front of the train.',
+			'WHEELS SQUEAL IN CURVES — Take a tight bend fast and you hear the wheels complain, louder the harder you take it. Go round gently and it stays quiet.',
+			'It only squeals on real curves, not on straight track — the game measures the actual bend under the train.',
+		],
+	},
+	{
 		version: '2.36.0',
 		codename: 'Cast Off',
 		date: '2026-08-15',
