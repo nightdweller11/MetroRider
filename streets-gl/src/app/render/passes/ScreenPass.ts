@@ -10,6 +10,7 @@ import ScreenMaterialContainer from "../materials/ScreenMaterialContainer";
 import {UniformFloat1, UniformFloat2} from "~/lib/renderer/abstract-renderer/Uniform";
 import AbstractTexture2DArray from "~/lib/renderer/abstract-renderer/AbstractTexture2DArray";
 import ControlsSystem from "~/app/systems/ControlsSystem";
+import SettingsSystem from "~/app/systems/SettingsSystem";
 
 export default class ScreenPass extends Pass<{
 	HDR: {
@@ -107,6 +108,12 @@ export default class ScreenPass extends Pass<{
 		this.material.getUniform<UniformFloat2>('resolution', 'Uniforms').value[0] = uiResolution.x;
 		this.material.getUniform<UniformFloat2>('resolution', 'Uniforms').value[1] = uiResolution.y;
 		this.material.getUniform<UniformFloat1>('slippyMapFactor', 'Uniforms').value[0] = slippyMapFactor;
+		// How bright the picture is, before the filmic curve. A setting rather
+		// than a constant because "right" depends on the screen as much as the
+		// scene, and the game is played on everything from a phone to a TV.
+		this.material.getUniform<UniformFloat1>('exposure', 'Uniforms').value[0] =
+			this.manager.systemManager.getSystem(SettingsSystem)
+				.settings.get('exposure')?.numberValue ?? 1;
 		this.material.updateUniformBlock('Uniforms');
 
 		this.renderer.useMaterial(this.material);

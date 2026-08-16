@@ -31,6 +31,11 @@ export default class ScreenMaterialContainer extends MaterialContainer {
 					type: RendererTypes.UniformType.Float1,
 					value: new Float32Array(1)
 				}, {
+					name: 'exposure',
+					block: 'Uniforms',
+					type: RendererTypes.UniformType.Float1,
+					value: new Float32Array([1])
+				}, {
 					name: 'tSlippyMap',
 					block: null,
 					type: RendererTypes.UniformType.Texture2D,

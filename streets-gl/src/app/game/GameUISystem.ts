@@ -1534,6 +1534,7 @@ export default class GameUISystem extends System {
 
 		if (traffic) rows.push(traffic);
 
+
 		// Sound is the audio system's own state rather than a stored setting,
 		// so it cannot go through the same cycler.
 		rows.push({
@@ -1651,6 +1652,8 @@ export default class GameUISystem extends System {
 			});
 		};
 
+		step('exposure', 'Brightness', 'how bright the whole picture is',
+			[0.5, 0.65, 0.8, 1, 1.3, 1.6], n => `${Math.round(n * 100)}%`);
 		pick('performanceMode', 'Quality', 'a whole set of settings at once, or Automatic to let the game choose',
 			QUALITY_LABELS, QUALITY_VALUES.map(v => QUALITY_BADGES[v]));
 		step('renderScale', 'Sharpness', 'how many pixels the world is drawn at', [0.5, 0.6, 0.7, 0.8, 0.9, 1], n => `${Math.round(n * 100)}%`);

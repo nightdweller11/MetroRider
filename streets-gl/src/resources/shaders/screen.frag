@@ -11,9 +11,11 @@ uniform sampler2D tSlippyMap;
 uniform Uniforms {
 	vec2 resolution;
 	float slippyMapFactor;
+	float exposure;
 };
 
 #include <gamma>
+#include <tonemap>
 
 // from https://iquilezles.org/articles/distfunctions
 float roundedBoxSDF(vec2 CenterPosition, vec2 Size, float Radius) {
@@ -32,7 +34,9 @@ void main() {
 		labels.a *= smoothstep(0., -100., bordersSDF);
 	#endif
 
-	vec3 sceneColor = LINEARtoSRGB(texture(tHDR, uv).rgb);
+	// Tone map BEFORE the gamma conversion: the curve works on linear light,
+	// and the conversion is what puts it on the screen.
+	vec3 sceneColor = LINEARtoSRGB(tonemapACES(texture(tHDR, uv).rgb * exposure));
 	vec3 sceneWithLabelsColor = mix(sceneColor, labels.rgb, labels.a);
 
 	vec3 withSlippyMap = mix(sceneWithLabelsColor, texture(tSlippyMap, uv).rgb, slippyMapFactor);

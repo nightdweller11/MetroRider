@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.47.0',
+		codename: 'Not So Bright',
+		date: '2026-08-16',
+		emblem: '🌤️🎚️',
+		summary: 'Midday no longer washes the world out — and how bright the picture is, is yours to set.',
+		changes: [
+			'FIXED — at midday the ground, roofs and hillsides flattened into one white sheet with no detail in them. The scene is drawn in high dynamic range and the last step converted it straight to screen colours, so anything brighter than white simply became white.',
+			'There is a proper filmic curve now: bright things roll off towards white instead of being cut at it, so a sunlit wall keeps its texture and the sky keeps its gradient.',
+			'BRIGHTNESS — a new setting under Picture, if you want it lighter or darker than the game chose.',
+		],
+	},
+	{
 		version: '2.46.0',
 		codename: 'Coupled Up',
 		date: '2026-08-16',

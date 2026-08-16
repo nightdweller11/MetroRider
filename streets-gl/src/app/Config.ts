@@ -192,6 +192,16 @@ const Config = {
 			selectRangeDefault: 40,
 			category: 'general'
 		},
+		exposure: {
+			label: 'Brightness',
+			selectRange: [0.4, 2, 0.05],
+			// 0.65, not 1. Measured on the Israel map at midday: the mean frame
+			// luma is 176/255 at 1.0 and 160 at 0.65, and at 0.65 the ground
+			// keeps its texture instead of reading as one pale sheet. Night is
+			// unharmed — 0.1% of the frame is crushed to black either way.
+			selectRangeDefault: 0.65,
+			category: 'general'
+		},
 		labels: {
 			label: 'Text labels',
 			status: ['off', 'on'],
