@@ -108,15 +108,15 @@ This file was re-read against the source before this run and was wrong in
 | Feature | State |
 |---|---|
 | **F1 Profiles & scores** | **SHIPPED** — Railway volume attached with `DATA_DIR=/data`, persistence PROVEN across a real container replacement |
-| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, distance readout v2.17.0, stop marker v2.18.0, own-ghost v2.39.0. Stop replay outstanding |
-| **F3 Speed limits** | **SHIPPED v1.1.12–v1.1.14** — curvature-derived profile, HUD limit, lineside boards, country-correct signage. Ribbon limit ticks outstanding |
-| **F4 Timetables** | **PART SHIPPED v2.7.0** — due times from the line's real speed profile, punctuality read, follows a reversal. Service picker + punctuality SCORING outstanding |
+| **F2 Driving score** | **SHIPPED** — stop + run scoring, cards, badges, board, stop marker v2.18.0, own-ghost v2.39.0, approach graph v2.40.0, live score v2.41.0. Camera replay outstanding |
+| **F3 Speed limits** | **SHIPPED** — curvature-derived profile, HUD limit, lineside boards, country-correct signage, ribbon limit ticks v2.34.0 |
+| **F4 Timetables** | **SHIPPED** — due times from the line's real speed profile, punctuality read + scoring v2.23.0, service picker v2.29.0. Line-group/express patterns outstanding |
 | **F5 Passengers** | **SHIPPED** — demand from real map data, boarding, figures on platforms, interchange surfacing v2.42.0 |
-| **F6 Line modes & vehicles** | **PART SHIPPED** — modes v2.12.0, tint v2.13.0, consists v2.14.0/v2.16.0, feel v2.15.0, TTS v2.5.0, grade v2.22.0. Ferry water, cab overlay, flange squeal outstanding |
-| **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0. Same-line AI and SPAD outstanding |
-| **F8 Cameras & exploration** | **PART SHIPPED** — six named views v2.2.0, photo save v2.10.0, Simple/Advanced v2.2.0 incl. drain suppression. Walk mode outstanding |
+| **F6 Line modes & vehicles** | **SHIPPED** — modes v2.12.0, tint v2.13.0, consists v2.14.0/v2.16.0, feel v2.15.0, TTS v2.5.0, grade v2.22.0, ferry v2.36.0, cab windscreen + squeal v2.37.0. Per-MODEL physics outstanding |
+| **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0, same-line AI + SPAD v2.33.0, train-ahead readout v2.41.0. Density governor and ambient cars/aircraft outstanding |
+| **F8 Cameras & exploration** | **SHIPPED** — six named views v2.2.0, photo save v2.10.0, Simple/Advanced v2.2.0, walk mode v2.30.0 + avatar v2.31.0. Auto-drive while riding outstanding |
 | **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, map-local solar time v2.20.0. Weather DEFERRED by agreement |
-| **F10 City & discovery** | **PART SHIPPED** — world tour v2.8.0, line facts v2.6.0, share links v2.21.0. Landmarks, discovery and city stats outstanding |
+| **F10 City & discovery** | **PART SHIPPED** — world tour v2.8.0, line facts v2.6.0, share links v2.21.0, journey record v2.32.0, discovery v2.35.0 + map pins v2.38.0. Landmark icons and the map browser outstanding |
 
 ---
 
@@ -173,10 +173,16 @@ wants a camera).
 - [ ] **Per-MODEL physics** — `performance` metadata per carriage in
       catalog.json. Feel is currently per line kind, which is the axis that
       matters; this is a refinement, not a gap
-- [ ] **Ferry water routes** — BLOCKED: no boat GLB in the catalog
-- [ ] **Cab windscreen overlay** — instruments shipped in v2.1.0 as the
-      permanent HUD in every view; the windscreen framing is not built
-- [ ] **Flange squeal** by curvature × speed
+- [x] **Ferry water routes** — SHIPPED v2.36.0. The block was "no boat GLB";
+      the answer was to build one (`buildFerryGeometry`, 26 boxes) rather than
+      wait for a catalogue. `onTrack` on the line mode — declared since 2.12.0
+      and read by nothing — now stops a water route laying synthetic rails
+- [x] **Cab windscreen overlay** — SHIPPED v2.37.0. Pillars, roof, visor,
+      wiper, desk and grime in CSS over the scene, so Cab view is a cab rather
+      than a camera at the front of the train
+- [x] **Flange squeal** by curvature × speed — SHIPPED v2.37.0. Keyed on how
+      HARD the curve is taken, not that a curve exists; the posted limit carries
+      the line's floor, so feeding it that made the train sing on straight track
 
 ## The dead-surface sweep (v2.41.0)
 
@@ -310,7 +316,7 @@ defects than the 824-test suite has.
       limit is information the driver acts on; cutting traction took the
       decision away and made the sign pointless. Ignoring it costs points —
       that is the entire enforcement, and it is the player's call
-- [ ] **Ribbon limit ticks + loop ring** → release 6 below
+- [x] **Ribbon limit ticks + loop ring** — SHIPPED v2.34.0
 - [ ] Local browser validation (known-curve limits, forced overspeed chain)
 
 ## F4 — Timetables & service (`04-timetables-and-service.md`)
@@ -323,7 +329,7 @@ defects than the 824-test suite has.
       (the timetable is rebuilt on every reversal, so reading it at the end of
       a run would judge early stops against a schedule that no longer exists),
       posted to F1 as its own `punctuality` score kind
-- [ ] **Service picker** ("Drive the 09:12") → release 2 below
+- [x] **Service picker** ("Drive the 18:30") — SHIPPED v2.29.0
 - [ ] `lineGroupId` plumbing + grouped picker + express patterns
 - [ ] Validate against the Israel-railways map's real A1–A5 groups
 - [ ] Local + production validation, changelog entry
@@ -337,7 +343,9 @@ defects than the 824-test suite has.
 - [x] Delivered + left-behind in the run summary, delivery badge
 - [ ] **Delivered-passenger points component** (currently narrative only)
 - [ ] Express/skip handling (no spawn for skipped services)
-- [ ] Interchange icons (map overlay + ribbon) + transfer stats
+- [~] Interchange surfacing SHIPPED v2.42.0 on the board and in the
+      announcement. Still outstanding: icons on the map overlay and the ribbon,
+      and transfer stats
 - [ ] Platform crowd meters in the station panel
 - [ ] Local browser validation (PAX flow over two stops), production
 
@@ -345,8 +353,10 @@ defects than the 824-test suite has.
 - [x] `BlockSystem` (blocks, occupancy, aspects) + unit tests
 - [x] Signal post meshes + aspect rendering
 - [x] Passing services on the adjacent alignment (v2.5.0), cheap by design
-- [ ] **Same-line AI + dispatch spacing; AI obeys signals** → release 5
-- [ ] **Player SPAD → run-card note** → release 5
+- [x] **Same-line AI + dispatch spacing; AI obeys signals** — SHIPPED v2.33.0,
+      with the gap to the train in front surfaced as a cab tell-tale in v2.41.0
+- [x] **Player SPAD → run-card note** — SHIPPED v2.33.0 ("N red signals
+      passed", charged in both driving modes)
 - [ ] Density setting (Off/Light/Normal, hard cap) + consist culling
 - [ ] Perf gate: 4×-throttle profile with AI ≥85% of no-AI
 - [ ] Ambient aircraft; ambient cars
@@ -358,10 +368,10 @@ defects than the 824-test suite has.
 - [x] Ride (v2.2.0) — a seat by the window looking out along the train
 - [x] Photo: damped flight, FOV slider, HUD hide, PNG capture
 - [x] Simple / Advanced driving (v2.2.0) incl. score-drain suppression
-- [ ] **Walk mode** — `WalkController` (terrain clamp, WASD + drag, mobile
+- [x] **Walk mode** — SHIPPED v2.30.0/v2.31.0: `WalkController` (terrain clamp, WASD + drag, mobile
       dual-zone touch), "Step out" / "Return", distance leash → release 3
 - [ ] Auto-drive while riding (Ride currently still needs you to drive)
-- [ ] Unit tests (terrain clamp, leash)
+- [x] Unit tests (terrain clamp, leash) — `walkController.test.ts`
 - [ ] Local + mobile-emulation validation, production, changelog
 
 ## F9 — World atmosphere (`09-world-atmosphere.md`)
