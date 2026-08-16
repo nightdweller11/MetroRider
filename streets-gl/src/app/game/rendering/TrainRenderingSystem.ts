@@ -373,19 +373,70 @@ export default class TrainRenderingSystem extends System {
 	}
 
 	/**
+	 * Make sure a set of models is in the cache, for traffic to wear.
+	 *
+	 * Resolves either way — a model that will not load is a duller train, not a
+	 * broken game, and the caller falls back to the procedural body.
+	 */
+	/** Whether a model is already in hand, so a caller can avoid asking. */
+	public hasModel(id: string): boolean {
+		return this.glbCache.has(id);
+	}
+
+	public async ensureModels(ids: string[]): Promise<boolean> {
+		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
+		const catalog = assetConfig?.getCatalog?.();
+		const toLoad: {id: string; url: string}[] = [];
+
+		for (const id of new Set(ids)) {
+			if (!id || PROCEDURAL_IDS.has(id) || this.glbCache.has(id)) continue;
+
+			const entry = catalog?.models.trains.find((e: {id: string; path?: string}) => e.id === id);
+
+			if (entry?.path && assetConfig) toLoad.push({id, url: assetConfig.getAssetUrl(entry.path)});
+		}
+
+		if (toLoad.length === 0) return false;
+
+		await Promise.all(toLoad.map(async ({id, url}) => {
+			try {
+				const resp = await fetch(url);
+
+				if (!resp.ok) throw new Error(`HTTP ${resp.status} loading ${url}`);
+
+				const ab = await resp.arrayBuffer();
+				const parsed = await this.parseGLBWithTextures(ab, url.substring(0, url.lastIndexOf('/') + 1));
+
+				if (parsed) this.glbCache.set(id, parsed);
+			} catch (err) {
+				console.warn(`[TrainRenderingSystem] Ambient model unavailable: ${id}`, err);
+			}
+		}));
+
+		return true;
+	}
+
+	/**
 	 * Cars for OTHER trains on the network.
 	 *
-	 * Always the procedural body rather than a loaded model: passing traffic is
-	 * seen for a couple of seconds from tens of metres away, and it is not
-	 * worth a second set of GLB loads, textures and skinned poses to pass a
-	 * train. It also lets each service wear its own line's colour.
+	 * These were the procedural box, always — one grey shape for every service
+	 * on every line, on the reasoning that a train passed in two seconds is not
+	 * worth a GLB load. The catalogue is thirty-five models, the loader and
+	 * cache already exist for the player's own consist, and the whole ambient
+	 * fleet is NINE cars: fewer than the player is often driving. So traffic
+	 * runs real stock now, chosen to suit the line.
+	 *
+	 * `modelId` empty, or not yet loaded, falls back to the procedural body in
+	 * the line's colour — which is what a ferry route and the first second
+	 * after a line change both get.
 	 */
-	public buildAmbientCars(count: number, color: string): TrainMeshObject[] {
+	public buildAmbientCars(count: number, color: string, modelId = ''): TrainMeshObject[] {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 
 		if (!sceneSystem) return [];
 
-		const buf = this.extractSingleProceduralCar(buildTrainCarGeometry(color));
+		const model = modelId ? this.glbCache.get(modelId) : undefined;
+		const buf = model ?? this.extractSingleProceduralCar(buildTrainCarGeometry(color));
 		const made: TrainMeshObject[] = [];
 
 		for (let i = 0; i < count; i++) {
@@ -398,6 +449,11 @@ export default class TrainRenderingSystem extends System {
 				texFlag: buf.texFlag ? new Float32Array(buf.texFlag) : undefined,
 			}, false);
 
+			// A loaded model carries its own image and per-vertex gate; without
+			// both, a multi-material body samples one texture at uv (0,0) and
+			// comes out a single flat colour — the bug that made the town bus
+			// black. The procedural body has neither and wants neither.
+			mesh.texture = buf.baseColorImage ?? null;
 			sceneSystem.objects.wrapper.add(mesh);
 			this.ambientMeshes.push(mesh);
 			made.push(mesh);

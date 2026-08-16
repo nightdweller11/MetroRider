@@ -2,6 +2,8 @@ import System from '../System';
 import SettingsSystem from '../systems/SettingsSystem';
 import TrainSystem from './TrainSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
+import {ambientModelFor} from './data/AmbientFleet';
+import {inferLineMode} from './data/LineModes';
 import type TrainMeshObject from './rendering/TrainMeshObject';
 import SpeedLimitSystem from './limits/SpeedLimitSystem';
 import {
@@ -108,6 +110,29 @@ export default class AmbientTrainSystem extends System {
 		return gapAhead(playerDist, this.leading.state.dist, direction);
 	}
 
+	/**
+	 * Fetch exactly the stock THIS fleet will wear, and rebuild once it is here.
+	 *
+	 * The picks are stable per line, so a line needs three models — not its
+	 * whole pool. Loading the pool fetched eleven files on a cold start,
+	 * because the default map builds a fleet before the real map replaces it.
+	 *
+	 * The fleet is built synchronously from whatever is cached, so the first
+	 * fleet after a line change wears the procedural body for a moment; when
+	 * the models land the build stamp is cleared and the next update puts the
+	 * real trains out. Rebuilding ONLY when something actually loaded matters:
+	 * invalidating unconditionally makes every build schedule another one.
+	 */
+	private loadFleetModels(rendering: TrainRenderingSystem, ids: string[]): void {
+		const missing = ids.filter(id => id && !rendering.hasModel(id));
+
+		if (missing.length === 0) return;
+
+		void rendering.ensureModels(missing).then(loaded => {
+			if (loaded) this.builtForLine = -1;
+		});
+	}
+
 	private build(trainSystem: TrainSystem, playerDist: number): void {
 		const rendering = this.systemManager.getSystem(TrainRenderingSystem);
 
@@ -118,11 +143,26 @@ export default class AmbientTrainSystem extends System {
 
 		const line = trainSystem.lines[trainSystem.currentLineIdx];
 		const colour = line?.parsed.color ?? '#9aa7b4';
+		// Stock that suits this railway, and a stable pick per service so the
+		// fleet does not reshuffle every time it is respawned.
+		// Inferred the same way the rest of the game infers it — from the name,
+		// the length and the stop count — when the map does not say.
+		const mode = line?.parsed.mode ?? inferLineMode(
+			line?.parsed.name ?? '',
+			line?.track.totalLength ?? 0,
+			line?.parsed.stations.length ?? 0,
+		);
+		const lineKey = `${trainSystem.mapName}::${line?.parsed.id ?? ''}`;
+
+		// One per service, plus the one you chase.
+		const fleetModels = Array.from({length: FLEET_SIZE + 1}, (_, i) => ambientModelFor(mode, lineKey, i));
+
+		this.loadFleetModels(rendering, fleetModels);
 
 		for (let i = 0; i < FLEET_SIZE; i++) {
 			this.services.push({
 				dist: playerDist + SPAWN_AHEAD + i * SPAWN_STAGGER,
-				cars: rendering.buildAmbientCars(CARS_PER_TRAIN, colour),
+				cars: rendering.buildAmbientCars(CARS_PER_TRAIN, colour, fleetModels[i]),
 			});
 		}
 
@@ -143,7 +183,9 @@ export default class AmbientTrainSystem extends System {
 
 			this.leading = {
 				state: createLeadingTrain(start, target),
-				cars: rendering.buildAmbientCars(LEADING_CARS, colour),
+				// Index past the fleet so the train you chase is not a twin of
+				// one you have already passed.
+				cars: rendering.buildAmbientCars(LEADING_CARS, colour, fleetModels[FLEET_SIZE]),
 			};
 		}
 

@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.45.0',
+		codename: 'Proper Traffic',
+		date: '2026-08-16',
+		emblem: '🚈🚋',
+		summary: 'The other trains on the line are real trains now, and they are not all the same one.',
+		changes: [
+			'REAL STOCK — Passing services were the plain grey box, always, on every line in every city. They run actual models now, out of the same catalogue your own train comes from.',
+			'AND THEY VARY — Each service gets its own train, and the stock suits the railway: a bus route runs the bus, a tram route runs trams, a metro runs metro cars and a high-speed line runs bullet trains.',
+			'A service keeps its train. The fleet is respawned whenever you turn around, and it does not reshuffle when it is.',
+		],
+	},
+	{
 		version: '2.44.0',
 		codename: 'The Picture Controls Come Back',
 		date: '2026-08-16',
