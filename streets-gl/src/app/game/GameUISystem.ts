@@ -79,6 +79,13 @@ import {
 
 const DEFAULT_MAP_URL = 'https://metrodreamin.com/view/QVQ2V2ZIYVpyUFEzNE1acEVLcGhlVkdqR3BPMnwxNg%3D%3D';
 
+/** The quality tiers, in the order the setting cycles them. */
+const QUALITY_VALUES = ['low', 'medium', 'high', 'auto', 'custom'];
+const QUALITY_LABELS = ['Low-end', 'Medium', 'High-end', 'Automatic', 'Your own'];
+const QUALITY_BADGES: Record<string, string> = {
+	low: 'LOW', medium: 'MED', high: 'HIGH', auto: 'AUTO', custom: 'MINE',
+};
+
 export default class GameUISystem extends System {
 	private container: HTMLElement | null = null;
 	private speedEl: HTMLElement | null = null;
@@ -1533,13 +1540,144 @@ export default class GameUISystem extends System {
 			},
 		});
 
-		const graphics = cycler('performanceMode', 'Graphics', {
-			low: 'LOW', medium: 'MED', high: 'HIGH', auto: 'AUTO', custom: 'CUST',
-		});
-		const fps = cycler('fpsLimit', 'Frame rate limit', {off: 'MAX', '30': '30', '60': '60'});
+		// Graphics gets a sheet of its own rather than one cycling row. The cab
+		// interface replaced a settings panel that had FIFTEEN picture controls
+		// in it, and rehomed none of them: shadows, reflections, glow, detail,
+		// view angle and the rest had no path in the game at all, and picking
+		// "Custom" here offered nothing to customise. Simplifying the interface
+		// was the point; losing the controls was not.
+		const quality = settings?.get('performanceMode');
+		const qualityAt = Math.max(0, QUALITY_VALUES.indexOf(quality?.statusValue ?? 'high'));
 
-		if (graphics) rows.push(graphics);
-		if (fps) rows.push(fps);
+		rows.push({
+			badge: QUALITY_BADGES[QUALITY_VALUES[qualityAt]] ?? 'GFX',
+			badgeColor: '#4fb6ef',
+			title: 'Picture',
+			subtitle: `${QUALITY_LABELS[qualityAt]} — shadows, detail, effects`,
+			// A row that opens another sheet must keep this one alive: without
+			// it the tap closes the sheet the handler has just put up, and the
+			// screen goes back to the world with nothing shown.
+			keepOpen: true,
+			onSelect: (): void => this.openGraphicsSheet(),
+		});
+
+		return rows;
+	}
+
+	/**
+	 * Every picture control, in one place, in words a person would use.
+	 *
+	 * Children of a setting that is off are not shown — a row for shadow
+	 * sharpness under "Shadows: off" is a control that does nothing, which is
+	 * the thing this whole interface has spent a fortnight removing.
+	 */
+	private openGraphicsSheet(): void {
+		if (!this.cabSheet) return;
+
+		this.cabSheet.show('Picture', this.graphicsSheetRows());
+	}
+
+	private graphicsSheetRows(): SheetRow[] {
+		const settings = this.systemManager.getSystem(SettingsSystem)?.settings;
+		const rows: SheetRow[] = [];
+		const redraw = (): void => { this.cabSheet?.setRows(this.graphicsSheetRows()); };
+
+		/** A setting with named steps: show where it is, tap to advance. */
+		const pick = (key: string, title: string, note: string, labels?: string[], badges?: string[]): void => {
+			const setting = settings?.get(key);
+			const config = (Config.SettingsSchema as Record<string, {status?: string[]}>)[key];
+
+			if (!setting || !config?.status) return;
+
+			const values = config.status;
+			const at = Math.max(0, values.indexOf(setting.statusValue));
+			const shown = labels?.[at] ?? values[at];
+
+			rows.push({
+				// An explicit badge where the readable label is a sentence:
+				// slicing "60 a second" to four characters gives "60 A", which
+				// is not a word in any language.
+				badge: badges?.[at] ?? shown.toUpperCase().slice(0, 4),
+				badgeColor: values[at] === 'off' ? '#7a8899' : '#4fd996',
+				title,
+				subtitle: `${shown} — ${note}`,
+				keepOpen: true,
+				onSelect: (): void => {
+					settings?.update(key, {statusValue: values[(at + 1) % values.length]});
+					redraw();
+				},
+			});
+		};
+
+		/**
+		 * A numeric setting, stepped through sensible values.
+		 *
+		 * The panel this replaces used a slider. A handful of named steps is
+		 * the honest trade for a control you work with a thumb on a moving
+		 * train — and every value a player would pick is still reachable.
+		 */
+		const step = (key: string, title: string, note: string, steps: number[], say: (n: number) => string): void => {
+			const setting = settings?.get(key);
+
+			if (!setting) return;
+
+			const current = setting.numberValue ?? steps[0];
+			// Nearest step, so a value set by a preset or the governor still
+			// shows as itself rather than snapping the label to something else.
+			let at = 0;
+
+			for (let i = 1; i < steps.length; i++) {
+				if (Math.abs(steps[i] - current) < Math.abs(steps[at] - current)) at = i;
+			}
+
+			rows.push({
+				badge: say(steps[at]).toUpperCase().slice(0, 4),
+				badgeColor: '#4fd996',
+				title,
+				subtitle: `${say(steps[at])} — ${note}`,
+				keepOpen: true,
+				onSelect: (): void => {
+					settings?.update(key, {numberValue: steps[(at + 1) % steps.length]});
+					redraw();
+				},
+			});
+		};
+
+		pick('performanceMode', 'Quality', 'a whole set of settings at once, or Automatic to let the game choose',
+			QUALITY_LABELS, QUALITY_VALUES.map(v => QUALITY_BADGES[v]));
+		step('renderScale', 'Sharpness', 'how many pixels the world is drawn at', [0.5, 0.6, 0.7, 0.8, 0.9, 1], n => `${Math.round(n * 100)}%`);
+		pick('fpsLimit', 'Frame rate', 'capping it can make the picture steadier',
+			['uncapped', '30 a second', '60 a second'], ['MAX', '30', '60']);
+
+		pick('shadows', 'Shadows', 'shadows under the train and the buildings',
+			['off', 'soft', 'medium', 'sharp'], ['OFF', 'SOFT', 'MED', 'SHRP']);
+
+		if (settings?.get('shadows')?.statusValue !== 'off') {
+			pick('shadowResolution', 'Shadow detail', 'how crisp the shadow edges are',
+				['low', 'medium', 'high'], ['LOW', 'MED', 'HIGH']);
+			pick('shadowCascades', 'Shadow distance', 'how far away shadows keep their detail', ['near', 'far'], ['NEAR', 'FAR']);
+		}
+
+		pick('ssr', 'Reflections', 'buildings and lights reflected in glass and water',
+			['off', 'some', 'full'], ['OFF', 'SOME', 'FULL']);
+		pick('ssao', 'Corner shading', 'darkening where surfaces meet, which gives things weight');
+		pick('bloom', 'Glow', 'bright things bleed a little light');
+		pick('taa', 'Smooth edges', 'takes the jagged steps off edges');
+
+		pick('dof', 'Distance blur', 'the far distance goes soft, like a camera',
+			['off', 'a little', 'a lot'], ['OFF', 'SOME', 'LOTS']);
+
+		if (settings?.get('dof')?.statusValue !== 'off') {
+			pick('dofMode', 'What stays sharp', 'the middle of the screen, or wherever you point',
+				['the middle', 'where you point'], ['MID', 'PTR']);
+			step('dofAperture', 'How much blur', 'a wider lens blurs more', [0.01, 0.05, 0.1, 0.25, 0.5], n => `${Math.round(n * 100)}`);
+		}
+
+		pick('terrainDetail', 'Ground detail', 'how finely the ground itself is drawn',
+			['low', 'medium', 'high'], ['LOW', 'MED', 'HIGH']);
+		pick('terrainHeight', 'Hills', 'real ground height, so the line climbs and dips');
+		pick('labels', 'Place names', 'names of places written on the world');
+		step('fov', 'View angle', 'how wide a view the camera takes in', [50, 60, 70, 80, 90, 100], n => `${n}°`);
 
 		return rows;
 	}

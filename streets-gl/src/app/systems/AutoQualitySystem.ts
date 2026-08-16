@@ -154,12 +154,20 @@ export default class AutoQualitySystem extends System {
 			this.onTierSelected(statusValue);
 		}, true);
 
-		// Manually changing any governed setting while in auto → the user wants
-		// control: stop the governor and mark the tier as custom.
+		// Manually changing any governed setting means the settings are no
+		// longer the tier that is named on the label — whether or not the
+		// governor was running. The doc above has always said the label flips
+		// to Custom; the code only did it while auto was engaged, so tweaking
+		// a shadow on "High-end" left the label claiming a preset it no longer
+		// matched. Nobody could see that until the controls became reachable.
 		for (const key of GOVERNED_KEYS) {
 			settings.onChange(key, () => {
-				if (this.engaged && !this.applying) {
+				if (this.applying) return;
+
+				if (this.engaged) {
 					this.becomeCustom('Auto tuning off — you’re in manual control (tier: Custom)');
+				} else if (settings.get('performanceMode')?.statusValue !== 'custom') {
+					this.becomeCustom('Picture settings are your own now');
 				}
 			}, false);
 		}

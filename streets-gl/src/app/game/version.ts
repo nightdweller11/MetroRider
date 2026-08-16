@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.44.0',
+		codename: 'The Picture Controls Come Back',
+		date: '2026-08-16',
+		emblem: '🖼️🎛️',
+		summary: 'All fifteen graphics settings have a home again — in plain words, in the cab menu.',
+		changes: [
+			'FIXED — the new interface had no way to reach ANY picture setting. Shadows, reflections, glow, ground detail, view angle and ten more had no path in the game at all, and picking Graphics → Custom offered nothing to customise.',
+			'Settings → Picture now holds every one of them, in words rather than initials: “Corner shading — darkening where surfaces meet, which gives things weight”.',
+			'Rows for settings that do nothing are not shown: shadow sharpness only appears when shadows are on.',
+			'Picking a quality preset still sets everything at once, and Automatic still tunes it for you. Change anything by hand and the label says “Your own” — which it used to claim only sometimes.',
+		],
+	},
+	{
 		version: '2.43.0',
 		codename: 'One Handle',
 		date: '2026-08-16',
