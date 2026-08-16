@@ -26,6 +26,7 @@ import WalkPad from './ui/WalkPad';
 import {distanceFromTrain, leashNotice} from './WalkController';
 import JourneySystem from './JourneySystem';
 import GhostSystem from './replay/GhostSystem';
+import ReplaySystem from './replay/ReplaySystem';
 import {ghostChip} from './replay/GhostTrace';
 import AmbientTrainSystem from './AmbientTrainSystem';
 import {connectionsAt, describeInterchange} from './data/Interchanges';
@@ -845,6 +846,13 @@ export default class GameUISystem extends System {
 				keepOpen: true,
 				onSelect: (): void => void this.copyRideLink(),
 			},
+			...(this.systemManager.getSystem(ReplaySystem)?.hasReplay() ? [{
+				badge: 'AGN',
+				badgeColor: '#f0b429',
+				title: 'Watch that stop again',
+				subtitle: 'See your last approach from beside the line',
+				onSelect: (): void => { this.systemManager.getSystem(ReplaySystem)?.start(); },
+			}] : []),
 			{
 				badge: 'TRN',
 				badgeColor: '#4fd996',

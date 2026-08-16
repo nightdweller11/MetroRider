@@ -590,12 +590,21 @@ export default class TrainSystem extends System {
 		return (h1 - h0) / GRADE_BASELINE_M;
 	}
 
-	public getCarPosition(offsetFromFront: number): TrainWorldPosition | null {
+	/**
+	 * Where a car sits, `atDist` metres along the line.
+	 *
+	 * The base distance is a parameter so a REPLAY can put the same train back
+	 * where it was twenty seconds ago without touching the physics. Moving
+	 * `trainDist` itself would have the scorer, the station manager and the
+	 * timetable all react to a train apparently reversing at speed.
+	 */
+	public getCarPosition(offsetFromFront: number, atDist?: number): TrainWorldPosition | null {
 		const ls = this.getCurrentLine();
 		if (!ls) return null;
 
+		const base = atDist ?? this.physicsState.trainDist;
 		const carDist = wrapTrackDistance(
-			this.physicsState.trainDist - offsetFromFront * this.physicsState.direction,
+			base - offsetFromFront * this.physicsState.direction,
 			ls.track,
 		);
 		const pos: PositionOnTrack = getPositionAtDistance(

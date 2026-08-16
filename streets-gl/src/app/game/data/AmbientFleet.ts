@@ -25,28 +25,56 @@
 import type {LineMode} from './LineModes';
 
 /**
- * The stock each kind of line runs, in the order it is preferred.
+ * One kind of train: a front, a middle and a rear.
+ *
+ * The catalogue's `-a` / `-b` / `-c` families are exactly that — measured:
+ * subway `-a` and `-c` are both 5.78 m and mirror each other (cabs), `-b` is
+ * 7.09 m (a carriage). Treating a family as three interchangeable models and
+ * repeating ONE of them made every ambient train three front cabs nose to
+ * tail, which is what it looked like.
+ *
+ * Single vehicles — a bus, a tram, a metro car — name themselves in all three
+ * places, because that is what a single vehicle is.
+ */
+export interface AmbientStock {
+	front: string;
+	middle: string;
+	rear: string;
+}
+
+function unit(id: string): AmbientStock {
+	return {front: id, middle: id, rear: id};
+}
+
+function family(base: string): AmbientStock {
+	return {front: `${base}-a`, middle: `${base}-b`, rear: `${base}-c`};
+}
+
+/**
+ * The stock each kind of line runs.
  *
  * Ferry and air are deliberately empty: the ferry has its own hull built in
  * code, and nothing in the catalogue is an aeroplane. Empty means "use the
  * procedural body", which is the honest answer rather than putting a tram on
  * the water.
  */
-export const AMBIENT_POOLS: Record<LineMode, string[]> = {
-	bus: ['generic-town-bus'],
-	tram: ['train-tram-modern', 'train-tram-classic', 'train-tram-round'],
-	light: ['train-tram-modern', 'train-electric-city-a', 'train-electric-city-b'],
+export const AMBIENT_POOLS: Record<LineMode, AmbientStock[]> = {
+	bus: [unit('generic-town-bus')],
+	tram: [unit('train-tram-modern'), unit('train-tram-classic'), unit('train-tram-round')],
+	light: [unit('train-tram-modern'), family('train-electric-city')],
 	rapid: [
-		'train-electric-subway-a', 'train-electric-subway-b', 'train-electric-subway-c',
-		'moscow-metro-81-717', 'metro-car-ezh3',
+		family('train-electric-subway'),
+		unit('moscow-metro-81-717'),
+		unit('metro-car-ezh3'),
 	],
 	regional: [
-		'train-electric-double-a', 'train-electric-double-b',
-		'train-electric-square-a', 'train-diesel-a', 'train-diesel-b',
+		family('train-electric-double'),
+		family('train-electric-square'),
+		family('train-diesel'),
 	],
-	hsr: ['train-electric-bullet-a', 'train-electric-bullet-b', 'train-electric-bullet-c'],
+	hsr: [family('train-electric-bullet')],
 	ferry: [],
-	gondola: ['funicular'],
+	gondola: [unit('funicular')],
 	air: [],
 };
 
@@ -71,13 +99,37 @@ export function seedFrom(text: string, index: number): number {
 	return Math.abs(h);
 }
 
-/** The model a service should run, or `PROCEDURAL` when none fits. */
-export function ambientModelFor(mode: LineMode | undefined, lineKey: string, index: number): string {
+/** The kind of train a service should run, or null when none fits. */
+export function ambientStockFor(
+	mode: LineMode | undefined, lineKey: string, index: number,
+): AmbientStock | null {
 	const pool = AMBIENT_POOLS[mode ?? 'rapid'] ?? [];
 
-	if (pool.length === 0) return PROCEDURAL;
+	if (pool.length === 0) return null;
 
 	return pool[seedFrom(lineKey ?? '', index) % pool.length];
+}
+
+/**
+ * The models for one train, front to back.
+ *
+ * A two-car train is a front and a rear with no middle; a one-car train is
+ * just the front, which for a single vehicle is the vehicle.
+ */
+export function ambientConsistFor(
+	mode: LineMode | undefined, lineKey: string, index: number, cars: number,
+): string[] {
+	const stock = ambientStockFor(mode, lineKey, index);
+	const count = Math.max(1, Math.floor(cars));
+
+	if (!stock) return new Array(count).fill(PROCEDURAL);
+	if (count === 1) return [stock.front];
+
+	return [
+		stock.front,
+		...new Array(count - 2).fill(stock.middle),
+		stock.rear,
+	];
 }
 
 /**
@@ -88,5 +140,7 @@ export function ambientModelFor(mode: LineMode | undefined, lineKey: string, ind
  * to want now would fetch again the moment the third comes up.
  */
 export function ambientModelsFor(mode: LineMode | undefined): string[] {
-	return AMBIENT_POOLS[mode ?? 'rapid'] ?? [];
+	const pool = AMBIENT_POOLS[mode ?? 'rapid'] ?? [];
+
+	return [...new Set(pool.flatMap(s => [s.front, s.middle, s.rear]))];
 }

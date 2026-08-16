@@ -7,6 +7,7 @@ import ServiceSystem from '../service/ServiceSystem';
 import SignalRenderingSystem from '../limits/SignalRenderingSystem';
 import JourneySystem from '../JourneySystem';
 import GhostSystem from '../replay/GhostSystem';
+import ReplaySystem from '../replay/ReplaySystem';
 import {
 	approachSamples, createRecorder, resetRecorder, tickRecorder, type RunSample,
 } from '../replay/RunRecorder';
@@ -213,8 +214,15 @@ export default class ScoringSystem extends System {
 		const stationName = ls.parsed.stations[result.stationIndex]?.name ?? '';
 		const direction = this.systemManager.getSystem(TrainSystem)?.physicsState.direction ?? 1;
 
+		const samples = approachSamples(this.recorder, this.approachMarker, direction, TRACE_WINDOW_M);
+
+		// Kept so the menu can offer to play it back. Handed over here rather
+		// than recorded twice: this is the one place that knows which stretch
+		// of the ring was an approach and which marker it was aimed at.
+		this.systemManager.getSystem(ReplaySystem)?.keepApproach(samples);
+
 		this.onStopScored?.(result, stationName, {
-			samples: approachSamples(this.recorder, this.approachMarker, direction, TRACE_WINDOW_M),
+			samples,
 			markerDist: this.approachMarker,
 			direction,
 		});

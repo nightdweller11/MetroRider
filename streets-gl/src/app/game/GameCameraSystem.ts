@@ -115,6 +115,8 @@ export default class GameCameraSystem extends System {
 	public mode: GameCameraMode = GameCameraMode.Chase;
 
 	private camera: PerspectiveCamera | null = null;
+	/** Where a replay wants the camera to look, or null when none is running. */
+	public replayFocus: {x: number; y: number; height: number; heading: number} | null = null;
 	private smoothX: number = 0;
 	private smoothY: number = 0;
 	private smoothZ: number = 0;
@@ -469,7 +471,10 @@ export default class GameCameraSystem extends System {
 
 		this.camera.matrixOverwrite = false;
 
-		const pos = trainSystem.trainPosition;
+		// A replay draws the train back down the line; the camera has to watch
+		// THAT rather than the one standing at the platform, or it stares at an
+		// empty stop while the approach happens off to the side.
+		const pos = this.replayFocus ?? trainSystem.trainPosition;
 		const dt = Math.min(deltaTime, 0.1);
 
 		// Track the train's position EXACTLY — never lag-filter it. A first-order
@@ -544,6 +549,19 @@ export default class GameCameraSystem extends System {
 			),
 			false,
 		);
+	}
+
+	/**
+	 * Stand at an exact spot rather than the one worked out from the train.
+	 *
+	 * The replay knows where it wants to be watched from — beside the stop,
+	 * looking back down the approach — and that is not derivable from a train
+	 * standing at a platform.
+	 */
+	public plantTracksideAt(x: number, y: number, z: number): void {
+		this.tracksideX = x;
+		this.tracksideY = y;
+		this.tracksideZ = z;
 	}
 
 	private plantTrackside(): void {

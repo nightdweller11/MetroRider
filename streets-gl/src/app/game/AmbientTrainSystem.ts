@@ -2,7 +2,7 @@ import System from '../System';
 import SettingsSystem from '../systems/SettingsSystem';
 import TrainSystem from './TrainSystem';
 import TrainRenderingSystem from './rendering/TrainRenderingSystem';
-import {ambientModelFor} from './data/AmbientFleet';
+import {ambientConsistFor} from './data/AmbientFleet';
 import {inferLineMode} from './data/LineModes';
 import type TrainMeshObject from './rendering/TrainMeshObject';
 import SpeedLimitSystem from './limits/SpeedLimitSystem';
@@ -49,6 +49,15 @@ const SPAWN_STAGGER = 1400;
 interface AmbientService {
 	dist: number;
 	cars: TrainMeshObject[];
+	/**
+	 * Where each car sits behind the front of the train, metres.
+	 *
+	 * Per car, from the model it is actually wearing. A single spacing taken
+	 * from the procedural body put fourteen metres of daylight between cars the
+	 * moment traffic started running real stock, which are six to seven metres
+	 * long rather than twenty.
+	 */
+	offsets: number[];
 }
 
 /**
@@ -71,10 +80,9 @@ export default class AmbientTrainSystem extends System {
 	 * are cleared all together — two owners of that list would wipe each
 	 * other's trains out on every line change.
 	 */
-	private leading: {state: LeadingTrainState; cars: TrainMeshObject[]} | null = null;
+	private leading: {state: LeadingTrainState; cars: TrainMeshObject[]; offsets: number[]} | null = null;
 	private builtForLine: number = -1;
 	private builtForMap: number = -1;
-	private carLength: number = 20;
 
 	public postInit(): void {
 		// Nothing to build yet: the line and its track are not loaded, and the
@@ -133,13 +141,31 @@ export default class AmbientTrainSystem extends System {
 		});
 	}
 
+	/** Cumulative nose-to-tail offsets for cars of the given lengths. */
+	private static offsetsFor(lengths: number[]): number[] {
+		const offsets: number[] = [];
+		let cum = 0;
+
+		for (let i = 0; i < lengths.length; i++) {
+			if (i === 0) {
+				offsets.push(0);
+				cum = lengths[0] / 2;
+			} else {
+				cum += CAR_GAP + lengths[i] / 2;
+				offsets.push(cum);
+				cum += lengths[i] / 2;
+			}
+		}
+
+		return offsets;
+	}
+
 	private build(trainSystem: TrainSystem, playerDist: number): void {
 		const rendering = this.systemManager.getSystem(TrainRenderingSystem);
 
 		if (!rendering) return;
 
 		this.clear();
-		this.carLength = rendering.ambientCarLength() || 20;
 
 		const line = trainSystem.lines[trainSystem.currentLineIdx];
 		const colour = line?.parsed.color ?? '#9aa7b4';
@@ -154,15 +180,22 @@ export default class AmbientTrainSystem extends System {
 		);
 		const lineKey = `${trainSystem.mapName}::${line?.parsed.id ?? ''}`;
 
-		// One per service, plus the one you chase.
-		const fleetModels = Array.from({length: FLEET_SIZE + 1}, (_, i) => ambientModelFor(mode, lineKey, i));
+		// A whole train each — front, middle, rear — for every service plus the
+		// one you chase.
+		const consists = Array.from(
+			{length: FLEET_SIZE + 1},
+			(_, i) => ambientConsistFor(mode, lineKey, i, i === FLEET_SIZE ? LEADING_CARS : CARS_PER_TRAIN),
+		);
 
-		this.loadFleetModels(rendering, fleetModels);
+		this.loadFleetModels(rendering, consists.flat());
 
 		for (let i = 0; i < FLEET_SIZE; i++) {
+			const built = rendering.buildAmbientCars(colour, consists[i]);
+
 			this.services.push({
 				dist: playerDist + SPAWN_AHEAD + i * SPAWN_STAGGER,
-				cars: rendering.buildAmbientCars(CARS_PER_TRAIN, colour, fleetModels[i]),
+				cars: built.meshes,
+				offsets: AmbientTrainSystem.offsetsFor(built.lengths),
 			});
 		}
 
@@ -181,11 +214,14 @@ export default class AmbientTrainSystem extends System {
 				if ((stops[i] - start) * dir > 0) { target = i; break; }
 			}
 
+			// Index past the fleet so the train you chase is not a twin of one
+			// you have already passed.
+			const built = rendering.buildAmbientCars(colour, consists[FLEET_SIZE]);
+
 			this.leading = {
 				state: createLeadingTrain(start, target),
-				// Index past the fleet so the train you chase is not a twin of
-				// one you have already passed.
-				cars: rendering.buildAmbientCars(LEADING_CARS, colour, fleetModels[FLEET_SIZE]),
+				cars: built.meshes,
+				offsets: AmbientTrainSystem.offsetsFor(built.lengths),
 			};
 		}
 
@@ -265,12 +301,10 @@ export default class AmbientTrainSystem extends System {
 			this.leading.state.speed = 0;
 		}
 
-		const spacing = this.carLength + CAR_GAP;
-
 		for (let i = 0; i < this.leading.cars.length; i++) {
 			const pos = trainSystem.getPositionOnLine(
 				trainSystem.currentLineIdx,
-				this.leading.state.dist - i * spacing * playerDir,
+				this.leading.state.dist - (this.leading.offsets[i] ?? 0) * playerDir,
 				playerDir,
 				// Zero: it is on YOUR track. That is the whole point of it.
 				0,
@@ -287,12 +321,11 @@ export default class AmbientTrainSystem extends System {
 	private poseService(trainSystem: TrainSystem, service: AmbientService, playerDir: number): void {
 		// It faces the way it is going, which is opposite to the player.
 		const facing = -playerDir;
-		const spacing = this.carLength + CAR_GAP;
 
 		for (let i = 0; i < service.cars.length; i++) {
 			const pos = trainSystem.getPositionOnLine(
 				trainSystem.currentLineIdx,
-				service.dist - i * spacing * facing,
+				service.dist - (service.offsets[i] ?? 0) * facing,
 				facing,
 				// Which side depends on the direction of travel, so an oncoming
 				// service is always on the left-hand alignment rather than

@@ -95,6 +95,14 @@ export default class TrainRenderingSystem extends System {
 	}
 
 	public carMeshes: TrainMeshObject[] = [];
+	/**
+	 * Draw the train HERE instead of where the physics has it, for a replay.
+	 *
+	 * Only the drawing moves. Moving `trainDist` itself would have the scorer,
+	 * the station manager and the timetable all react to a train apparently
+	 * reversing three hundred metres at speed.
+	 */
+	public replayDist: number | null = null;
 	/** Cars belonging to other services running on the network. */
 	public ambientMeshes: TrainMeshObject[] = [];
 	public trackMesh: TrainMeshObject | null = null;
@@ -430,16 +438,24 @@ export default class TrainRenderingSystem extends System {
 	 * the line's colour — which is what a ferry route and the first second
 	 * after a line change both get.
 	 */
-	public buildAmbientCars(count: number, color: string, modelId = ''): TrainMeshObject[] {
+	public buildAmbientCars(color: string, modelIds: string[]): {
+		meshes: TrainMeshObject[];
+		/** Each car's real length, so the caller can space them nose to tail. */
+		lengths: number[];
+	} {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 
-		if (!sceneSystem) return [];
+		if (!sceneSystem) return {meshes: [], lengths: []};
 
-		const model = modelId ? this.glbCache.get(modelId) : undefined;
-		const buf = model ?? this.extractSingleProceduralCar(buildTrainCarGeometry(color));
 		const made: TrainMeshObject[] = [];
+		const lengths: number[] = [];
 
-		for (let i = 0; i < count; i++) {
+		for (const modelId of modelIds) {
+			const model = modelId ? this.glbCache.get(modelId) : undefined;
+			const buf = model ?? this.extractSingleProceduralCar(buildTrainCarGeometry(color));
+
+			lengths.push(this.getCarLength(buf));
+
 			const mesh = new TrainMeshObject({
 				position: new Float32Array(buf.position),
 				normal: new Float32Array(buf.normal),
@@ -459,12 +475,7 @@ export default class TrainRenderingSystem extends System {
 			made.push(mesh);
 		}
 
-		return made;
-	}
-
-	/** The procedural car's length, so other traffic can space its cars. */
-	public ambientCarLength(): number {
-		return this.getCarLength(this.extractSingleProceduralCar(buildTrainCarGeometry('#888888')));
+		return {meshes: made, lengths};
 	}
 
 	public clearAmbientCars(): void {
@@ -1684,7 +1695,10 @@ export default class TrainRenderingSystem extends System {
 		const heightAlpha = 1 - Math.exp(-12 * dtClamped);
 
 		for (let i = 0; i < this.carMeshes.length; i++) {
-			const carPos = trainSystem.getCarPosition(this.carOffsets[i] * cosLat);
+			const carPos = trainSystem.getCarPosition(
+				this.carOffsets[i] * cosLat,
+				this.replayDist ?? undefined,
+			);
 			if (!carPos) continue;
 			const flipOffset = this.carFlipped[i] ? Math.PI : 0;
 

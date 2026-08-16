@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.46.0',
+		codename: 'Coupled Up',
+		date: '2026-08-16',
+		emblem: '🚃🎬',
+		summary: 'The other trains are proper trains — front, carriages and rear, coupled together — and you can watch your last stop again.',
+		changes: [
+			'FIXED — yesterday\'s traffic had huge gaps between its cars and looked like three engines nose to tail. Both were mine: the cars were spaced for the old grey box (20 m) while the real models are 6 to 7 m, and every train was the same FRONT car repeated three times.',
+			'A train is now a front, a carriage and a rear, coupled at the right distance — the catalogue\'s a/b/c models are exactly that.',
+			'WATCH THAT STOP AGAIN — After any stop, the menu offers to play your approach back: your own train, running the last three hundred metres again, watched from beside the line.',
+		],
+	},
+	{
 		version: '2.45.0',
 		codename: 'Proper Traffic',
 		date: '2026-08-16',
