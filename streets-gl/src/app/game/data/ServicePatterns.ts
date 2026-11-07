@@ -332,3 +332,18 @@ export function boardName(name: string): string {
 
 	return out || name;
 }
+
+/**
+ * The line id a personal best is filed under.
+ *
+ * A ghost is keyed by the index of the stop a run starts from. Taking the
+ * skipped stations out of a line's stops renumbers every stop after the first
+ * skip, so a best saved before express patterns existed would, under the same
+ * key, describe a run from a DIFFERENT station — and one that stopped
+ * everywhere, which an express beats without trying. A line with a pattern
+ * therefore files its bests under its own key; an all-stops line keeps the
+ * key it always had, and its records with it.
+ */
+export function bestTimeLineKey(line: {id: string; skipped: readonly unknown[]}): string {
+	return line.skipped.length > 0 ? `${line.id}~skips${line.skipped.length}` : line.id;
+}

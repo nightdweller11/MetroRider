@@ -15,6 +15,7 @@ import {TRACE_WINDOW_M} from '../replay/ApproachTrace';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 import SettingsSystem from '~/app/systems/SettingsSystem';
+import {bestTimeLineKey} from '~/app/game/data/ServicePatterns';
 
 /** How the run went against the record it was chasing. */
 export interface GhostOutcome {
@@ -152,7 +153,7 @@ export default class ScoringSystem extends System {
 
 	private startRun(
 		trainSystem: TrainSystem,
-		ls: {parsed: {id: string; name: string; stations: unknown[]; isLoop: boolean}},
+		ls: {parsed: {id: string; name: string; stations: unknown[]; isLoop: boolean; skipped: readonly unknown[]}},
 	): void {
 		this.stop.reset();
 		this.run.abandon();
@@ -176,7 +177,7 @@ export default class ScoringSystem extends System {
 		// would be describing different journeys.
 		this.systemManager.getSystem(GhostSystem)?.beginRun(
 			trainSystem.mapName || 'unknown-map',
-			ls.parsed.id,
+			bestTimeLineKey(ls.parsed),
 			trainSystem.stationState?.nearestStationIdx ?? 0,
 			trainSystem.physicsState.direction,
 		);

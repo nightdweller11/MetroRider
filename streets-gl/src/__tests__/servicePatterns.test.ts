@@ -16,7 +16,7 @@ import {buildTrackData} from '~/app/game/data/TrackBuilder';
 import {TEL_AVIV_METRO} from '~/app/game/data/SampleRoutes';
 import {buildInterchangeIndex, linesServing} from '~/app/game/data/Interchanges';
 import {
-	authorMarkedExpress, boardName, effectiveSkips, groupLinesForPicker, partOfSibling,
+	authorMarkedExpress, bestTimeLineKey, boardName, effectiveSkips, groupLinesForPicker, partOfSibling,
 	passingAhead, patternNote, skippedBetween, skipsPerLeg, type GroupableLine,
 } from '~/app/game/data/ServicePatterns';
 import {linePickerRows} from '~/app/game/ui/LinePicker';
@@ -417,5 +417,23 @@ describe('the timetable and the passengers follow the stops (F4 + F5)', () => {
 
 		expect(a2.stations.some(s => boardName(s.name) === 'Holon Junction')).toBe(true);
 		expect(a2.skipped).toHaveLength(0);
+	});
+});
+
+describe('bestTimeLineKey', () => {
+	it('keeps an all-stops line on the key its old bests were saved under', () => {
+		expect(bestTimeLineKey({id: 'L7', skipped: []})).toBe('L7');
+	});
+
+	it('files an express under its own key, so an all-stops best is never raced', () => {
+		expect(bestTimeLineKey({id: 'L7', skipped: [{}, {}, {}, {}]})).toBe('L7~skips4');
+	});
+
+	it('gives every line with skips on the real Israel map a key of its own', () => {
+		const lines = israel().parsed;
+		const withSkips = lines.filter(l => l.skipped.length > 0);
+		expect(withSkips.length).toBeGreaterThan(0);
+		for (const l of withSkips) expect(bestTimeLineKey(l)).not.toBe(l.id);
+		for (const l of lines.filter(x => x.skipped.length === 0)) expect(bestTimeLineKey(l)).toBe(l.id);
 	});
 });
