@@ -425,7 +425,10 @@ export default class ShadowMappingPass extends Pass<{
 
 			if (i < 2) {
 				this.renderInstances(camera);
-				this.renderAircraft(camera);
+				// Aircraft cast no shadow here. The lowest flies at ~300 m, so
+				// its shadow lands far outside these near cascades — drawing
+				// them was two draw calls per aircraft type per frame (measured:
+				// 8 of the 12 that air traffic added) for nothing on screen.
 				// Trains, platforms and lineside furniture are small objects
 				// whose shadows only read at close range — the same reason
 				// trees and aircraft are limited to the near cascades. The far

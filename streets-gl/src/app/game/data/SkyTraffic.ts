@@ -42,8 +42,8 @@ export const SPEED_MAX = 264;
 export const LOW_FLIGHTS = 3;
 
 /** Approach and departure heights at the middle of their pass, metres. */
-export const LOW_MIN_M = 450;
-export const LOW_MAX_M = 900;
+export const LOW_MIN_M = 250;
+export const LOW_MAX_M = 500;
 
 /**
  * How steeply the low ones climb out or come down: a three-degree path, the
@@ -54,7 +54,7 @@ export const LOW_MAX_M = 900;
 export const LOW_GRADIENT = 0.05;
 
 /** Never lower than this, metres — nothing skims the roofs. */
-export const LOW_FLOOR_M = 280;
+export const LOW_FLOOR_M = 200;
 
 /** Approach speeds, metres per second. 250–330 km/h. */
 export const LOW_SPEED_MIN = 70;
@@ -64,23 +64,50 @@ export const LOW_SPEED_MAX = 92;
 export const LOW_SPREAD_M = 7000;
 
 /**
- * How far to the side the low ones are held, metres.
+ * Where a low pass is laid: across the view, not overhead.
  *
- * Deliberately NOT overhead. A driver looks forward along the line, and an
- * aeroplane directly above them is one nobody ever sees. Held out here they
- * sit a few degrees up — the top of a forward view, where you see a real one.
+ * A driver looks forward along the line, and an aeroplane directly above them
+ * is one nobody ever sees; one laid out at random around them crossed the
+ * forward view about four per cent of the time (measured in the cab, 150 s).
+ * So each low pass is centred this far AHEAD of the player when it begins,
+ * crossing the line of sight at 40–140 degrees, offset a little to one side.
+ * Its closest approach is then most of a kilometre away or more, and it
+ * crosses the top of a forward view, where you see a real one. Measured in
+ * the cab at midday: centred 3 km out at 450–900 m, an A321 was a six-pixel
+ * speck; centred 2 km out at 350–700 m it was above the top of the cab's
+ * view (about 15 degrees up) for 96% of the time. Real approaches over a
+ * city are low — a few hundred metres — and that is what fits the view.
  */
-export const LOW_SIDE_MIN_M = 1500;
-export const LOW_SIDE_SPAN_M = 1800;
+export const LOW_AHEAD_M = 2500;
+export const LOW_SIDE_MIN_M = 0;
+export const LOW_SIDE_SPAN_M = 600;
+/** How far from square-on to the view a low pass may cross it, radians. */
+export const LOW_CROSS_SPREAD = 50 * Math.PI / 180;
 
 /**
- * How far the player may travel from where a flight's pass was laid out
- * before it is laid out again around them, metres. A pass is fixed to the
- * ground while it runs — an aeroplane that slid along with the train would
- * look tethered to it — and is moved only when the player has gone somewhere
- * else entirely (a jump to another station or city).
+ * A pass is laid out around the player when it begins and then stays fixed
+ * to the ground — an aeroplane that slid along with the train would look
+ * tethered to it. Once the player has gone further from that spot than this
+ * share of the pass's half-length, the flight is no longer theirs...
  */
-export const REANCHOR_DISTANCE_M = 30000;
+export const REANCHOR_SHARE = 0.8;
+
+/**
+ * ...and if it is also at least this share of the half-length away from
+ * them, it simply ends there (nothing until its next pass begins around the
+ * player). Moving it instead would be a teleport — out of one part of the
+ * sky and, often enough, straight into the windscreen.
+ */
+export const UNSEEN_SHARE = 0.7;
+
+/**
+ * A camera that moved this far between two updates (ten seconds apart) did
+ * not drive there — it jumped: to a station, to another city, or from the
+ * map's start view to the first station at boot, which once left every low
+ * flight twenty kilometres off and out of sight. A jump re-lays the whole
+ * sky around the player at once; the world around them has changed anyway.
+ */
+export const JUMP_M = 3000;
 
 export interface SkyFlight {
 	/** Stable for one pass across the sky; a new pass is a new aeroplane. */
@@ -165,11 +192,12 @@ export function passAt(plan: FlightPlan, seconds: number): number {
  */
 export function flightAt(
 	plan: FlightPlan, seconds: number, pass: number, anchorX: number, anchorZ: number,
+	heading: number = plan.heading,
 ): SkyFlight {
 	const along = plan.phase + seconds * plan.speed - pass * plan.spread * 2 - plan.spread;
 	// (sin, cos) for (x, z) — the engine's convention.
-	const fx = Math.sin(plan.heading);
-	const fz = Math.cos(plan.heading);
+	const fx = Math.sin(heading);
+	const fz = Math.cos(heading);
 	const altitude = plan.low
 		? Math.max(LOW_FLOOR_M, plan.altitude + plan.gradient * along)
 		: plan.altitude;
@@ -179,11 +207,43 @@ export function flightAt(
 		x: anchorX + fx * along + fz * plan.across,
 		z: anchorZ + fz * along - fx * plan.across,
 		altitude,
-		heading: plan.heading,
+		heading,
 	};
 }
 
-/** The sky above a point, at a moment, every flight on its current pass. */
+export interface PassLayout {
+	/** The spot the pass is laid around, world metres. */
+	x: number;
+	z: number;
+	heading: number;
+}
+
+/**
+ * Where one pass of a flight goes, for a player at a place looking a way.
+ *
+ * High flights are laid around the player on their own fixed heading; low
+ * ones across the player's forward view (see LOW_AHEAD_M). `forward` is the
+ * horizontal view direction; it need not be normalised. Deterministic in
+ * (flight, pass), so asking twice gives the same pass.
+ */
+export function layoutPass(
+	plan: FlightPlan, pass: number, cameraX: number, cameraZ: number,
+	forwardX = 0, forwardZ = 1,
+): PassLayout {
+	if (!plan.low) return {x: cameraX, z: cameraZ, heading: plan.heading};
+
+	const n = Math.hypot(forwardX, forwardZ);
+	const fx = n > 1e-6 ? forwardX / n : 0;
+	const fz = n > 1e-6 ? forwardZ / n : 1;
+	const seed = plan.index * 1009 + pass * 7919;
+	const look = Math.atan2(fx, fz);
+	const side = hash(seed + 1) < 0.5 ? -1 : 1;
+	const heading = look + side * Math.PI / 2 + (hash(seed + 2) * 2 - 1) * LOW_CROSS_SPREAD;
+
+	return {x: cameraX + fx * LOW_AHEAD_M, z: cameraZ + fz * LOW_AHEAD_M, heading};
+}
+
+/** The sky around a player looking north (+z), at a moment, every flight on its current pass. */
 export function skyAt(centreX: number, centreZ: number, seconds: number): SkyFlight[] {
 	if (!Number.isFinite(centreX) || !Number.isFinite(centreZ) || !Number.isFinite(seconds)) {
 		return [];
@@ -194,7 +254,10 @@ export function skyAt(centreX: number, centreZ: number, seconds: number): SkyFli
 	for (let i = 0; i < FLIGHT_COUNT; i++) {
 		const plan = flightPlan(i);
 
-		out.push(flightAt(plan, seconds, passAt(plan, seconds), centreX, centreZ));
+		const pass = passAt(plan, seconds);
+		const at = layoutPass(plan, pass, centreX, centreZ);
+
+		out.push(flightAt(plan, seconds, pass, at.x, at.z, at.heading));
 	}
 
 	return out;
@@ -212,19 +275,36 @@ export interface SkyTrack {
  * The sky as the interpolating vehicle system wants it: each aeroplane as a
  * few timed samples along one pass.
  *
- * Holds one anchor per flight slot. A pass is laid out around wherever the
- * player is when it begins, then stays fixed to the ground until it ends —
- * by which time the aeroplane is at the far edge of its pass, which is where
- * it can be replaced without anyone seeing a jump.
+ * Holds one layout per flight slot. A pass is laid out around wherever the
+ * player is (and, for a low one, whichever way they look) when it begins,
+ * then stays fixed to the ground until it ends — by which time the aeroplane
+ * is at the far edge of its pass, where it can be replaced without anyone
+ * seeing a jump.
  */
 export class SkyTracker {
-	private anchors: Map<number, {pass: number; x: number; z: number}> = new Map();
+	private anchors: Map<number, PassLayout & {pass: number; ended: boolean; serial: number}> = new Map();
+	private lastCamera: {x: number; z: number} | null = null;
+	/**
+	 * Bumped on every layout. Part of each aircraft's id, because the vehicle
+	 * system interpolates between the states it holds for an id: a pass
+	 * re-laid under the SAME id after a camera jump was drawn sweeping from
+	 * its old track to its new one (measured: 991 m/s, three times an
+	 * airliner's speed). A new layout must be a new aeroplane.
+	 */
+	private serial: number = 0;
 
-	public tracks(cameraX: number, cameraZ: number, times: number[]): SkyTrack[] {
+	public tracks(
+		cameraX: number, cameraZ: number, times: number[], forwardX = 0, forwardZ = 1,
+	): SkyTrack[] {
 		if (!Number.isFinite(cameraX) || !Number.isFinite(cameraZ) || times.length === 0 ||
 			!times.every(Number.isFinite)) {
 			return [];
 		}
+
+		const jumped = !this.lastCamera ||
+			Math.hypot(this.lastCamera.x - cameraX, this.lastCamera.z - cameraZ) > JUMP_M;
+
+		this.lastCamera = {x: cameraX, z: cameraZ};
 
 		const out: SkyTrack[] = [];
 
@@ -233,24 +313,43 @@ export class SkyTracker {
 			const pass = passAt(plan, times[0]);
 			let anchor = this.anchors.get(i);
 
-			if (
-				!anchor || anchor.pass !== pass ||
-				Math.hypot(anchor.x - cameraX, anchor.z - cameraZ) > REANCHOR_DISTANCE_M
-			) {
-				anchor = {pass, x: cameraX, z: cameraZ};
+			if (jumped || !anchor || anchor.pass !== pass) {
+				anchor = {
+					pass, ended: false, serial: ++this.serial,
+					...layoutPass(plan, pass, cameraX, cameraZ, forwardX, forwardZ),
+				};
 				this.anchors.set(i, anchor);
+			} else if (!anchor.ended && this.leftBehind(plan, anchor, times[0], cameraX, cameraZ)) {
+				anchor.ended = true;
 			}
 
-			const samples = times.map(t => flightAt(plan, t, pass, anchor.x, anchor.z));
+			if (anchor.ended) continue;
 
-			out.push({id: samples[0].id, type: flightType(i, plan.low), samples});
+			const samples = times.map(t => flightAt(plan, t, pass, anchor.x, anchor.z, anchor.heading));
+
+			out.push({id: `${samples[0].id}-${anchor.serial}`, type: flightType(i, plan.low), samples});
 		}
 
 		return out;
 	}
 
+	/** Whether the player has driven away from a pass that is out of their sight. */
+	private leftBehind(
+		plan: FlightPlan, anchor: PassLayout & {pass: number}, seconds: number,
+		cameraX: number, cameraZ: number,
+	): boolean {
+		const reach = plan.spread * REANCHOR_SHARE + (plan.low ? LOW_AHEAD_M : 0);
+
+		if (Math.hypot(anchor.x - cameraX, anchor.z - cameraZ) <= reach) return false;
+
+		const now = flightAt(plan, seconds, anchor.pass, anchor.x, anchor.z, anchor.heading);
+
+		return Math.hypot(now.x - cameraX, now.z - cameraZ) > plan.spread * UNSEEN_SHARE;
+	}
+
 	public reset(): void {
 		this.anchors.clear();
+		this.lastCamera = null;
 	}
 }
 

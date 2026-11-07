@@ -51,7 +51,11 @@ function makeSystem(status: 'on' | 'off' = 'on'): {
 	const systems = new Map<unknown, unknown>([
 		[SettingsSystem, {settings}],
 		[TerrainSystem, {terrainHeightProvider: {getHeightGlobalInterpolated: (): number => 30}}],
-		[SceneSystem, {objects: {camera: {position: {...CAMERA}}}}],
+		[SceneSystem, {objects: {camera: {
+			position: {...CAMERA},
+			// Identity: looking down -z.
+			matrix: {values: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]},
+		}}}],
 	]);
 	const vs = new VehicleSystem();
 

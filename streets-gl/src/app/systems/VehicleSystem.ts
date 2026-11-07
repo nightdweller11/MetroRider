@@ -178,7 +178,9 @@ export default class VehicleSystem extends System {
 		const start = Date.now() - AircraftRollbackTime;
 		const times = [0, 1, 2].map(k => (start + k * QueryInterval) / 1000);
 
-		const tracks = this.sky.tracks(camera.position.x, camera.position.z, times);
+		// The view direction, flattened: low passes are laid across it.
+		const m = camera.matrix.values;
+		const tracks = this.sky.tracks(camera.position.x, camera.position.z, times, -m[8], -m[10]);
 
 		this.handleQueryResponse({
 			timestamp: Date.now(),
