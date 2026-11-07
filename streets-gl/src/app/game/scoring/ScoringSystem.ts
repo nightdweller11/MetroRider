@@ -14,7 +14,9 @@ import {
 import {TRACE_WINDOW_M} from '../replay/ApproachTrace';
 import {StopScorer, StopResult, APPROACH_M, standingAtScoredStop} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
-import {PassengerTally, passengerPoints, readyToFinish, type PassengerCounts} from './PassengerPoints';
+import {
+	LeftBehindCount, PassengerTally, passengerPoints, readyToFinish, type PassengerCounts,
+} from './PassengerPoints';
 import SettingsSystem from '~/app/systems/SettingsSystem';
 import {bestTimeLineKey} from '~/app/game/data/ServicePatterns';
 
@@ -68,16 +70,8 @@ export default class ScoringSystem extends System {
 	private deliveredAtLastStop = 0;
 	/** This run's passengers, as opposed to everyone since the line was picked. */
 	private readonly passengers = new PassengerTally();
-	/**
-	 * People on platforms this run rolled straight through.
-	 *
-	 * The passenger model only notices a platform left behind when the train
-	 * comes to a stand beside it (its "arriving" needs under 2 m/s), so rolling
-	 * past a packed platform at speed — the very case the run card's "left on
-	 * the platform" exists for — counted nobody. A stop scored as rolled
-	 * through is exactly that case, so it is counted here.
-	 */
-	private rolledPastWaiting = 0;
+	/** People left on platforms this run, counted by the scorer (`LeftBehindCount`). */
+	private readonly leftBehind = new LeftBehindCount();
 	/**
 	 * A run whose last stop is scored but whose passengers are still getting
 	 * off. Closed by `update` once they are — see `readyToFinish`.
@@ -154,6 +148,8 @@ export default class ScoringSystem extends System {
 		const direction = trainSystem.physicsState.direction;
 		const where = trainSystem.trainPosition;
 
+		this.leftBehind.tick(trainSystem.physicsState.doorsOpen, dist, i => this.waitingAt(i));
+
 		tickRecorder(this.recorder, deltaTime, {
 			dist,
 			speed,
@@ -210,7 +206,7 @@ export default class ScoringSystem extends System {
 		this.stopLateness = [];
 		this.deliveredAtLastStop = 0;
 		this.pendingFinish = null;
-		this.rolledPastWaiting = 0;
+		this.leftBehind.reset();
 		this.passengers.start(this.passengerCounts());
 		// A new journey's first approach must not be drawn over the tail of the
 		// last one — the train has been picked up and put down somewhere else,
@@ -243,9 +239,8 @@ export default class ScoringSystem extends System {
 		this.run.addStop(result);
 		this.lastScored = {stationIndex: result.stationIndex, markerDist: this.approachMarker};
 
-		if (result.verdict === 'passed') {
-			this.rolledPastWaiting += this.systemManager.getSystem(PassengerSystem)?.waitingAt(result.stationIndex) ?? 0;
-		}
+		if (result.verdict === 'passed') this.leftBehind.rolledThrough(this.waitingAt(result.stationIndex));
+		else this.leftBehind.stopped(result.stationIndex, this.approachMarker, i => this.waitingAt(i));
 
 		// A stop rolled through was never an arrival, so it has no time to keep
 		// and must not count against the timekeeping — it is already scored as
@@ -297,6 +292,10 @@ export default class ScoringSystem extends System {
 		}
 	}
 
+	private waitingAt(stationIndex: number): number {
+		return this.systemManager.getSystem(PassengerSystem)?.waitingAt(stationIndex) ?? 0;
+	}
+
 	/** What the passenger model has counted since the line was picked. */
 	private passengerCounts(): PassengerCounts {
 		const snap = this.systemManager.getSystem(PassengerSystem)?.getSnapshot();
@@ -315,10 +314,11 @@ export default class ScoringSystem extends System {
 	 * it is about to start one itself.
 	 */
 	public async finishRun(completedLine: boolean, restart = true): Promise<void> {
+		this.leftBehind.settle(i => this.waitingAt(i));
 		const counted = this.passengers.read(this.passengerCounts());
 		const result = this.run.finalize(
 			performance.now(),
-			{...counted, leftBehind: counted.leftBehind + this.rolledPastWaiting},
+			{...counted, leftBehind: this.leftBehind.total},
 			completedLine,
 			this.stopLateness,
 		);

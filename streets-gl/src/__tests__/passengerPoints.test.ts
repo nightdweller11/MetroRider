@@ -1,6 +1,6 @@
 import {
 	passengerPoints, describePassengerScheme, PassengerTally, readyToFinish,
-	PassengerPointsFlash, PASSENGER_POINTS_PER_STOP, FINISH_WAIT_MAX_S, type PassengerCounts,
+	PassengerPointsFlash, PASSENGER_POINTS_PER_STOP, FINISH_WAIT_MAX_S, type PassengerCounts, LeftBehindCount,
 } from '~/app/game/scoring/PassengerPoints';
 import {PassengerModel} from '~/app/game/passengers/PassengerModel';
 
@@ -144,5 +144,55 @@ describe('PassengerPointsFlash', () => {
 		flash.update(40, 0);
 		expect(flash.update(0, 100)).toBeNull();
 		expect(flash.update(2, 200)).toBe('👥 +2');
+	});
+});
+
+describe('LeftBehindCount', () => {
+	const waiting = (n: number) => (): number => n;
+
+	test('a platform rolled through: everyone on it', () => {
+		const c = new LeftBehindCount();
+
+		c.rolledThrough(39);
+		expect(c.total).toBe(39);
+	});
+
+	test('a stop served with the doors is nobody left behind, however the train crawled in', () => {
+		const c = new LeftBehindCount(40);
+
+		c.stopped(3, 1000, waiting(39));
+		c.tick(false, 1005, waiting(39));
+		c.tick(true, 1005, waiting(12));
+		c.tick(false, 1100, waiting(0));
+		expect(c.total).toBe(0);
+	});
+
+	test('a stop made and left without opening: those still waiting', () => {
+		const c = new LeftBehindCount(40);
+
+		c.stopped(3, 1000, waiting(20));
+		c.tick(false, 1020, waiting(21));
+		expect(c.total).toBe(0);
+		c.tick(false, 1041, waiting(22));
+		expect(c.total).toBe(22);
+		// Counted once.
+		c.tick(false, 1200, waiting(22));
+		expect(c.total).toBe(22);
+	});
+
+	test('the run ending at an unopened stop counts it', () => {
+		const c = new LeftBehindCount(40);
+
+		c.stopped(5, 0, waiting(8));
+		c.settle(waiting(8));
+		expect(c.total).toBe(8);
+	});
+
+	test('reset starts a new run at zero', () => {
+		const c = new LeftBehindCount();
+
+		c.rolledThrough(5);
+		c.reset();
+		expect(c.total).toBe(0);
 	});
 });

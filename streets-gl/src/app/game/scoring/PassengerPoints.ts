@@ -176,3 +176,59 @@ export class PassengerPointsFlash {
 		return nowMs < this.until ? `👥 +${this.last - this.shownFrom}` : null;
 	}
 }
+
+/**
+ * Who was left on the platform, for the run card.
+ *
+ * The passenger model has its own count and it was wrong both ways, because
+ * it keys off the station's "arriving" flag, which needs the train under
+ * 2 m/s inside 40 m of the stop:
+ *   - roll straight past a packed platform at speed and it never "arrived",
+ *     so nobody was left behind;
+ *   - crawl in at about 2 m/s and the flag flickers on and off, and the first
+ *     "off" read as leaving without opening — measured on the Israel map, 39
+ *     people reported left behind at a terminus where the doors then opened
+ *     and served them.
+ * The scorer already knows the two real cases, so it counts them itself:
+ *   1. a stop scored as rolled through: everyone on that platform;
+ *   2. a stop made, then the train leaves the stop zone (or the run ends)
+ *      without the doors ever having opened: everyone still on it.
+ */
+export class LeftBehindCount {
+	public total = 0;
+	private standing: {stationIndex: number; markerDist: number; opened: boolean} | null = null;
+
+	public constructor(private readonly zoneM = 40) {}
+
+	public reset(): void {
+		this.total = 0;
+		this.standing = null;
+	}
+
+	public rolledThrough(waiting: number): void {
+		this.total += Math.max(0, Math.floor(waiting));
+	}
+
+	/** A stop has been made at this station; whether it was served is yet to be seen. */
+	public stopped(stationIndex: number, markerDist: number, waitingAt: (i: number) => number): void {
+		this.settle(waitingAt);
+		this.standing = {stationIndex, markerDist, opened: false};
+	}
+
+	/** Every frame: doors opening serve the stop; leaving the zone closes it. */
+	public tick(doorsOpen: boolean, trainDist: number, waitingAt: (i: number) => number): void {
+		const s = this.standing;
+
+		if (!s) return;
+		if (doorsOpen) s.opened = true;
+		if (Math.abs(trainDist - s.markerDist) > this.zoneM) this.settle(waitingAt);
+	}
+
+	/** Close the stop being stood at, e.g. when the run ends. */
+	public settle(waitingAt: (i: number) => number): void {
+		const s = this.standing;
+
+		this.standing = null;
+		if (s && !s.opened) this.total += Math.max(0, Math.floor(waitingAt(s.stationIndex)));
+	}
+}
