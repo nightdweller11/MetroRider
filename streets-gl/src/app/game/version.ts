@@ -20,6 +20,17 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.49.0',
+		codename: 'Fresh Off the Press',
+		date: '2026-11-07',
+		emblem: '📰🔄',
+		summary: 'A new release reaches you the next time you open the game, not an hour later.',
+		changes: [
+			'FIXED — after an update, anyone who had played in the last hour kept getting the old game for up to an hour more, because the browser was told to keep the page that long. The sample-map fix earlier today looked unfixed for exactly that reason.',
+			'The page is now checked with the server every time you open it, which costs almost nothing when nothing changed. The big game files are still kept, and a new release simply has new ones.',
+		],
+	},
+	{
 		version: '2.48.0',
 		codename: 'The Real Sample',
 		date: '2026-11-07',

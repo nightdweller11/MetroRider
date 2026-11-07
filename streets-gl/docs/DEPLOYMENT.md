@@ -8,25 +8,38 @@
   (root `package.json`: runs `seed-data.js`, then `server/dist/index.js`).
 - The service deploys from the GitHub repo `nightdweller11/MetroRider` (branch `main`).
 
+## How a deploy happens
+
+**Pushing to `main` on GitHub deploys.** The Railway service is sourced from the
+repo `nightdweller11/MetroRider` through Railway's GitHub integration (not GitHub
+Actions — the workflows under `.github/` are upstream streets-gl leftovers and run
+nothing here). A push builds and replaces the container in about 3–4 minutes.
+Verified 2026-11-07 with 2.48.0 and 2.49.0.
+
+After the deploy reaches `SUCCESS`, validate on the live URL by playing, as every
+release has been.
+
+### Caching (2.49.0)
+
+The page and the unhashed stylesheet are served `no-cache` (an ETag revalidation,
+a 304 when unchanged), content-hashed scripts `immutable` for a year, everything
+else an hour — `server/utils/cachePolicy.ts`. Before 2.49.0 the page itself was
+cached for an hour, so a player who had the game open before a deploy kept the
+old build for up to an hour after it.
+
 ## Railway access
 
-A **project token** for the MetroRider Railway project is stored in the git-ignored
-`streets-gl/.env` as `RAILWAY_TOKEN` (added 2026-08-11). Use it with the Railway CLI
-or GraphQL API:
+The project token that used to live in the git-ignored `streets-gl/.env` as
+`RAILWAY_TOKEN` (added 2026-08-11) **no longer works**: every pre-existing project
+token was deleted in the 2026-10-22 rotation after Railway's security incident
+("Project Token not found"). To watch deploys or read logs, use an account or
+workspace token as `Authorization: Bearer <token>` on
+`https://backboard.railway.com/graphql/v2`, or create a new project token in the
+Railway dashboard (Project → Settings → Tokens) and put it back in `.env`.
 
-```bash
-cd streets-gl
-export RAILWAY_TOKEN=$(grep '^RAILWAY_TOKEN=' .env | cut -d= -f2)
-railway status          # project/environment info
-railway up --detach     # deploy the current directory
-```
-
-For logs/metrics, query the GraphQL API at `https://backboard.railway.app/graphql/v2`
-with header `Project-Access-Token: $RAILWAY_TOKEN` (the CLI's `railway logs` needs a
-service link; the API always works with the project token).
-
-Note: a separate project token for the `sing.events` Railway project lives in
-`~/Projects/live-karaoke/.env` — it does **not** grant access to MetroRider.
+IDs: project `4df0ce74-1fb6-4206-99c3-01097b803420`, service `MetroRider`
+`edf43f50-f308-44a2-97c1-06ba1b9b1161`, environment `production`
+`fcb1d9f4-beec-4e70-83ed-49b7f93af015`.
 
 ## Data persistence — VOLUME ATTACHED AND VERIFIED (2026-08-14)
 

@@ -14,6 +14,7 @@ import {createFreesoundRouter} from './routes/freesound';
 import {createProfilesRouter} from './routes/profiles';
 import {ProfileStore} from './store/ProfileStore';
 import {getAdminToken} from './middleware/adminAuth';
+import {cacheControlFor} from './utils/cachePolicy';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '3001', 10);
@@ -278,11 +279,14 @@ app.get('/api/metrodreamin/view/:systemId', (req, res) => {
 	});
 });
 
-app.use(express.static(BUILD_DIR, {maxAge: '1h'}));
+app.use(express.static(BUILD_DIR, {
+	setHeaders: (res, filePath) => res.setHeader('Cache-Control', cacheControlFor(filePath)),
+}));
 
 app.get('/{*path}', (_req, res) => {
 	const indexPath = path.join(BUILD_DIR, 'index.html');
 	if (fs.existsSync(indexPath)) {
+		res.setHeader('Cache-Control', cacheControlFor(indexPath));
 		res.sendFile(indexPath);
 	} else {
 		res.status(404).send('Frontend not built yet. Run: npm run build');
