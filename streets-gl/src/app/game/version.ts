@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.48.0',
+		codename: 'The Real Sample',
+		date: '2026-11-07',
+		emblem: '🚇🗺️',
+		summary: '“Play Sample Map (Tel Aviv)” opens the Tel Aviv sample again — the three-line metro that ships with the game.',
+		changes: [
+			'FIXED — the sample button opened the Israel Railways map from MetroDreamin instead of the Tel Aviv sample. It only ever started whatever map was loaded, and the start screen loads the MetroDreamin map as soon as it opens.',
+			'The MetroDreamin map is still there: its own Play button, the link box and your saved maps all open it as before.',
+			'Picking the sample while the MetroDreamin map is still loading no longer gets the sample swapped out when that load finishes.',
+		],
+	},
+	{
 		version: '2.47.0',
 		codename: 'Not So Bright',
 		date: '2026-08-16',

@@ -34,6 +34,7 @@ import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
 import {inferLineMode, lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
+import {SAMPLE_MAP, LatestLoad} from './data/StartMaps';
 import {lineBadge, lineNameWithoutCode, lineShortLabel} from './data/LineLabel';
 import {limitAt} from './limits/SpeedProfile';
 import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
@@ -2635,9 +2636,17 @@ export default class GameUISystem extends System {
 
 		const playBtn = document.createElement('div');
 		playBtn.style.cssText = BTN_STYLE + 'background: rgba(34,197,94,0.7); color: #fff; margin-bottom: 10px; font-size: 16px; font-weight: 600; display: none;';
-		playBtn.addEventListener('click', startGameFlow);
+		// The same button offers either the map just loaded or, after a failed
+		// load, the sample — and each must play what its label names.
+		let playBtnIsSample = false;
+		playBtn.addEventListener('click', () => (playBtnIsSample ? playSampleMap() : startGameFlow()));
+
+		// Only the newest load may apply its map: the background MetroDreamin
+		// fetch must not land after the player picked the sample and replace it.
+		const loads = new LatestLoad();
 
 		const loadMapFromUrl = async (url: string, autoStart: boolean = true): Promise<void> => {
+			const ticket = loads.begin();
 			statusEl.style.display = 'block';
 			statusEl.textContent = 'Loading map...';
 			playBtn.style.display = 'none';
@@ -2645,6 +2654,7 @@ export default class GameUISystem extends System {
 			try {
 				const {fetchMetroDreaminMap, extractMapId} = await import('./data/MetroDreaminImporter');
 				const mapData = await fetchMetroDreaminMap(url);
+				if (!loads.isCurrent(ticket)) return;
 				trainSystem.loadMap(mapData);
 				this.currentMapUrl = url;
 				// The id, not just the url — a shared link is built from the id,
@@ -2664,15 +2674,29 @@ export default class GameUISystem extends System {
 					setTimeout(startGameFlow, 500);
 				} else {
 					defaultMapReady = true;
+					playBtnIsSample = false;
 					playBtn.textContent = `\u25B6  Play: ${mapData.name}`;
 					playBtn.style.display = 'block';
 				}
 			} catch (err) {
+				if (!loads.isCurrent(ticket)) return;
 				statusEl.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
 				console.error('[GameUI] Failed to load map:', err);
+				playBtnIsSample = true;
 				playBtn.textContent = '\u25B6  Play Sample Map (Tel Aviv)';
 				playBtn.style.display = 'block';
 			}
+		};
+
+		// The built-in three-line Tel Aviv metro. It used to just start whatever
+		// was loaded, which is the MetroDreamin map the screen fetches on open.
+		const playSampleMap = (): void => {
+			loads.begin();
+			trainSystem.loadMap(SAMPLE_MAP);
+			this.currentMapUrl = null;
+			this.currentMapId = null;
+			this.closeMetroMapOverlay();
+			startGameFlow();
 		};
 
 		const showUserMaps = async (url: string): Promise<void> => {
@@ -2876,7 +2900,7 @@ export default class GameUISystem extends System {
 			}
 		});
 
-		playDefaultBtn.addEventListener('click', startGameFlow);
+		playDefaultBtn.addEventListener('click', playSampleMap);
 
 		renderSavedMaps();
 
