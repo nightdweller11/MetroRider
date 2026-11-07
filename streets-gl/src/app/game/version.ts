@@ -20,6 +20,18 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.53.0',
+		codename: 'Look Up',
+		date: '2026-11-07',
+		emblem: '✈️☁️',
+		summary: 'Aeroplanes fly over every city again — and this time you can see them.',
+		changes: [
+			'SIX AEROPLANES near wherever you are: airliners cruising high, and lower ones climbing out or coming in, crossing the view ahead of your cab. Settings → Aeroplanes turns them off.',
+			'FIXED — the sky stayed empty when we last tried this. The drawing was fine all along: every aircraft sat frozen on old data and then leapt 2.5 km at a time, and the low ones were kept out of view.',
+			'They cost very little: a few extra draw calls a frame, and no shadows landing kilometres away. After dark they are hard to spot — there are no lights on them yet.',
+		],
+	},
+	{
 		version: '2.52.0',
 		codename: 'Where Next',
 		date: '2026-11-07',
