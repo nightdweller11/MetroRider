@@ -26,6 +26,12 @@
   shows on the summary ("142 passengers left behind").
 - Skipped by express patterns (F4) is fine — passengers for skipped stations
   simply don't spawn for that service.
+  **BUILT 2026-11-07:** a station a line runs through (MetroDreamin
+  `waypointOverrides`) is not in that line's `stations`, which is the list
+  `PassengerSystem` binds the model to — so for that service nobody
+  accumulates there, nobody boards if the doors are opened at its platform,
+  nobody is given it as a destination, and rolling through it is not counted
+  as leaving anyone behind. See F4 §4.
 
 ### Phase 1b — the figures (this is the headline, not an extra)
 - Every waiting passenger the model counts is **drawn as a person standing on

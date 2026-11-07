@@ -174,13 +174,20 @@ export function groupLinesForPicker(lines: GroupableLine[]): PickerEntry[] {
 }
 
 /**
- * The longest sibling that calls at every station this line calls at, with
- * more stops of its own — i.e. this line is a short working of it.
+ * The longest sibling this line is a short working of: a sibling with more
+ * stops that calls, in the same order and with nothing left out in between,
+ * at exactly the stops this line calls at. A1-A3 calls at the first eighteen
+ * stops of A1-A2 and nowhere else, so it is part of A1-A2.
+ *
+ * An express is NOT part of the all-stops line it shadows, even though every
+ * station it calls at is one the all-stops line calls at too: it leaves out
+ * stations in between, and "part of A1-A2" would tell the driver it stops
+ * where A1-A2 stops.
  */
 export function partOfSibling(lines: GroupableLine[], index: number, members: number[]): number | null {
 	const mine = lines[index]?.stopIds ?? [];
 
-	if (mine.length === 0) return null;
+	if (mine.length < 2) return null;
 
 	let best: number | null = null;
 
@@ -190,14 +197,23 @@ export function partOfSibling(lines: GroupableLine[], index: number, members: nu
 		const theirs = lines[j].stopIds;
 
 		if (theirs.length <= mine.length) continue;
-
-		const set = new Set(theirs);
-
-		if (!mine.every(id => set.has(id))) continue;
+		if (!isContiguousRun(mine, theirs)) continue;
 		if (best === null || theirs.length > lines[best].stopIds.length) best = j;
 	}
 
 	return best;
+}
+
+/** `run` appears in `whole` as consecutive entries, forwards or backwards. */
+function isContiguousRun(run: string[], whole: string[]): boolean {
+	const at = whole.indexOf(run[0]);
+
+	if (at < 0) return false;
+
+	const forwards = run.every((id, k) => whole[at + k] === id);
+	const backwards = run.every((id, k) => whole[at - k] === id);
+
+	return forwards || backwards;
 }
 
 /**

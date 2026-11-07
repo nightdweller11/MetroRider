@@ -330,8 +330,17 @@ defects than the 824-test suite has.
       a run would judge early stops against a schedule that no longer exists),
       posted to F1 as its own `punctuality` score kind
 - [x] **Service picker** ("Drive the 18:30") — SHIPPED v2.29.0
-- [ ] `lineGroupId` plumbing + grouped picker + express patterns
-- [ ] Validate against the Israel-railways map's real A1–A5 groups
+- [x] `lineGroupId` plumbing + grouped picker + express patterns (2026-11-07,
+      wave 1 / agent A, not yet deployed) — the skip list is IN the data:
+      MetroDreamin `waypointOverrides`, per line, cleaned of stale entries.
+      Skipped stations are left out of `stations`, so no stop / due time /
+      crowd there; picker grouped under the map's own groups; ribbon ring,
+      board "NOT STOPPING", announcement, timetable passes. F4 doc §4
+- [x] Validate against the Israel-railways map's real A1–A5 groups — real
+      payload as a test fixture (36 tests) and driven locally: A · 4
+      services, A1-A5 16 stops · Express · skips 4 (Holon Junction, Holon
+      Wolfson, Bat Yam Yoseftal, Bat Yam Komemuyot); Tel Aviv sample
+      unchanged (flat, 3 rows)
 - [ ] Local + production validation, changelog entry
 
 ## F5 — Passengers (`05-passengers.md`)
@@ -342,7 +351,10 @@ defects than the 824-test suite has.
       caps, `models/people` catalog category + import + settings
 - [x] Delivered + left-behind in the run summary, delivery badge
 - [ ] **Delivered-passenger points component** (currently narrative only)
-- [ ] Express/skip handling (no spawn for skipped services)
+- [x] Express/skip handling (no spawn for skipped services) — 2026-11-07,
+      not yet deployed: a skipped station is not in the line's `stations`,
+      which is the list the passenger model binds to; doors opened at a
+      skipped platform board nobody (measured locally). F5 doc §1
 - [~] Interchange surfacing SHIPPED v2.42.0 on the board and in the
       announcement. Still outstanding: icons on the map overlay and the ribbon,
       and transfer stats

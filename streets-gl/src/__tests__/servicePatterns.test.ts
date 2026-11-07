@@ -235,6 +235,18 @@ describe('grouping for the picker', () => {
 		expect(partOfSibling(lines, 0, [0, 1, 2])).toBeNull();
 	});
 
+	test('an express is not "part of" the all-stops line it shadows', () => {
+		const lines = [
+			line('A1 - A2', ['h', 'a', 'b', 'c', 'd', 'e'], '2'),
+			line('A1 - A5', ['h', 'a', 'd', 'e'], '2'),
+			// Drawn the other way round, still a short working.
+			line('C6 - C5', ['d', 'c', 'b'], '2'),
+		];
+
+		expect(partOfSibling(lines, 1, [0, 1, 2])).toBeNull();
+		expect(partOfSibling(lines, 2, [0, 1, 2])).toBe(0);
+	});
+
 	test('the header falls back to the shared code letter, then the group number', () => {
 		const letter = groupLinesForPicker([line('K1 - K2', ['a', 'b'], '11'), line('K3-K4', ['c', 'd'], '11')]);
 		const number = groupLinesForPicker([line('North', ['a', 'b'], '9'), line('South', ['c', 'd'], '9')]);
@@ -270,7 +282,7 @@ describe('the picker on the real Israel map', () => {
 	test('rows say express, how many are skipped, and what a short working is part of', () => {
 		const row = (badge: string): string => lineRows.find(r => r.badge === badge)?.subtitle ?? '';
 
-		expect(row('A1-A5')).toContain('16 stops · Express · skips 4');
+		expect(row('A1-A5')).toMatch(/16 stops · Express · skips 4$/);
 		expect(row('A1-A3')).toContain('part of A1-A2');
 		expect(row('A1-A2')).not.toMatch(/Express|skips|part of/);
 	});

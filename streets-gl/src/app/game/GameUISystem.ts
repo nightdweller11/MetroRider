@@ -60,6 +60,8 @@ const STOP_MARK_READOUT_S = 20;
 const STOP_MARK_READOUT_FLOOR_M = 250;
 /** How far ahead an express's board names the station it will run through, metres. */
 const PASSING_NOTICE_M = 900;
+/** Within this of a skipped station's mark, the train is standing at its platform, metres. */
+const SKIPPED_PLATFORM_M = 60;
 /**
  * How much ground the corner map covers, metres across.
  *
@@ -967,8 +969,17 @@ export default class GameUISystem extends System {
 
 		if (!trainSystem || !ls || !ss || !(ls.skippedStationDists?.length)) return '';
 
+		const at = trainSystem.physicsState.trainDist;
+		// Standing at the platform of a station this train runs through: the
+		// doors may open, but nobody is waiting for THIS train here.
+		const here = ls.skippedStationDists.findIndex(d => Math.abs(d - at) < SKIPPED_PLATFORM_M);
+
+		if (here >= 0 && trainSystem.physicsState.trainSpeed < 2) {
+			return `NOT A STOP FOR THIS TRAIN · ${boardName(ls.parsed.skipped[here]?.name ?? '').toUpperCase()}`;
+		}
+
 		const i = passingAhead(
-			ls.skippedStationDists, trainSystem.physicsState.trainDist,
+			ls.skippedStationDists, at,
 			trainSystem.physicsState.direction, ss.nextStationDist, PASSING_NOTICE_M,
 			ls.track.isLoop ? ls.track.totalLength : 0,
 		);
@@ -998,10 +1009,12 @@ export default class GameUISystem extends System {
 			}
 		}
 		// An express about to run through a station says so, so the platform
-		// going past is not read as one you were meant to stop at.
-		const passing = !doorsOpen && !arriving ? this.passingNotice() : '';
+		// going past is not read as one you were meant to stop at. Without the
+		// change clause: that belongs to the next STOP, and after a station
+		// name it would read as "change here" at a station the train skips.
+		const passing = arriving ? '' : this.passingNotice();
 
-		if (passing) return withChange(passing);
+		if (passing) return passing;
 
 		const service = this.systemManager.getSystem(ServiceSystem);
 		const due = service?.dueAtNext();
