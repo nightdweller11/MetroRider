@@ -116,7 +116,7 @@ This file was re-read against the source before this run and was wrong in
 | **F7 AI traffic & signals** | **PART SHIPPED** — passing services v2.5.0, block signals v2.11.0, same-line AI + SPAD v2.33.0, train-ahead readout v2.41.0. Density governor and ambient cars/aircraft outstanding |
 | **F8 Cameras & exploration** | **SHIPPED** — six named views v2.2.0, photo save v2.10.0, Simple/Advanced v2.2.0, walk mode v2.30.0 + avatar v2.31.0. Auto-drive while riding outstanding |
 | **F9 World atmosphere** | **PART SHIPPED** — time of day v2.4.0, map-local solar time v2.20.0. Weather DEFERRED by agreement |
-| **F10 City & discovery** | **PART SHIPPED** — world tour v2.8.0, line facts v2.6.0, share links v2.21.0, journey record v2.32.0, discovery v2.35.0 + map pins v2.38.0. Landmark icons and the map browser outstanding |
+| **F10 City & discovery** | **PART SHIPPED** — world tour v2.8.0, line facts v2.6.0, share links v2.21.0, journey record v2.32.0, discovery v2.35.0 + map pins v2.38.0. Landmark icons and the map browser built in wave 2, awaiting release |
 
 ---
 
@@ -417,9 +417,19 @@ defects than the 824-test suite has.
       a priority. Radius and threshold set from measurement, not taste — at
       140 m a whole run found nothing, because a railway runs through open
       country and the places are in the towns
-- [ ] Map-overlay landmark icons
-- [ ] Map browser: SVG thumbnails, Featured list, richer Recents
-- [ ] Local + production validation, changelog entry
+- [x] Map-overlay landmark icons (wave 2, `data/Landmarks.ts`) — found
+      places lit and named, places still to find near the line dim with a
+      "?". Only what the discovery check would really find from the line, in
+      the streets loaded so far. Capped at 12 dim pins and 8 names, pins
+      spaced apart before the cap (Jerusalem: 75 qualified → 12 drawn); the
+      keys moved under the map so the close button stays on a phone
+- [x] Map browser: SVG thumbnails, Featured list, richer Recents (wave 2) —
+      `renderMapThumbnail` shares the overlay's projection; sketches cached
+      (≤ 40, 0.4–6 KB each) so no list refetches a map; six Featured maps,
+      each checked through the importer, Tel Aviv built-in first; Recents say
+      when you drove, the size, and how many lines you have driven
+- [ ] Local + production validation, changelog entry — LOCAL done (desktop
+      1440×900 + phone 390×844, production build); production is the lead's
 
 ---
 
