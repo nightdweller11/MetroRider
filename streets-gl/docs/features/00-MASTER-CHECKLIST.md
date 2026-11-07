@@ -358,7 +358,7 @@ defects than the 824-test suite has.
       a stop made (~10% of a run); live chip flashes "👥 +N", run card row with
       the mark scheme. Left behind costs nothing (decision in `05` §5). Also
       fixed: per-run counting, the run closing before terminus passengers got
-      off, left-behind miscounts, a phantom "rolled through" (wave 1, local)
+      off, left-behind miscounts, a phantom "rolled through" (wave 1, SHIPPED v2.51.0)
 - [x] Express/skip handling (no spawn for skipped services) — 2026-11-07,
       SHIPPED v2.50.0: a skipped station is not in the line's `stations`,
       which is the list the passenger model binds to; doors opened at a
@@ -367,11 +367,14 @@ defects than the 824-test suite has.
       announcement; change-station rings on the route strip and the network
       map (+ key), placed where a line joins/leaves/ends/crosses rather than at
       every shared stop; "N got off at a change station" on the run card.
-      Real transfers are NOT modelled — stated in `05` §5 (wave 1, local)
+      Real transfers are NOT modelled — stated in `05` §5 (wave 1, SHIPPED v2.51.0)
 - [x] Platform crowd meters in the station panel — five-bar meter on the
-      destination board, drains while boarding (wave 1, local)
-- [~] Local browser validation (PAX flow over two stops) DONE 2026-11-07 on
-      the Israel map, numbers in `05` §5. Production validation outstanding
+      destination board, drains while boarding (wave 1, SHIPPED v2.51.0)
+- [x] Local browser validation (PAX flow over two stops) DONE 2026-11-07 on
+      the Israel map, numbers in `05` §5. Production (v2.51.0 "Mind the
+      Crowd", desktop + iPhone 13): at Hod HaSharon the meter read "24
+      WAITING", after the doors opened "NOBODY WAITING" with 25 aboard; the
+      phone layout fits the meter beside the station name; no page errors
 
 ## F7 — AI traffic & signals (`07-ai-traffic-and-signals.md`)
 - [x] `BlockSystem` (blocks, occupancy, aspects) + unit tests

@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.52.0',
+		codename: 'Where Next',
+		date: '2026-11-07',
+		emblem: '🗺️✨',
+		summary: 'Every map shows a little picture of its lines, there are six good maps to start from, and the network map shows places still waiting to be found.',
+		changes: [
+			'FEATURED MAPS — on the start screen and in "Drive another map": Tel Aviv, Israel Railways, Jerusalem, Paris, Washington and San Francisco, each with a tiny picture of its real lines.',
+			'RECENT MAPS say when you last drove them, how big they are, and how many of their lines you have driven.',
+			'The 🗺 network map shows places you have not found yet as dim pins near the line, in the streets you have been through.',
+			'FIXED — on a phone, the network map\'s close button was pushed off the screen; its keys now sit under the map.',
+		],
+	},
+	{
 		version: '2.51.0',
 		codename: 'Mind the Crowd',
 		date: '2026-11-07',
