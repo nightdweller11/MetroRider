@@ -28,10 +28,12 @@ export default new class ResourceLoader {
 		for (const [name, record] of Object.entries(resources)) {
 			const type = ResourceLoader.getResourceTypeFromString(record.type);
 
-			if (name.startsWith('aircraft')) {
-				continue;
-			}
-
+			// Aircraft assets used to be skipped here. Skipping them is what made
+			// turning the other switches on abort the whole boot: `getGLTFModel`
+			// throws on a resource that was never requested, SceneSystem's
+			// constructor died half-built, and every later frame reported
+			// "cannot read 'fov'" from an undefined camera instead of the cause.
+			// 1.2 MB for five aircraft and their textures.
 			this.add(name, record.url, type);
 		}
 	}

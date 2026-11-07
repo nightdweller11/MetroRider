@@ -14,7 +14,12 @@ export default class TexturePool {
 		this.textures.set('tree', createTreeTexture(renderer));
 		this.textures.set('projectedMesh', createProjectedMeshTexture(renderer));
 		this.textures.set('extrudedMesh', createExtrudedMeshTexture(renderer));
-		//this.textures.set('aircraft', createAircraftTexture(renderer));
+		// Air traffic. Every layer of this was switched off upstream — this
+		// texture, the scene's parts, the settings listener and the resource
+		// loader's skip — because the live flight feed went away. The flights
+		// are generated now (game/data/SkyTraffic); aircraftAreDrawn.test.ts
+		// keeps every one of these switches on.
+		this.textures.set('aircraft', createAircraftTexture(renderer));
 	}
 
 	public get(name: string): AbstractTexture {

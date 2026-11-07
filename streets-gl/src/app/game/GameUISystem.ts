@@ -1722,6 +1722,10 @@ export default class GameUISystem extends System {
 
 		if (traffic) rows.push(traffic);
 
+		const planes = cycler('airTraffic', 'Aeroplanes', {on: 'ON', off: 'OFF'});
+
+		if (planes) rows.push(planes);
+
 
 		// Sound is the audio system's own state rather than a stored setting,
 		// so it cannot go through the same cycler.

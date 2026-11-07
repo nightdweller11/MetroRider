@@ -4,7 +4,7 @@ import MathUtils from "~/lib/math/MathUtils";
 import SettingsSystem from "~/app/systems/SettingsSystem";
 import TerrainSystem from "~/app/systems/TerrainSystem";
 import SceneSystem from "~/app/systems/SceneSystem";
-import Config from "~/app/Config";
+import {SkyTracker} from "~/app/game/data/SkyTraffic";
 import Aircraft, {
 	AircraftPart,
 	AircraftPartType,
@@ -58,6 +58,7 @@ export default class VehicleSystem extends System {
 	private enabled: boolean = false;
 	private lockAircraftPositions: boolean = false;
 	public aircraftPartsBuffers: Map<AircraftPartType, Float32Array> = new Map();
+	private readonly sky: SkyTracker = new SkyTracker();
 
 	public postInit(): void {
 		this.listenToSettings();
@@ -78,9 +79,19 @@ export default class VehicleSystem extends System {
 	private listenToSettings(): void {
 		const settings = this.systemManager.getSystem(SettingsSystem).settings;
 
-		/*settings.onChange('airTraffic', ({statusValue}) => {
+		settings.onChange('airTraffic', ({statusValue}) => {
 			this.enabled = statusValue === 'on';
-		}, true);*/
+
+			// Leaving the last frame's aeroplanes hanging in the sky is what
+			// turning it off must not do; turning it on should not mean
+			// waiting up to ten seconds for the first one.
+			if (this.enabled) {
+				this.fetchData();
+			} else {
+				this.aircraftMap.clear();
+				this.sky.reset();
+			}
+		}, true);
 	}
 
 	private startTimer(): void {
@@ -139,22 +150,55 @@ export default class VehicleSystem extends System {
 		return buffer;
 	}
 
+	/**
+	 * The traffic overhead.
+	 *
+	 * This used to fetch real flights from the tile server. That feed is gone —
+	 * it still answers, and every answer is an empty list, over London, New
+	 * York and Frankfurt alike — so the flights are generated instead. Better
+	 * for a game in any case: it works over every city, needs nobody's server,
+	 * cannot be rate-limited, and works on a train with no signal.
+	 *
+	 * TWO samples per aircraft, now and one interval ahead, because the system
+	 * INTERPOLATES between the states it is given. One sample would leave every
+	 * aeroplane frozen between updates and then jumping ten seconds' worth.
+	 */
 	public async fetchData(): Promise<void> {
-		const camera = this.systemManager.getSystem(SceneSystem).objects.camera;
-		const normalizedPosition = MathUtils.meters2tile(camera.position.x, camera.position.z, 0);
+		const camera = this.systemManager.getSystem(SceneSystem)?.objects?.camera;
 
-		fetch(`${Config.TileServerEndpoint}/vehicles/${normalizedPosition.x}/${normalizedPosition.y}`, {
-			method: 'GET'
-		}).then(async r => {
-			const response: VehiclesQueryResponse = await r.json();
+		if (!camera) return;
 
-			if (this.serverTimeOffset === null) {
-				this.serverTimeOffset = response.timestamp - Date.now();
-			}
+		this.serverTimeOffset = 0;
 
-			this.handleQueryResponse(response);
-		}).catch(() => {
-			console.warn('Failed to fetch vehicles');
+		// The system draws every aircraft AircraftRollbackTime behind the clock
+		// (it was built to smooth a laggy feed), so the samples have to cover
+		// THAT moment through to the next update, with an interval to spare.
+		// Samples that started at "now" left every aeroplane parked on its last
+		// sample, then jumping a whole interval's flight — 2.5 km at cruise.
+		const start = Date.now() - AircraftRollbackTime;
+		const times = [0, 1, 2].map(k => (start + k * QueryInterval) / 1000);
+
+		const tracks = this.sky.tracks(camera.position.x, camera.position.z, times);
+
+		this.handleQueryResponse({
+			timestamp: Date.now(),
+			aircraft: tracks.map(track => track.samples.map((f, k): QueryAircraft => {
+				const {lat, lon} = MathUtils.meters2degrees(f.x, f.z);
+
+				return {
+					id: track.id,
+					lat,
+					lon,
+					altitude: f.altitude,
+					// The converter negates and converts to radians, so it is
+					// handed over in the degrees form it expects.
+					heading: -MathUtils.toDeg(f.heading),
+					type: track.type,
+					onGround: false,
+					timestamp: Math.round(times[k] * 1000),
+				};
+			})),
+			vessels: [],
 		});
 	}
 

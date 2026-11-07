@@ -192,6 +192,13 @@ const Config = {
 			selectRangeDefault: 40,
 			category: 'general'
 		},
+		airTraffic: {
+			label: 'Aeroplanes',
+			status: ['off', 'on'],
+			statusLabels: ['Off', 'On'],
+			statusDefault: 'on',
+			category: 'general'
+		},
 		exposure: {
 			label: 'Brightness',
 			selectRange: [0.4, 2, 0.05],

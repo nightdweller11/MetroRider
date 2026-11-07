@@ -87,42 +87,49 @@ export default class SceneSystem extends System {
 			instancedAircraftParts: new Map()
 		};
 
-		/*this.objects.instancedAircraftParts.set(
-			AircraftPartType.B777Body,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftB777'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.A321Body,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftA321'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.Cessna208Body,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftCessna208'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.ERJ135Body,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftERJ135'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.HelicopterBody,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliBody'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.HelicopterRotorSpinning,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotor'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.HelicopterRotorStatic,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotorStatic'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.HelicopterTailRotorSpinning,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotorTail'))
-		);
-		this.objects.instancedAircraftParts.set(
-			AircraftPartType.HelicopterTailRotorStatic,
-			new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotorTailStatic'))
-		);*/
+		// Air traffic's models. Guarded because a throw in a system constructor
+		// takes the WHOLE boot with it and reports something else entirely.
+		try {
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.B777Body,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftB777'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.A321Body,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftA321'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.Cessna208Body,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftCessna208'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.ERJ135Body,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftERJ135'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.HelicopterBody,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliBody'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.HelicopterRotorSpinning,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotor'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.HelicopterRotorStatic,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotorStatic'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.HelicopterTailRotorSpinning,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotorTail'))
+			);
+			this.objects.instancedAircraftParts.set(
+				AircraftPartType.HelicopterTailRotorStatic,
+				new InstancedAircraftPart(ModelManager.getGLTFModel('aircraftHeliRotorTailStatic'))
+			);
+		} catch (err) {
+			console.error('[SceneSystem] Air traffic models unavailable:', err);
+			this.objects.instancedAircraftParts.clear();
+		}
 
 		this.objects.instancedObjects.set('tree', new InstancedTree(ModelManager.getGLTFModel('tree')));
 		this.objects.instancedObjects.set('adColumn', new GenericInstancedObject(ModelManager.getGLTFModel('adColumn')));
