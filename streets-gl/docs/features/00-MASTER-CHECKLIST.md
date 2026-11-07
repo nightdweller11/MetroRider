@@ -331,7 +331,7 @@ defects than the 824-test suite has.
       posted to F1 as its own `punctuality` score kind
 - [x] **Service picker** ("Drive the 18:30") — SHIPPED v2.29.0
 - [x] `lineGroupId` plumbing + grouped picker + express patterns (2026-11-07,
-      wave 1 / agent A, not yet deployed) — the skip list is IN the data:
+      wave 1 / agent A, SHIPPED v2.50.0) — the skip list is IN the data:
       MetroDreamin `waypointOverrides`, per line, cleaned of stale entries.
       Skipped stations are left out of `stations`, so no stop / due time /
       crowd there; picker grouped under the map's own groups; ribbon ring,
@@ -341,7 +341,11 @@ defects than the 824-test suite has.
       services, A1-A5 16 stops · Express · skips 4 (Holon Junction, Holon
       Wolfson, Bat Yam Yoseftal, Bat Yam Komemuyot); Tel Aviv sample
       unchanged (flat, 3 rows)
-- [ ] Local + production validation, changelog entry
+- [x] Local + production validation, changelog entry — v2.50.0 "Not
+      Stopping"; on production: picker groups A (4), B, C (5), E, G, H, K, P;
+      A1-A5 "16 stops · Express · skips 4"; board "NOT STOPPING · HOLON
+      JUNCTION" on the approach. Ghost bests on lines with skips are keyed
+      `<id>~skips<N>` so an express never races an all-stops record
 
 ## F5 — Passengers (`05-passengers.md`)
 - [x] Thread density (`densityInfo`) + `interchanges` through the importer
@@ -356,7 +360,7 @@ defects than the 824-test suite has.
       fixed: per-run counting, the run closing before terminus passengers got
       off, left-behind miscounts, a phantom "rolled through" (wave 1, local)
 - [x] Express/skip handling (no spawn for skipped services) — 2026-11-07,
-      not yet deployed: a skipped station is not in the line's `stations`,
+      SHIPPED v2.50.0: a skipped station is not in the line's `stations`,
       which is the list the passenger model binds to; doors opened at a
       skipped platform board nobody (measured locally). F5 doc §1
 - [x] Interchange surfacing SHIPPED v2.42.0 on the board and in the

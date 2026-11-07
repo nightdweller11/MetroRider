@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.51.0',
+		codename: 'Mind the Crowd',
+		date: '2026-11-07',
+		emblem: '👥🎯',
+		summary: 'The passengers you carry now count towards your score — and you can see how busy a platform is before you get there.',
+		changes: [
+			'EVERY PASSENGER COUNTS — 1 point for each person you set down, up to 20 a stop. The points chip flashes 👥 +12 as they step off, and the run card shows how it added up. Your runs can score a little higher than before for the same driving.',
+			'HOW BUSY? — The destination board has a crowd meter: five bars that fill as the platform gets busy and drain as people board.',
+			'CHANGE HERE — Stations where you can change lines are ringed on the route strip and on the network map, where lines meet, split or cross.',
+			'FIXED — the last stop\'s passengers never counted, because the run ended before anyone got off; and a slow crawl into a station could report the whole platform as left behind.',
+		],
+	},
+	{
 		version: '2.50.0',
 		codename: 'Not Stopping',
 		date: '2026-11-07',
