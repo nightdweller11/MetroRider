@@ -199,3 +199,120 @@ Built and validated locally end-to-end:
   but wants a human drive to confirm in-game.
 - Crowd meters in the station panel / ribbon, interchange icons and the F2
   scoring tie-in are still to come (they depend on F2/F3 surfaces).
+
+---
+
+## 5. Passengers in the score, the crowd meter, change stations (2026-11-07, wave 1)
+
+Four open F5 rows, built together because they all hang off the same counts.
+
+### Delivered passengers are a points component
+
+`scoring/PassengerPoints.ts` holds the whole rule, so the card can quote it:
+
+> **1 point for every passenger you set down, up to 20 for each stop you make.**
+
+| Part of a stop | Up to |
+|---|---|
+| Stopping (precision + smoothness + doors) | 175 |
+| Keeping time (`Punctuality.POINTS_PER_STOP`) | 15 |
+| Passengers (`PASSENGER_POINTS_PER_STOP`) | 20 |
+
+So passengers are at most 20 of a stop's 210 — **about a tenth of a run**, the
+same order as timekeeping (~7%). Stopping well stays worth the most.
+
+**Why a cap per stop made.** Deliveries pile up at the end of a line (at the
+terminus everyone gets off) and the Calm / Normal / Rush demand setting
+changes how many people there are. Measured on the model (ten stops, a minute
+apart, three cars): ~190 delivered on Calm, ~380 on Normal, ~440 on Rush.
+Uncapped, a Rush run would out-score the same drive on Normal for nothing the
+driver did, and the score board would compare settings rather than drivers.
+The cap puts Normal and Rush on the same 200 (a unit test pins this on the
+real model) and Calm within a dozen of it.
+
+**Left behind costs nothing — decided, not forgotten.** Rolling through a
+station already scores zero for that stop, and F2's rule is "no punishment
+screens"; charging again for the people on its platform would fine the same
+act twice. Those people are already a cost — each is a point not earned.
+Express services (F4) skip stations on purpose, and a penalty there would
+punish the timetable, not the driver. The card still says how many were left.
+
+Where the player sees it:
+
+- **Live**: the points chip on the route strip now includes the passengers,
+  and while people are getting off it flashes **"👥 +N"** for under two seconds
+  before going back to the total — one points line, which says where the new
+  points came from (`PassengerPointsFlash`).
+- **Run card**: a passengers row — "👥 42 passengers delivered … +20" — with
+  the mark scheme underneath ("1 point a passenger, up to 20 a stop — you hit
+  the top"), how many got off at a change station, and how many were left on
+  the platform. The passengers moved out of the summary sentence into this
+  row, so they are said once.
+- Posted with the score as `detail.passengerPoints`.
+
+**Two counting bugs fixed on the way** (both made the passenger numbers on
+the card wrong, which mattered once they became points):
+
+1. *Per line, not per run.* The run card read the model's totals, which count
+   from when the line was picked. The second run on a loop line (or after
+   jumping to a stop or turning round) got the first run's passengers too, and
+   the journey record's first stop of each new run re-added them all.
+   `PassengerTally` now takes a baseline when a run starts; a model reset
+   underneath it (counters going down) is read as the reset it is.
+2. *The run closed before the terminus passengers got off.* A run completes the
+   moment the last stop is scored — the train coming to a stand, doors still
+   shut — so the biggest delivery of the line landed in the NEXT run. The run
+   now waits (`readyToFinish`): until everyone for that stop is off, or the
+   doors close, or the train leaves without opening, at most 45 s. Turning
+   round in the meantime closes it with what it has rather than abandoning it.
+
+And one in the left-behind count: the model only noticed a platform left
+behind when the train came to a stand beside it (its "arriving" needs under
+2 m/s), so rolling straight past a packed platform at speed counted nobody.
+A stop scored as rolled through now adds that platform's waiting count.
+
+The score-posting order was also tightened: the next run now starts before the
+score is posted rather than after the network round-trip, so a stop made
+while the post was in flight no longer lands on a closed run.
+
+### Platform crowd meter
+
+`passengers/CrowdMeter.ts`. The destination board's "26 WAITING" chip is now a
+meter: the number, and five bars underneath — blue when few, amber when busy,
+orange when packed. One full meter = one carriage-load (60), the same at every
+station on every map, so "nearly full" means the same everywhere; bars are
+linear, and one person lights one bar (an empty meter over a platform with
+people on it would be a lie by rounding). It reads the stop being approached,
+then the stop you are standing at, and drains as people board.
+
+### Change stations: rings on the strip and the map, and the count
+
+The first build ringed every stop another line calls at — and on the Israel
+map that is **all 18 of 18** stops on A1–A3, because the A-services share one
+trunk. A ring on every dot says nothing. A printed metro map has the same
+problem and solves it the same way: shared track gets plain ticks, the
+interchange symbol goes where a line **joins, leaves, ends or crosses**.
+`Interchanges.changePoints` does that: a stop is a change station when some
+other line calling there does not also call at both this line's stop before
+and its stop after (either end of an open line counts when shared).
+
+- **Route strip**: change stations are ringed dots. On a compressed strip
+  (more than 24 stops) a dot is ringed when any station it stands for is one.
+- **Network map** (the map button): one white double ring per change station,
+  over the line colours, under the train marker, with a key in the header
+  ("◎ Change here · N stations"). Positioned once per station, not once per
+  line, so three lines' stacked dots read as one place.
+- The destination board still says "CHANGE FOR …" at every shared stop — that
+  is a different, true statement (another line does call here).
+
+**Transfer stats — scoped to what is modelled.** `PassengerModel` gives every
+rider a destination on the line being driven; nobody is routed onto another
+line. So the game cannot honestly say "N passengers changed lines". What it
+can say, and does, is how many were set down at a change station:
+`PassengerSystem` counts them, the run card says "N got off at a ◎ change
+station", and `RunResult.passengersAtInterchanges` carries it. Real transfers
+would need a network-level demand model (origin–destination across lines);
+that is a separate piece of work, not a relabelling of this count.
+
+### Measured
+<!-- filled in after the browser run -->
