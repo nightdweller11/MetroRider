@@ -350,16 +350,24 @@ defects than the 824-test suite has.
 - [x] Platform people: merged per-station meshes, deterministic placement,
       caps, `models/people` catalog category + import + settings
 - [x] Delivered + left-behind in the run summary, delivery badge
-- [ ] **Delivered-passenger points component** (currently narrative only)
+- [x] **Delivered-passenger points component** — 1 point a passenger, up to 20
+      a stop made (~10% of a run); live chip flashes "👥 +N", run card row with
+      the mark scheme. Left behind costs nothing (decision in `05` §5). Also
+      fixed: per-run counting, the run closing before terminus passengers got
+      off, left-behind miscounts, a phantom "rolled through" (wave 1, local)
 - [x] Express/skip handling (no spawn for skipped services) — 2026-11-07,
       not yet deployed: a skipped station is not in the line's `stations`,
       which is the list the passenger model binds to; doors opened at a
       skipped platform board nobody (measured locally). F5 doc §1
-- [~] Interchange surfacing SHIPPED v2.42.0 on the board and in the
-      announcement. Still outstanding: icons on the map overlay and the ribbon,
-      and transfer stats
-- [ ] Platform crowd meters in the station panel
-- [ ] Local browser validation (PAX flow over two stops), production
+- [x] Interchange surfacing SHIPPED v2.42.0 on the board and in the
+      announcement; change-station rings on the route strip and the network
+      map (+ key), placed where a line joins/leaves/ends/crosses rather than at
+      every shared stop; "N got off at a change station" on the run card.
+      Real transfers are NOT modelled — stated in `05` §5 (wave 1, local)
+- [x] Platform crowd meters in the station panel — five-bar meter on the
+      destination board, drains while boarding (wave 1, local)
+- [~] Local browser validation (PAX flow over two stops) DONE 2026-11-07 on
+      the Israel map, numbers in `05` §5. Production validation outstanding
 
 ## F7 — AI traffic & signals (`07-ai-traffic-and-signals.md`)
 - [x] `BlockSystem` (blocks, occupancy, aspects) + unit tests

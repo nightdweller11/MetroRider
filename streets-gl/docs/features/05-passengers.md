@@ -266,10 +266,23 @@ the card wrong, which mattered once they became points):
    doors close, or the train leaves without opening, at most 45 s. Turning
    round in the meantime closes it with what it has rather than abandoning it.
 
-And one in the left-behind count: the model only noticed a platform left
-behind when the train came to a stand beside it (its "arriving" needs under
-2 m/s), so rolling straight past a packed platform at speed counted nobody.
-A stop scored as rolled through now adds that platform's waiting count.
+And two more the drive itself turned up:
+
+3. *Left behind was counted wrong both ways.* The model keys off the station's
+   "arriving" flag (under 2 m/s inside 40 m). Rolling past a packed platform
+   at speed never "arrived", so nobody was left behind; crawling in at about
+   2 m/s flickered the flag, and the first "off" read as leaving without
+   opening — measured: **39 left behind reported at a terminus whose doors
+   then opened and served them**. The run card's count now comes from the
+   scorer (`LeftBehindCount`): a stop scored as rolled through counts its
+   whole platform; a stop made and then left (out of the 40 m zone, or the run
+   ending) without the doors ever opening counts whoever is still waiting.
+4. *A phantom "rolled straight through".* Stop more than 10 m short of the
+   mark and the station is still "ahead", so pulling away began a fresh
+   approach to the same station that ended as rolled through — one stop showed
+   on the card twice, once as a good stop and once as a miss, and lost the
+   "Every stop served" badge. `StopScorer.standingAtScoredStop` stops a new
+   approach to the station just scored while the train is still in its zone.
 
 The score-posting order was also tightened: the next run now starts before the
 score is posted rather than after the network round-trip, so a stop made
@@ -288,13 +301,23 @@ then the stop you are standing at, and drains as people board.
 ### Change stations: rings on the strip and the map, and the count
 
 The first build ringed every stop another line calls at — and on the Israel
-map that is **all 18 of 18** stops on A1–A3, because the A-services share one
-trunk. A ring on every dot says nothing. A printed metro map has the same
+map that is **all 18 of 18** stops on A1–A3 (311 shared stop-visits across
+the 26 lines), because the services overlap so heavily. A ring on every dot says nothing. A printed metro map has the same
 problem and solves it the same way: shared track gets plain ticks, the
 interchange symbol goes where a line **joins, leaves, ends or crosses**.
 `Interchanges.changePoints` does that: a stop is a change station when some
 other line calling there does not also call at both this line's stop before
 and its stop after (either end of an open line counts when shared).
+
+Measured on the Israel map (with 2.50.0's express patterns): A1–A3 goes from
+18 rings to **6**; across all 26 lines 311 shared stop-visits become **179**
+rings; the network map marks **35** of the 69 shared stations. It is still about half the stops on that
+map, because its services really do start, end and branch everywhere — on a
+map with one trunk per line it is far fewer.
+
+Express patterns (2.50.0) come for free: a skipped station is not in the
+express's `stations`, so the express does not "serve" it for the index, and an
+express running through an interchange is not a change point there.
 
 - **Route strip**: change stations are ringed dots. On a compressed strip
   (more than 24 stops) a dot is ringed when any station it stands for is one.
@@ -314,5 +337,46 @@ station", and `RunResult.passengersAtInterchanges` carries it. Real transfers
 would need a network-level demand model (origin–destination across lines);
 that is a separate piece of work, not a relabelling of this count.
 
-### Measured
-<!-- filled in after the browser run -->
+### Measured — PAX flow over two real stops (local production build)
+
+Israel Railways map (MetroDreamin, 26 lines), line A1–A3, from Bat Yam
+Yoseftal through Bat Yam Komemiyut to the terminus Rishon LeZion Moshe Dayan.
+Driven with the cab lever (pointer presses on its notches) and the doors
+opened with the cab's doors button; numbers read through `window.__gameSystems`
+before and after each door cycle; script `~/.metrorider/scratch-b/pax-drive.cjs`.
+
+| Moment | Board meter | Aboard | Delivered (run) | Change-station | Live chip |
+|---|---|---|---|---|---|
+| Start platform, doors shut | 29 WAITING, 3 bars | 0 | 0 | 0 | — |
+| Start platform, doors cycled | NOBODY WAITING, 0 | 29 | 0 | 0 | — |
+| Komemiyut, stopped (stop scored 59) | 30 WAITING, 3 bars | 29 | 0 | 0 | 59 PTS |
+| Komemiyut, doors cycled | NOBODY WAITING, 0 | 44 | 15 | 0 | flashed 👥 +4 → +9 → +13, then 74 PTS |
+| Terminus, stopped (stop scored 65) | 40 WAITING, 4 bars | 45 | 15 | 0 | 139 PTS |
+| Terminus, doors open | — | 6 | 60 | 45 | run card 3.5 s after the doors opened |
+
+Run card: **"👥 60 passengers delivered +40"** — "1 point a passenger, up to
+20 a stop — you hit the top · 45 got off at a ◎ change station"; 59 + 65 + 30
+(on time) + 40 (passengers) − 25 (overspeed) − 59 (two reds) = **110**. The
+terminus's 45 riders are in this run's count only because the run now waits
+for them; before, the card would have said 15. The model's own left-behind
+counter read 40 at the terminus (the crawl-in flicker above) and the card,
+correctly, says nobody was left. Network map: 35 rings and the key "Change
+here · 35 stations". No console errors.
+
+The test driver is a bot, not a careful driver: the overspeed and the red
+signals on the card are its own (a same-line train was running ahead).
+Earlier runs on the pre-fix code are what found bugs 3 and 4 above.
+
+Screenshots in `docs/features/_artifacts/passengers-2026-11-07/`:
+`stop1-approach.png` (meter + rings on the approach), `stop1-doors-open.png`
+(chip flashing 👥 +15, meter draining, crowd on the platform),
+`stop2-approach.png`, `run-card.png`, `map-overlay.png`.
+
+### Not verified / still open
+- **Production validation** — the lead deploys; not done here.
+- Phone and portrait layouts of the meter were not screenshotted (the chip
+  only grew a five-bar strip under the number, inside the same panel).
+- Personal bests set before this release do not include passengers, so a new
+  run scores up to ~10% more than an old one for the same driving.
+- Real transfers (riders changing onto another line) are not modelled — see
+  above.

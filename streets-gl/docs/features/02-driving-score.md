@@ -171,3 +171,17 @@ and clear of the platform furniture. Visible at 120 m, clearly readable at 45 m.
 
 Screenshots, including the probe that proved placement was fine, in
 `docs/features/_artifacts/stop-mark-2026-08-14/`.
+
+---
+
+## Passengers as a score component (2026-11-07, wave 1)
+
+A run's total is now: the stops + keeping time + **passengers delivered** −
+overspeed − red signals. Passengers are worth 1 point each, up to 20 per stop
+made — at most 20 of a stop's 210, about a tenth of a run — and leaving people
+behind costs nothing (a rolled-through stop already scores zero). The rule,
+the reasoning and the measurements are in `05-passengers.md` §5; the code is
+`scoring/PassengerPoints.ts`. Two scorer fixes came with it: a run now waits
+for the terminus passengers to get off before it closes, and pulling away from
+a stop made short of the mark no longer starts a phantom approach to the same
+station (`StopScorer.standingAtScoredStop`).
