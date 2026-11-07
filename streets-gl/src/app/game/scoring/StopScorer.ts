@@ -218,3 +218,23 @@ export class StopScorer {
 		};
 	}
 }
+
+/**
+ * True while the train is still standing in the zone of the stop it has just
+ * been scored for.
+ *
+ * Stop more than 10 m short of the mark and the station is still "ahead", so
+ * the moment the train pulls away a fresh approach to the SAME station began —
+ * and ended a few metres later as "rolled straight through". Measured on the
+ * Israel map: a stop 13 m short at Bat Yam Komemiyut went onto the run card as
+ * a good stop AND a rolled-through one, and its platform as left behind.
+ */
+export function standingAtScoredStop(
+	targetIdx: number,
+	trainDist: number,
+	last: {stationIndex: number; markerDist: number} | null,
+): boolean {
+	if (!last || targetIdx !== last.stationIndex) return false;
+
+	return Math.abs(trainDist - last.markerDist) <= STOP_ZONE_M;
+}

@@ -12,7 +12,7 @@ import {
 	approachSamples, createRecorder, resetRecorder, tickRecorder, type RunSample,
 } from '../replay/RunRecorder';
 import {TRACE_WINDOW_M} from '../replay/ApproachTrace';
-import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
+import {StopScorer, StopResult, APPROACH_M, standingAtScoredStop} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
 import {PassengerTally, passengerPoints, readyToFinish, type PassengerCounts} from './PassengerPoints';
 import SettingsSystem from '~/app/systems/SettingsSystem';
@@ -49,6 +49,8 @@ export default class ScoringSystem extends System {
 	private readonly recorder = createRecorder();
 	/** The marker the current approach is aimed at, for slicing the recording. */
 	private approachMarker = 0;
+	/** The stop last scored, so pulling away from it is not a new approach to it. */
+	private lastScored: {stationIndex: number; markerDist: number} | null = null;
 
 	private lastLineKey = '';
 	private lastDist = 0;
@@ -174,6 +176,7 @@ export default class ScoringSystem extends System {
 			&& targetIdx >= 0
 			&& state.nextStationDist < APPROACH_M
 			&& speed > 1
+			&& !standingAtScoredStop(targetIdx, dist, this.lastScored)
 		) {
 			const marker = ls.realStationDists[targetIdx];
 			if (marker !== undefined) {
@@ -238,6 +241,7 @@ export default class ScoringSystem extends System {
 		ls: {parsed: {stations: {name: string}[]}},
 	): void {
 		this.run.addStop(result);
+		this.lastScored = {stationIndex: result.stationIndex, markerDist: this.approachMarker};
 
 		if (result.verdict === 'passed') {
 			this.rolledPastWaiting += this.systemManager.getSystem(PassengerSystem)?.waitingAt(result.stationIndex) ?? 0;

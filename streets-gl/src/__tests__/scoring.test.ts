@@ -1,6 +1,6 @@
 import {
 	StopScorer, StopSample, verdictFor, smoothnessFor,
-	PERFECT_M, GREAT_M, GOOD_M, STOP_ZONE_M,
+	PERFECT_M, GREAT_M, GOOD_M, STOP_ZONE_M, standingAtScoredStop,
 } from '~/app/game/scoring/StopScorer';
 import {RunScorer, badgesForRun, RunResult} from '~/app/game/scoring/RunScorer';
 import type {StopResult} from '~/app/game/scoring/StopScorer';
@@ -366,5 +366,25 @@ describe('badges', () => {
 describe('constants sanity', () => {
 	it('keeps the stop zone larger than the "good" band', () => {
 		expect(STOP_ZONE_M).toBeGreaterThan(GOOD_M);
+	});
+});
+
+describe('standingAtScoredStop', () => {
+	const last = {stationIndex: 4, markerDist: 1000};
+
+	it('pulling away from a stop made short of the mark is not a new approach to it', () => {
+		expect(standingAtScoredStop(4, 987, last)).toBe(true);
+	});
+
+	it('the next station is a new approach', () => {
+		expect(standingAtScoredStop(5, 987, last)).toBe(false);
+	});
+
+	it('the same station, once well away from it, is a new approach (a loop coming round)', () => {
+		expect(standingAtScoredStop(4, 1000 - STOP_ZONE_M - 5, last)).toBe(false);
+	});
+
+	it('nothing scored yet, nothing to skip', () => {
+		expect(standingAtScoredStop(4, 1000, null)).toBe(false);
 	});
 });
