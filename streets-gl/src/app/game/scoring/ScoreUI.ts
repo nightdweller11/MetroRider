@@ -4,6 +4,7 @@ import ProfileClient, {BoardEntry} from '../profiles/ProfileClient';
 import {describeGhostDelta} from '../replay/GhostTrace';
 import {buildApproachTrace} from '../replay/ApproachTrace';
 import type {RunSample} from '../replay/RunRecorder';
+import {describePassengerScheme} from './PassengerPoints';
 
 /**
  * The two cards the player actually sees: a quick verdict after each stop, and
@@ -298,6 +299,8 @@ export default class ScoreUI {
 			timing.appendChild(bonus);
 		}
 
+		const passengers = this.buildPassengerRow(run);
+
 		// Racing yourself gets its own row for the same reason timekeeping does:
 		// it is not a component of the score, it is a different question about
 		// the same run — was that quicker than last time?
@@ -352,6 +355,7 @@ export default class ScoreUI {
 		card.appendChild(totalLabel);
 		card.appendChild(pb);
 		card.appendChild(summary);
+		if (passengers) card.appendChild(passengers);
 		if (run.punctualityPercent !== null) card.appendChild(timing);
 		if (raceText) card.appendChild(race);
 		card.appendChild(stopList);
@@ -394,6 +398,64 @@ export default class ScoreUI {
 
 		const board = await ProfileClient.get().getBoard(run.mapId, run.lineId, 'run-score');
 		this.renderBoard(boardWrap, board);
+	}
+
+	/**
+	 * The passengers, as a part of the score with its working shown.
+	 *
+	 * The points on the right, how they were earned underneath — the same
+	 * lesson as the stop card's graph: a number with no mark scheme is a grade
+	 * nobody can act on. Left-behind people are said here too, because this is
+	 * where a player looks for passengers, but they cost nothing (see
+	 * `PassengerPoints`).
+	 *
+	 * No row at all when nobody was carried or left: an empty row reads as
+	 * something broken rather than nothing to report.
+	 */
+	private buildPassengerRow(run: RunResult): HTMLElement | null {
+		const delivered = run.passengersDelivered ?? 0;
+		const left = run.passengersLeftBehind ?? 0;
+
+		if (delivered <= 0 && left <= 0) return null;
+
+		const stopsMade = run.stops.filter(s => s.verdict !== 'passed').length;
+		const row = document.createElement('div');
+
+		row.id = 'run-card-passengers';
+		row.style.cssText = `
+			font-size: 13px; padding: 8px 10px; border-radius: 8px; margin-bottom: 12px;
+			background: rgba(127,178,255,0.10); border: 1px solid rgba(127,178,255,0.26);
+		`;
+
+		const top = document.createElement('div');
+		top.style.cssText = 'display: flex; justify-content: space-between; align-items: baseline;';
+
+		const label = document.createElement('span');
+		label.style.color = '#cfe8ff';
+		label.textContent = `👥 ${delivered} passenger${delivered === 1 ? '' : 's'} delivered`;
+
+		const points = document.createElement('span');
+		points.style.cssText = 'color: #ddd; font-weight: 700;';
+		points.textContent = run.passengerPoints > 0 ? `+${run.passengerPoints}` : '—';
+
+		top.appendChild(label);
+		top.appendChild(points);
+
+		const how = document.createElement('div');
+		how.style.cssText = 'font-size: 11px; color: #9ab; margin-top: 3px; line-height: 1.45;';
+
+		const notes = [describePassengerScheme(delivered, stopsMade)];
+
+		if (run.passengersAtInterchanges > 0) {
+			notes.push(`${run.passengersAtInterchanges} got off at a ◎ change station`);
+		}
+		if (left > 0) notes.push(`${left} left on the platform`);
+		how.textContent = notes.join(' · ');
+
+		row.appendChild(top);
+		row.appendChild(how);
+
+		return row;
 	}
 
 	private renderBoard(target: HTMLElement, board: BoardEntry[]): void {

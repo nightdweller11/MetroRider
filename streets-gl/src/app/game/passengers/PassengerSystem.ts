@@ -2,6 +2,7 @@ import System from '~/app/System';
 import TrainSystem from '../TrainSystem';
 import AssetConfigSystem, {DEMAND_SCALES} from '../assets/AssetConfigSystem';
 import {PassengerModel} from './PassengerModel';
+import {changePoints, type InterchangeIndex} from '../data/Interchanges';
 
 /**
  * Runs the passenger demand model against the live train.
@@ -26,6 +27,17 @@ export default class PassengerSystem extends System {
 	private lastNearIdx = -1;
 	private lastNearOpened = false;
 
+	/**
+	 * Passengers set down at a change station — one of the ringed stops on the
+	 * strip, where another line joins, leaves or crosses (`changePoints`). The
+	 * model does not route anyone across lines, so this counts who got off
+	 * where a change is on offer, not who changed. Since the line was picked,
+	 * like `delivered`.
+	 */
+	private deliveredAtInterchanges = 0;
+	/** Per station of the bound line: is it a change station? */
+	private interchangeAt: boolean[] = [];
+
 	public boardedThisStop = 0;
 	public alightedThisStop = 0;
 	/** Flashes a "+N boarded" style event for the HUD. */
@@ -49,7 +61,7 @@ export default class PassengerSystem extends System {
 		const lineKey = `${trainSystem.mapName}::${ls.parsed.id}::${ls.parsed.stations.length}`;
 		if (lineKey !== this.boundLineKey) {
 			this.boundLineKey = lineKey;
-			this.bindLine(ls);
+			this.bindLine(ls, trainSystem.interchangeIndex);
 		}
 
 		if (!trainSystem.gameActive) return;
@@ -61,7 +73,10 @@ export default class PassengerSystem extends System {
 		this.updateDoors(trainSystem, dt);
 	}
 
-	private bindLine(ls: {parsed: {stations: {id: string; name: string; density?: number}[]}}): void {
+	private bindLine(
+		ls: {parsed: {id: string; isLoop: boolean; stations: {id: string; name: string; density?: number}[]}},
+		interchanges: InterchangeIndex,
+	): void {
 		const assetConfig = this.systemManager.getSystem(AssetConfigSystem);
 		this.model.setDemandScale(DEMAND_SCALES[assetConfig?.getConfig().demandLevel ?? 'normal'] ?? 1);
 		this.model.setStations(ls.parsed.stations.map(s => ({
@@ -71,6 +86,8 @@ export default class PassengerSystem extends System {
 		// Nobody wants to pull into a ghost station on the first run: seed the
 		// platforms with a few minutes of demand so the line feels in service.
 		this.model.preload(4);
+		this.interchangeAt = changePoints(interchanges, ls.parsed.stations, ls.parsed.id, ls.parsed.isLoop);
+		this.deliveredAtInterchanges = 0;
 		this.activeStationIdx = -1;
 		this.lastNearIdx = -1;
 		this.lastNearOpened = false;
@@ -115,6 +132,7 @@ export default class PassengerSystem extends System {
 		if (result.boarded > 0 || result.alighted > 0) {
 			this.boardedThisStop += result.boarded;
 			this.alightedThisStop += result.alighted;
+			if (this.interchangeAt[this.activeStationIdx]) this.deliveredAtInterchanges += result.alighted;
 			this.lastDoorEventAt = performance.now();
 		}
 	}
@@ -135,6 +153,8 @@ export default class PassengerSystem extends System {
 		aboard: number;
 		delivered: number;
 		leftBehind: number;
+		/** Of `delivered`, those set down at a change station. */
+		atInterchanges: number;
 		waitingHere: number;
 		boardingActive: boolean;
 	} {
@@ -142,6 +162,7 @@ export default class PassengerSystem extends System {
 			aboard: Math.round(this.model.getAboard()),
 			delivered: Math.round(this.model.delivered),
 			leftBehind: this.model.leftBehind,
+			atInterchanges: this.deliveredAtInterchanges,
 			waitingHere: this.activeStationIdx >= 0 ? this.model.getWaiting(this.activeStationIdx) : 0,
 			boardingActive: this.activeStationIdx >= 0,
 		};

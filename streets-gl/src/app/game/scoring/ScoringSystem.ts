@@ -14,6 +14,7 @@ import {
 import {TRACE_WINDOW_M} from '../replay/ApproachTrace';
 import {StopScorer, StopResult, APPROACH_M} from './StopScorer';
 import {RunScorer, RunResult, badgesForRun, Badge} from './RunScorer';
+import {PassengerTally, passengerPoints, readyToFinish, type PassengerCounts} from './PassengerPoints';
 import SettingsSystem from '~/app/systems/SettingsSystem';
 import {bestTimeLineKey} from '~/app/game/data/ServicePatterns';
 
@@ -61,8 +62,25 @@ export default class ScoringSystem extends System {
 	 * were judged against no longer exists.
 	 */
 	private stopLateness: (number | null)[] = [];
-	/** Passengers delivered as of the previous stop, to take a difference from. */
+	/** Passengers delivered (on this run) as of the previous stop, to take a difference from. */
 	private deliveredAtLastStop = 0;
+	/** This run's passengers, as opposed to everyone since the line was picked. */
+	private readonly passengers = new PassengerTally();
+	/**
+	 * People on platforms this run rolled straight through.
+	 *
+	 * The passenger model only notices a platform left behind when the train
+	 * comes to a stand beside it (its "arriving" needs under 2 m/s), so rolling
+	 * past a packed platform at speed — the very case the run card's "left on
+	 * the platform" exists for — counted nobody. A stop scored as rolled
+	 * through is exactly that case, so it is counted here.
+	 */
+	private rolledPastWaiting = 0;
+	/**
+	 * A run whose last stop is scored but whose passengers are still getting
+	 * off. Closed by `update` once they are — see `readyToFinish`.
+	 */
+	private pendingFinish: {stationIndex: number; waitedS: number; doorsWereOpened: boolean} | null = null;
 
 	/** Set by GameUISystem so cards can be shown without this system knowing the DOM. */
 	public onStopScored: ((
@@ -97,7 +115,36 @@ export default class ScoringSystem extends System {
 		const lineKey = `${trainSystem.mapName}::${ls.parsed.id}::${trainSystem.journeyGeneration}`;
 		if (lineKey !== this.lastLineKey) {
 			this.lastLineKey = lineKey;
+			// Turning round at the terminus is a new journey — and it is also
+			// the most likely way to leave a finished run waiting for its last
+			// passengers. Close it with what it has rather than abandon it.
+			if (this.pendingFinish) {
+				this.pendingFinish = null;
+				void this.finishRun(true, false);
+			}
 			this.startRun(trainSystem, ls);
+		}
+
+		if (this.pendingFinish) {
+			const pending = this.pendingFinish;
+			const doorsOpen = trainSystem.physicsState.doorsOpen;
+
+			pending.waitedS += Math.min(deltaTime, 0.5);
+			pending.doorsWereOpened ||= doorsOpen;
+
+			const ready = readyToFinish({
+				doorsOpen,
+				doorsWereOpened: pending.doorsWereOpened,
+				stillToAlight: this.systemManager.getSystem(PassengerSystem)?.getModel()
+					.getAboardFor(pending.stationIndex) ?? 0,
+				speed: trainSystem.physicsState.trainSpeed,
+				waitedS: pending.waitedS,
+			});
+
+			if (ready) {
+				this.pendingFinish = null;
+				void this.finishRun(true);
+			}
 		}
 
 		const dist = trainSystem.physicsState.trainDist;
@@ -159,6 +206,9 @@ export default class ScoringSystem extends System {
 		this.run.abandon();
 		this.stopLateness = [];
 		this.deliveredAtLastStop = 0;
+		this.pendingFinish = null;
+		this.rolledPastWaiting = 0;
+		this.passengers.start(this.passengerCounts());
 		// A new journey's first approach must not be drawn over the tail of the
 		// last one — the train has been picked up and put down somewhere else,
 		// so the track distances in the ring mean nothing here.
@@ -189,6 +239,10 @@ export default class ScoringSystem extends System {
 	): void {
 		this.run.addStop(result);
 
+		if (result.verdict === 'passed') {
+			this.rolledPastWaiting += this.systemManager.getSystem(PassengerSystem)?.waitingAt(result.stationIndex) ?? 0;
+		}
+
 		// A stop rolled through was never an arrival, so it has no time to keep
 		// and must not count against the timekeeping — it is already scored as
 		// zero for the stop itself.
@@ -205,7 +259,10 @@ export default class ScoringSystem extends System {
 			// The DELTA since the last stop, not the running total: passing the
 			// cumulative figure would add the whole run's deliveries again at
 			// every station and the lifetime count would climb quadratically.
-			const delivered = this.systemManager.getSystem(PassengerSystem)?.getSnapshot()?.delivered ?? 0;
+			// This run's count, not the line's: the line's total carries every
+			// earlier run on it, and a new run starting from zero here added all
+			// of them again at its first stop.
+			const delivered = this.passengers.read(this.passengerCounts()).delivered;
 			const sinceLastStop = Math.max(0, delivered - this.deliveredAtLastStop);
 
 			this.deliveredAtLastStop = delivered;
@@ -228,17 +285,36 @@ export default class ScoringSystem extends System {
 			direction,
 		});
 
-		if (result.verdict !== 'passed' && this.run.isComplete(result.stationIndex)) {
-			void this.finishRun(true);
+		if (result.verdict !== 'passed' && this.run.isComplete(result.stationIndex) && !this.pendingFinish) {
+			// Not yet: the stop is scored as the train comes to a stand, and the
+			// people getting off here — at a terminus, everybody — have not
+			// moved. The run closes when they have.
+			this.pendingFinish = {stationIndex: result.stationIndex, waitedS: 0, doorsWereOpened: false};
 		}
 	}
 
-	/** Finish the current run, post the score, and hand the card to the UI. */
-	public async finishRun(completedLine: boolean): Promise<void> {
-		const passengers = this.systemManager.getSystem(PassengerSystem)?.getSnapshot();
+	/** What the passenger model has counted since the line was picked. */
+	private passengerCounts(): PassengerCounts {
+		const snap = this.systemManager.getSystem(PassengerSystem)?.getSnapshot();
+
+		return {
+			delivered: snap?.delivered ?? 0,
+			leftBehind: snap?.leftBehind ?? 0,
+			atInterchanges: snap?.atInterchanges ?? 0,
+		};
+	}
+
+	/**
+	 * Finish the current run, post the score, and hand the card to the UI.
+	 *
+	 * `restart` rolls straight into the next run; the caller passes false when
+	 * it is about to start one itself.
+	 */
+	public async finishRun(completedLine: boolean, restart = true): Promise<void> {
+		const counted = this.passengers.read(this.passengerCounts());
 		const result = this.run.finalize(
 			performance.now(),
-			{delivered: passengers?.delivered ?? 0, leftBehind: passengers?.leftBehind ?? 0},
+			{...counted, leftBehind: counted.leftBehind + this.rolledPastWaiting},
 			completedLine,
 			this.stopLateness,
 		);
@@ -292,6 +368,18 @@ export default class ScoringSystem extends System {
 
 		const badges = badgesForRun(result, new Date().getHours());
 
+		// A finished run rolls straight into the next one, so a loop line keeps
+		// scoring lap after lap without the player restarting anything. Started
+		// HERE, before the score is posted rather than after: the post waits on
+		// the network, and a stop made while it was in flight used to land on a
+		// closed run and vanish.
+		if (restart) {
+			const trainSystem = this.systemManager.getSystem(TrainSystem);
+			const ls = trainSystem?.getCurrentLine();
+
+			if (trainSystem && ls) this.startRun(trainSystem, ls as never);
+		}
+
 		// A guest's run is queued locally and uploaded if they ever sign in —
 		// finishing a good run and losing it would be the worst first impression.
 		const client = ProfileClient.get();
@@ -305,6 +393,7 @@ export default class ScoringSystem extends System {
 				stops: result.stops.length,
 				perfect: result.perfectStops,
 				delivered: result.passengersDelivered,
+				passengerPoints: result.passengerPoints,
 				completedLine: result.completedLine,
 			},
 		});
@@ -324,16 +413,18 @@ export default class ScoringSystem extends System {
 		}
 
 		this.onRunFinished?.(result, badges, posted?.isPersonalBest ?? false, posted?.best ?? null, ghost);
-
-		// A finished run rolls straight into the next one, so a loop line keeps
-		// scoring lap after lap without the player restarting anything.
-		const trainSystem = this.systemManager.getSystem(TrainSystem);
-		const ls = trainSystem?.getCurrentLine();
-		if (trainSystem && ls) this.startRun(trainSystem, ls as never);
 	}
 
+	/** The run's points so far: the stops, and the passengers set down. */
 	public getRunTotal(): number {
-		return this.run.getTotalPoints();
+		return this.run.getTotalPoints() + this.getPassengerPoints();
+	}
+
+	/** What the passengers on this run are worth so far. */
+	public getPassengerPoints(): number {
+		if (!this.run.isActive()) return 0;
+
+		return passengerPoints(this.passengers.read(this.passengerCounts()).delivered, this.run.getStopsMade());
 	}
 
 	public getStopCount(): number {

@@ -233,9 +233,44 @@ describe('RunScorer', () => {
 		expect(result.summary).toContain('1 stop made');
 		expect(result.summary).toContain('1 perfect');
 		expect(result.summary).toContain('1 rolled through');
-		expect(result.summary).toContain('42 passengers delivered');
-		expect(result.summary).toContain('7 left waiting');
+		// Passengers moved out of the sentence into their own row on the card.
+		expect(result.summary).not.toContain('passengers');
+		expect(result.passengersDelivered).toBe(42);
+		expect(result.passengersLeftBehind).toBe(7);
 		expect(result.durationMs).toBe(60_000);
+	});
+
+	it('counts delivered passengers into the total, capped per stop made', () => {
+		const run = new RunScorer();
+		run.start(ctx, 0);
+		run.addStop(stopResult({stationIndex: 0, points: 100}));
+		run.addStop(stopResult({stationIndex: 1, verdict: 'passed', points: 0}));
+		run.addStop(stopResult({stationIndex: 2, points: 100}));
+
+		// Two stops made: the passengers can be worth at most 40.
+		const capped = run.finalize(1000, {delivered: 90, leftBehind: 0, atInterchanges: 12}, false)!;
+
+		expect(capped.passengerPoints).toBe(40);
+		expect(capped.totalPoints).toBe(240);
+		expect(capped.passengersAtInterchanges).toBe(12);
+
+		run.start(ctx, 0);
+		run.addStop(stopResult({stationIndex: 0, points: 100}));
+		const under = run.finalize(1000, {delivered: 7, leftBehind: 30}, false)!;
+
+		expect(under.passengerPoints).toBe(7);
+		// Left behind costs nothing: 100 for the stop + 7 for the people.
+		expect(under.totalPoints).toBe(107);
+		expect(under.passengersAtInterchanges).toBe(0);
+	});
+
+	it('reports stops made, not stops attempted', () => {
+		const run = new RunScorer();
+		run.start(ctx, 0);
+		run.addStop(stopResult({stationIndex: 0}));
+		run.addStop(stopResult({stationIndex: 1, verdict: 'passed', points: 0}));
+
+		expect(run.getStopsMade()).toBe(1);
 	});
 
 	it('returns nothing when no stop was attempted', () => {
@@ -294,7 +329,7 @@ describe('badges', () => {
 	const baseRun = (over: Partial<RunResult> = {}): RunResult => ({
 		mapId: 'm', lineId: 'l', lineName: 'Line', stops: [stopResult()], stationCount: 3,
 		totalPoints: 175, averagePoints: 175, perfectStops: 1, passengersDelivered: 10,
-		passengersLeftBehind: 0, durationMs: 1000, completedLine: false, summary: '',
+		passengersLeftBehind: 0, passengersAtInterchanges: 0, passengerPoints: 10, durationMs: 1000, completedLine: false, summary: '',
 		punctualityPercent: null, punctualityBonus: 0, ...over,
 	});
 

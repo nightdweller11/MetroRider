@@ -1,4 +1,4 @@
-import {buildRibbon, paceFor, MAX_DOTS} from '../app/game/ui/RouteRibbon';
+import {buildRibbon, paceFor, MAX_DOTS, interchangeDots} from '../app/game/ui/RouteRibbon';
 
 /**
  * The strip of stops across the top of the screen.
@@ -87,5 +87,30 @@ describe('leg pace', () => {
 		const view = buildRibbon(61, 0, many);
 
 		expect(view.legPace).toContain('slow');
+	});
+});
+
+describe('change-here rings', () => {
+	test('one ring per interchange stop on an ordinary line', () => {
+		const view = buildRibbon(5, 0, legs(80, 80, 80, 80));
+
+		expect(interchangeDots([false, true, false, false, true], view)).toEqual([false, true, false, false, true]);
+	});
+
+	test('a compressed strip rings the dot standing for that stretch', () => {
+		const flags = new Array(49).fill(false);
+
+		flags[24] = true;
+		const view = buildRibbon(49, 0, []);
+		const rings = interchangeDots(flags, view);
+
+		expect(view.compressed).toBe(true);
+		expect(rings).toHaveLength(MAX_DOTS);
+		expect(rings.filter(Boolean)).toHaveLength(1);
+		expect(rings[Math.round((24 / 48) * (MAX_DOTS - 1))]).toBe(true);
+	});
+
+	test('no flags, no rings', () => {
+		expect(interchangeDots([], buildRibbon(4, 0, [])).some(Boolean)).toBe(false);
 	});
 });

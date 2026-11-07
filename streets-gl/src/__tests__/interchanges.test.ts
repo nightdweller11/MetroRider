@@ -1,6 +1,6 @@
 import {
 	linesServing, describeInterchange, speakInterchange, MAX_NAMED,
-	buildInterchangeIndex, connectionsAt,
+	buildInterchangeIndex, connectionsAt, interchangeMarks, changePoints, changePointIds,
 	type InterchangeLine,
 } from '../app/game/data/Interchanges';
 
@@ -145,5 +145,78 @@ describe('speakInterchange', () => {
 
 	test('nothing to say, nothing said', () => {
 		expect(speakInterchange([])).toBe('');
+	});
+});
+
+describe('changePoints', () => {
+	// A trunk shared by two services that split, and a third line crossing.
+	//   T1: a b c d e        T2: a b c x y      X: q c r
+	const NET: InterchangeLine[] = [
+		line('T1', 'T1', ['a', 'b', 'c', 'd', 'e']),
+		line('T2', 'T2', ['a', 'b', 'c', 'x', 'y']),
+		line('X', 'X', ['q', 'c', 'r']),
+	];
+	const index = buildInterchangeIndex(NET);
+
+	test('a shared stretch is plain ticks; the ring goes where lines split, cross or end', () => {
+		// a: shared terminus -> ring. b: same lines either side -> tick.
+		// c: X crosses and T2 leaves -> ring. d, e: nobody else -> nothing.
+		expect(changePoints(index, NET[0].stations, 'T1')).toEqual([true, false, true, false, false]);
+	});
+
+	test('a crossing line rings the crossing', () => {
+		expect(changePoints(index, NET[2].stations, 'X')).toEqual([false, true, false]);
+	});
+
+	test('a station nobody else calls at is never ringed', () => {
+		expect(changePoints(index, NET[0].stations, 'T1')[3]).toBe(false);
+	});
+
+	test('a loop wraps its neighbours', () => {
+		const loop = [line('L', 'L', ['a', 'b', 'c']), line('M', 'M', ['a', 'b', 'c'])];
+		const i2 = buildInterchangeIndex(loop);
+
+		// Same pair of lines all the way round: a shared loop has nowhere to change.
+		expect(changePoints(i2, loop[0].stations, 'L', true)).toEqual([false, false, false]);
+		// Open line on the same stations: both shared ends are rings.
+		expect(changePoints(i2, loop[0].stations, 'L', false)).toEqual([true, false, true]);
+	});
+
+	test('nothing without an index', () => {
+		expect(changePoints(null, NET[0].stations, 'T1')).toEqual([false, false, false, false, false]);
+	});
+
+	test('the network-wide set is every change point on any line', () => {
+		expect([...changePointIds(index, NET)].sort()).toEqual(['a', 'c']);
+	});
+});
+
+describe('interchangeMarks', () => {
+	const placed = NETWORK.map((l, li) => ({
+		stations: l.stations.map((s, si) => ({id: s.id, lat: li + si / 10, lng: si})),
+	}));
+
+	test('one mark per shared station, not one per line', () => {
+		const marks = interchangeMarks(buildInterchangeIndex(NETWORK), placed);
+
+		expect(marks.map(m => m.id).sort()).toEqual(['ths', 'tsc']);
+		expect(marks.find(m => m.id === 'tsc')?.lineCount).toBe(3);
+		expect(marks.find(m => m.id === 'ths')?.lineCount).toBe(2);
+	});
+
+	test('positioned from the first line that lists it', () => {
+		const tsc = interchangeMarks(buildInterchangeIndex(NETWORK), placed).find(m => m.id === 'tsc');
+
+		expect(tsc).toMatchObject({lat: 0, lng: 0});
+	});
+
+	test('can be limited to the change points', () => {
+		const marks = interchangeMarks(buildInterchangeIndex(NETWORK), placed, new Set(['tsc']));
+
+		expect(marks.map(m => m.id)).toEqual(['tsc']);
+	});
+
+	test('no marks on a map with no shared stations', () => {
+		expect(interchangeMarks(buildInterchangeIndex([NETWORK[3]]), [placed[3]])).toEqual([]);
 	});
 });

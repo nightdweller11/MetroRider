@@ -162,3 +162,131 @@ export function speakInterchange(others: InterchangeLine[]): string {
 		? `Change here for the ${list} lines, and others.`
 		: `Change here for the ${list} lines.`;
 }
+
+/** One change-here mark on the network map. */
+export interface InterchangeMark {
+	id: string;
+	lat: number;
+	lng: number;
+	/** How many lines call here, the one being driven included. */
+	lineCount: number;
+}
+
+/**
+ * Where to draw the change-here marks on the network map: one per shared
+ * station, wherever several lines' dots would otherwise sit on top of each
+ * other with nothing to say they are the same place.
+ *
+ * Positioned from the first line that lists the station — the lines give the
+ * same station id the same coordinates, because it is one station.
+ */
+export function interchangeMarks(
+	index: InterchangeIndex | null | undefined,
+	lines: {stations: {id: string; lat: number; lng: number}[]}[],
+	/** Only these stations — `changePointIds`. Absent: every shared station. */
+	only?: Set<string>,
+): InterchangeMark[] {
+	if (!index || index.size === 0 || !Array.isArray(lines)) return [];
+
+	const marks: InterchangeMark[] = [];
+	const placed = new Set<string>();
+
+	for (const line of lines) {
+		if (!line || !Array.isArray(line.stations)) continue;
+
+		for (const st of line.stations) {
+			const id = st?.id;
+
+			if (!id || placed.has(id)) continue;
+
+			const serving = index.get(id);
+
+			if (!serving || serving.length < 2) continue;
+			if (only && !only.has(id)) continue;
+			if (!Number.isFinite(st.lat) || !Number.isFinite(st.lng)) continue;
+
+			placed.add(id);
+			marks.push({id, lat: st.lat, lng: st.lng, lineCount: serving.length});
+		}
+	}
+
+	return marks;
+}
+
+/**
+ * Where on this line the network actually changes: the stops worth a ring.
+ *
+ * "Does another line call here" is the wrong question for a ring: on a
+ * network of overlapping services that is nearly every stop — on the Israel
+ * map every one of the 18 stops of A1–A3 is shared, so a ring on each of them
+ * said nothing at all. A printed metro map has the same problem and the same
+ * answer: where two services share a stretch of track the shared stations are
+ * plain ticks, and the interchange symbol goes where a line JOINS, LEAVES,
+ * ENDS or CROSSES — the place you would actually get off to go somewhere else.
+ *
+ * So a stop is a change point when some other line calling there is not
+ * simply running alongside: it does not also call at both this line's stop
+ * before and its stop after. Either end of an open line counts when shared —
+ * the line stops there and another carries on.
+ */
+export function changePoints(
+	index: InterchangeIndex | null | undefined,
+	stations: {id: string}[],
+	lineId: string,
+	isLoop = false,
+): boolean[] {
+	if (!Array.isArray(stations)) return [];
+
+	const n = stations.length;
+	const callsAt = new Map<string, Set<string>>();
+	const stopsOf = (line: InterchangeLine): Set<string> => {
+		let set = callsAt.get(line.id);
+
+		if (!set) {
+			set = new Set((line.stations ?? []).map(s => s?.id));
+			callsAt.set(line.id, set);
+		}
+
+		return set;
+	};
+
+	return stations.map((s, i) => {
+		const others = connectionsAt(index, s?.id ?? '', lineId);
+
+		if (others.length === 0) return false;
+
+		const prev = i > 0 ? i - 1 : (isLoop ? n - 1 : -1);
+		const next = i < n - 1 ? i + 1 : (isLoop ? 0 : -1);
+
+		if (prev < 0 || next < 0) return true;
+
+		const before = stations[prev]?.id;
+		const after = stations[next]?.id;
+
+		return others.some(line => {
+			const set = stopsOf(line);
+
+			return !set.has(before) || !set.has(after);
+		});
+	});
+}
+
+/** Every station that is a change point on at least one of the lines through it. */
+export function changePointIds(
+	index: InterchangeIndex | null | undefined,
+	lines: {id: string; stations: {id: string}[]; isLoop?: boolean}[],
+): Set<string> {
+	const ids = new Set<string>();
+
+	if (!Array.isArray(lines)) return ids;
+
+	for (const line of lines) {
+		if (!line || !Array.isArray(line.stations)) continue;
+
+		const flags = changePoints(index, line.stations, line.id, !!line.isLoop);
+
+		flags.forEach((on, i) => { if (on) ids.add(line.stations[i].id); });
+	}
+
+	return ids;
+}

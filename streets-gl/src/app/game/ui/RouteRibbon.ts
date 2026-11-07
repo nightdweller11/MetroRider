@@ -120,3 +120,31 @@ export function buildRibbon(
 
 	return {dots, here, compressed, legPace, legSkips};
 }
+
+/**
+ * Which dots on the strip get the change-here ring.
+ *
+ * One dot per station, the ring on each station another line calls at. On a
+ * compressed strip a dot stands for a stretch of the line, and it is ringed
+ * when any station in that stretch is an interchange — the mark says "you can
+ * change somewhere about here", which is all a proportional strip can say.
+ */
+export function interchangeDots(flags: boolean[], view: Pick<RibbonView, 'dots' | 'compressed'>): boolean[] {
+	const out: boolean[] = new Array(Math.max(0, view.dots)).fill(false);
+
+	if (!Array.isArray(flags) || flags.length === 0 || view.dots <= 0) return out;
+
+	const stations = flags.length;
+
+	for (let i = 0; i < stations; i++) {
+		if (!flags[i]) continue;
+
+		const dot = view.compressed
+			? Math.round((i / Math.max(1, stations - 1)) * (view.dots - 1))
+			: i;
+
+		if (dot >= 0 && dot < out.length) out[dot] = true;
+	}
+
+	return out;
+}

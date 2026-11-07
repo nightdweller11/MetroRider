@@ -23,7 +23,9 @@
 
 import {describeSpan, type MiniMapView} from './MiniMap';
 import {NOTCHES, notchDemand, notchPercent} from '../physics/MasterController';
-import {buildRibbon, type RibbonLeg} from './RouteRibbon';
+import {buildRibbon, interchangeDots, type RibbonLeg} from './RouteRibbon';
+import {crowdMeter, CROWD_BARS} from '../passengers/CrowdMeter';
+import {PassengerPointsFlash} from '../scoring/PassengerPoints';
 
 export interface CabHudState {
 	speedKmh: number;
@@ -32,6 +34,7 @@ export interface CabHudState {
 	dialMax: number;
 	stationName: string;
 	stationMeta: string;
+	/** People on the platform being approached, or null when there is none. */
 	waiting: number | null;
 	/** 0..1 along the current line. */
 	progress: number;
@@ -53,6 +56,12 @@ export interface CabHudState {
 	legs?: RibbonLeg[];
 	/** Stations run through without stopping on each leg (an express). */
 	legSkips?: number[];
+	/**
+	 * Per station of the line: is it a change station — where another line
+	 * joins, leaves or crosses (`changePoints`)? The strip rings those stops,
+	 * the way a printed line diagram does.
+	 */
+	interchanges?: boolean[];
 	/** A circle line has no end, and the strip says so. */
 	isLoop?: boolean;
 	doorsOpen: boolean;
@@ -89,6 +98,12 @@ export interface CabHudState {
 	 * anything. Watching it climb is most of the reason to care about it.
 	 */
 	runPoints?: number | null;
+	/**
+	 * The part of `runPoints` the passengers earned. Not shown as a second
+	 * number — the chip flashes "👥 +N" for a moment when it rises, so the
+	 * player sees where those points came from without a second readout.
+	 */
+	passengerPoints?: number | null;
 	/**
 	 * Metres to the train in front, or null when there is nothing ahead.
 	 *
@@ -133,7 +148,16 @@ const CSS = `
 .cab-dest .nm{font-weight:800;font-size:15px}
 .cab-dest .mt{font-family:var(--tech);font-size:10px;letter-spacing:.16em;color:var(--ink-3);margin-top:2px}
 .cab-dest .pax{padding:6px 10px;border-radius:8px;font-family:var(--tech);font-size:12px;font-weight:700;color:#cfe8ff;
-  background:linear-gradient(180deg,rgba(87,182,255,.2),rgba(87,182,255,.07));box-shadow:inset 0 0 0 1px rgba(110,185,255,.28)}
+  background:linear-gradient(180deg,rgba(87,182,255,.2),rgba(87,182,255,.07));box-shadow:inset 0 0 0 1px rgba(110,185,255,.28);
+  display:flex;flex-direction:column;align-items:stretch;gap:4px;white-space:nowrap}
+/* The crowd meter: five bars, more lit the busier the platform, draining as
+   people board. A full meter is a carriage-load (CrowdMeter.ts). */
+.cab-dest .pax .bars{display:flex;gap:2px;height:5px}
+.cab-dest .pax .bars i{flex:1;border-radius:2px;background:rgba(255,255,255,.12)}
+.cab-dest .pax .bars i.on{background:#57b6ff;box-shadow:0 0 6px rgba(87,182,255,.55)}
+.cab-dest .pax.busy .bars i.on{background:#ffc35c;box-shadow:0 0 6px rgba(255,180,58,.5)}
+.cab-dest .pax.packed .bars i.on{background:#ff8a5c;box-shadow:0 0 6px rgba(255,120,70,.55)}
+.cab-dest .pax.empty{color:var(--ink-2)}
 /* Racing your own best. Hidden outright when there is no record for this
    journey — an empty chip would be read as a result. */
 .cab-dest .gho{display:none;padding:6px 10px;border-radius:8px;font-family:var(--tech);font-size:12px;font-weight:700;
@@ -171,6 +195,10 @@ const CSS = `
 .cab-rib .sg.skip::after{content:'';position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-4px 0 0 -4px;
   border-radius:50%;background:#0c1219;box-shadow:0 0 0 1.5px #8fa3b7}
 .cab-rib .st{width:8px;height:8px;border-radius:50%;background:#b9c9d9;margin:0 -3px;box-shadow:0 0 0 2px #0c1219}
+/* A stop where another line calls: ringed, the way a printed line diagram
+   marks an interchange. */
+.cab-rib .st.x{width:11px;height:11px;margin:0 -4px;background:#0c1219;
+  box-shadow:inset 0 0 0 2px #e8f0f8,0 0 0 2px #0c1219}
 .cab-rib .st.now{width:14px;height:14px;background:radial-gradient(circle at 50% 35%,#ffd489,var(--amber));
   box-shadow:0 0 0 3px #0c1219,0 0 14px rgba(255,180,58,.9)}
 
@@ -361,6 +389,7 @@ export default class CabHud {
 	private lampLimit: HTMLElement | null = null;
 	private lampAhead: HTMLElement | null = null;
 	private ribPoints: HTMLElement | null = null;
+	private readonly paxFlash = new PassengerPointsFlash();
 	private leverFill: HTMLElement | null = null;
 	private brakeFill: HTMLElement | null = null;
 	private lastRibbonKey = '';
@@ -677,10 +706,7 @@ export default class CabHud {
 
 		if (this.destName) this.destName.textContent = s.stationName;
 		if (this.destMeta) this.destMeta.textContent = s.stationMeta;
-		if (this.destPax) {
-			this.destPax.textContent = s.waiting === null ? '' : `${s.waiting} WAITING`;
-			this.destPax.style.display = s.waiting === null ? 'none' : '';
-		}
+		if (this.destPax) this.renderCrowd(s.waiting);
 
 		if (this.destGhost) {
 			const g = s.ghost ?? null;
@@ -727,8 +753,10 @@ export default class CabHud {
 			const pts = s.runPoints;
 			const show = pts !== null && pts !== undefined && pts > 0;
 
+			const flash = this.paxFlash.update(Math.max(0, s.passengerPoints ?? 0), performance.now());
+
 			this.ribPoints.style.display = show ? '' : 'none';
-			this.ribPoints.textContent = show ? `${pts} PTS` : '';
+			this.ribPoints.textContent = show ? (flash ?? `${pts} PTS`) : '';
 		}
 
 		// The handle, wherever the train is holding it — including when it was
@@ -860,13 +888,43 @@ export default class CabHud {
 		if (this.miniFoot) this.miniFoot.textContent = describeSpan(view.spanM).toUpperCase();
 	}
 
+	/** The platform's head-count and its meter, on the destination board. */
+	private renderCrowd(waiting: number | null): void {
+		const el = this.destPax;
+
+		if (!el) return;
+
+		if (waiting === null) {
+			el.style.display = 'none';
+			return;
+		}
+
+		el.style.display = '';
+
+		const view = crowdMeter(waiting);
+
+		if (!el.firstElementChild) {
+			el.innerHTML = `<span class="n"></span><span class="bars">${'<i></i>'.repeat(CROWD_BARS)}</span>`;
+		}
+
+		const n = el.querySelector('.n');
+
+		if (n) n.textContent = view.label;
+		el.className = `pax ${view.level}`;
+		el.dataset.bars = String(view.bars);
+		el.querySelectorAll('.bars i').forEach((bar, i) => bar.classList.toggle('on', i < view.bars));
+	}
+
 	private renderRibbon(s: CabHudState): void {
 		if (!this.ribbonEl) return;
 
 		const view = buildRibbon(s.stopCount, s.stopIndex, s.legs ?? [], s.legSkips ?? []);
-		// The shape changes with the line, and the pace bands with it, so the
-		// key covers both rather than the dot count alone.
-		const key = `${view.dots}|${view.legPace.join('')}|${view.legSkips.join(',')}|${s.isLoop ? 'o' : ''}|${view.compressed ? 'c' : ''}`;
+		const rings = interchangeDots(s.interchanges ?? [], view);
+		// The shape changes with the line, and the pace bands, the express skips
+		// and the change-here rings with it, so the key covers all of them rather
+		// than the dot count alone.
+		const key = `${view.dots}|${view.legPace.join('')}|${view.legSkips.join(',')}|${s.isLoop ? 'o' : ''}|${
+			view.compressed ? 'c' : ''}|${rings.map(r => (r ? 1 : 0)).join('')}`;
 
 		if (key !== this.lastRibbonKey) {
 			this.lastRibbonKey = key;
@@ -881,7 +939,7 @@ export default class CabHud {
 						? `<span class="sg ${view.legPace[i - 1] ?? ''} skip" title="Runs through ${skips} station${skips === 1 ? '' : 's'} without stopping"></span>`
 						: `<span class="sg ${view.legPace[i - 1] ?? ''}"></span>`;
 				}
-				html += '<span class="st"></span>';
+				html += `<span class="st${rings[i] ? ' x' : ''}"></span>`;
 			}
 
 			// A circle line has no far end to reach, which the strip should not

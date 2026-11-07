@@ -29,7 +29,10 @@ import GhostSystem from './replay/GhostSystem';
 import ReplaySystem from './replay/ReplaySystem';
 import {ghostChip} from './replay/GhostTrace';
 import AmbientTrainSystem from './AmbientTrainSystem';
-import {connectionsAt, describeInterchange} from './data/Interchanges';
+import {
+	changePointIds, changePoints, connectionsAt, describeInterchange, interchangeMarks,
+} from './data/Interchanges';
+import {drawInterchangeMarks, interchangeLegend} from './ui/MapInterchangeMarks';
 import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
 import {lineModeInfo} from './data/LineModes';
@@ -115,6 +118,8 @@ export default class GameUISystem extends System {
 	private miniLines: MiniMapLineInput[] = [];
 	private miniStations: MiniMapPoint[] = [];
 	private miniView: MiniMapView | undefined = undefined;
+	/** Change-here flags for the line being driven, worked out once per line. */
+	private ribbonRings: {key: string; flags: boolean[]} = {key: '', flags: []};
 	private miniHeading = 0;
 	private miniBuiltAt = -1e9;
 	private miniLineKey = '';
@@ -2088,6 +2093,7 @@ export default class GameUISystem extends System {
 			legs: this.ribbonLegs(ls, limits),
 			legSkips: ls ? skipsPerLeg(ls.realStationDists, ls.skippedStationDists ?? []) : [],
 			isLoop: ls?.parsed.isLoop ?? false,
+			interchanges: this.lineInterchanges(trainSystem),
 			// Null all the way through when this journey has no record yet, so
 			// the chip stays hidden rather than claiming a dead heat with a
 			// ghost that does not exist.
@@ -2097,11 +2103,27 @@ export default class GameUISystem extends System {
 			// over, and the gap to the train in front only ever as a red
 			// signal.
 			runPoints: this.systemManager.getSystem(ScoringSystem)?.getRunTotal() ?? null,
+			passengerPoints: this.systemManager.getSystem(ScoringSystem)?.getPassengerPoints() ?? null,
 			trainAheadM: this.systemManager.getSystem(AmbientTrainSystem)
 				?.leadingGap(physics?.trainDist ?? 0, physics?.direction ?? 1) ?? null,
 		});
 
 		this.updateMiniMap(trainSystem);
+	}
+
+	/** Where lines join, leave or cross this one — for the strip's rings (`changePoints`). */
+	private lineInterchanges(trainSystem: TrainSystem): boolean[] {
+		const ls = trainSystem.getCurrentLine();
+		const key = `${trainSystem.mapGeneration}:${trainSystem.currentLineIdx}`;
+
+		if (ls && key !== this.ribbonRings.key) {
+			this.ribbonRings = {
+				key,
+				flags: changePoints(trainSystem.interchangeIndex, ls.parsed.stations, ls.parsed.id, ls.parsed.isLoop),
+			};
+		}
+
+		return this.ribbonRings.flags;
 	}
 
 	/**
@@ -3332,6 +3354,22 @@ export default class GameUISystem extends System {
 		};
 		updateMarker();
 		this.metroMapMarkerTimer = window.setInterval(updateMarker, 300);
+
+		// Change-here rings over the lines, under the train marker; the key
+		// goes in the header next to the map's name.
+		const parsedLines = trainSystem.lines.map(l => l.parsed);
+		const rings = drawInterchangeMarks(
+			svg,
+			interchangeMarks(
+				trainSystem.interchangeIndex, parsedLines,
+				changePointIds(trainSystem.interchangeIndex, parsedLines),
+			),
+			toSvg,
+		);
+
+		svg.appendChild(pulse);
+		svg.appendChild(marker);
+		if (rings > 0) header.insertBefore(interchangeLegend(rings), mapTitle.nextSibling);
 
 		this.drawFoundPlaces(svg, SVG_NS, toSvg);
 

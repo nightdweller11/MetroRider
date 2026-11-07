@@ -2,6 +2,7 @@ import {StopResult} from './StopScorer';
 import {
 	arrivalMark, describePunctuality, lateArrivals, punctualityBonus, punctualityPercent,
 } from '../service/Punctuality';
+import {passengerPoints} from './PassengerPoints';
 
 /**
  * A run = the stops made since the line was picked, aggregated into one score
@@ -25,6 +26,14 @@ export interface RunResult {
 	perfectStops: number;
 	passengersDelivered: number;
 	passengersLeftBehind: number;
+	/**
+	 * Of those delivered, how many got off at a change station (a ringed stop:
+	 * another line joins, leaves or crosses there). Not a count of changes —
+	 * the model does not route anyone onto another line.
+	 */
+	passengersAtInterchanges: number;
+	/** Points the passengers earned (`PassengerPoints`). Part of `totalPoints`. */
+	passengerPoints: number;
 	durationMs: number;
 	completedLine: boolean;
 	summary: string;
@@ -70,6 +79,11 @@ export class RunScorer {
 		return this.stops.reduce((sum, s) => sum + s.points, 0);
 	}
 
+	/** Stops actually made — rolled-through stations are not stops. */
+	public getStopsMade(): number {
+		return this.stops.filter(s => s.verdict !== 'passed').length;
+	}
+
 	public addStop(result: StopResult): void {
 		if (!this.context) return;
 		this.stops.push(result);
@@ -92,7 +106,7 @@ export class RunScorer {
 
 	public finalize(
 		now: number,
-		passengers: {delivered: number; leftBehind: number},
+		passengers: {delivered: number; leftBehind: number; atInterchanges?: number},
 		completedLine: boolean,
 		/**
 		 * How late each scored stop was, in the order they were made. `null` for
@@ -108,7 +122,8 @@ export class RunScorer {
 		const percent = punctualityPercent(marks);
 		const bonus = punctualityBonus(percent, timed);
 
-		const totalPoints = this.getTotalPoints() + bonus;
+		const paxPoints = passengerPoints(passengers.delivered, this.getStopsMade());
+		const totalPoints = this.getTotalPoints() + bonus + paxPoints;
 		const perfect = this.stops.filter(s => s.verdict === 'perfect').length;
 		const average = Math.round(totalPoints / this.stops.length);
 
@@ -123,12 +138,14 @@ export class RunScorer {
 			perfectStops: perfect,
 			passengersDelivered: passengers.delivered,
 			passengersLeftBehind: passengers.leftBehind,
+			passengersAtInterchanges: passengers.atInterchanges ?? 0,
+			passengerPoints: paxPoints,
 			durationMs: Math.max(0, now - this.startedAt),
 			completedLine,
 			punctualityPercent: percent,
 			punctualityBonus: bonus,
 			summary: buildSummary(
-				this.stops, perfect, passengers, completedLine,
+				this.stops, perfect, completedLine,
 				describePunctuality(percent, lateArrivals(lateness)),
 			),
 		};
@@ -150,7 +167,6 @@ export class RunScorer {
 function buildSummary(
 	stops: StopResult[],
 	perfect: number,
-	passengers: {delivered: number; leftBehind: number},
 	completedLine: boolean,
 	punctuality: string,
 ): string {
@@ -162,8 +178,8 @@ function buildSummary(
 	if (perfect > 0) parts.push(`${perfect} perfect`);
 	if (missed > 0) parts.push(`${missed} rolled through`);
 	if (punctuality) parts.push(punctuality);
-	if (passengers.delivered > 0) parts.push(`${passengers.delivered} passengers delivered`);
-	if (passengers.leftBehind > 0) parts.push(`${passengers.leftBehind} left waiting`);
+	// Passengers are not in the sentence any more: they have their own row on
+	// the card, with the points they earned, and saying them twice is clutter.
 
 	const head = completedLine ? 'Whole line driven — ' : '';
 	return head + parts.join(' · ');
