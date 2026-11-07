@@ -20,6 +20,19 @@ export interface ReleaseEntry {
 
 export const CHANGELOG: ReleaseEntry[] = [
 	{
+		version: '2.50.0',
+		codename: 'Not Stopping',
+		date: '2026-11-07',
+		emblem: '🚄◇',
+		summary: 'The map always knew which trains run express — now the game does too.',
+		changes: [
+			'Pick a line groups related services the way the map does: the A line\'s four services sit together under "A", and the shorter ones say which longer line they are part of.',
+			'An express says so, and how many stations it runs through.',
+			'FIXED — the A1-A5 express stopped at every station. Now it runs through Holon and Bat Yam: no stop, no due time, nobody waiting for it, and the board, the route strip and the announcement all say "not stopping". The platforms are still there to watch go by.',
+			'Best times on an express start fresh, so you are never racing a run that stopped everywhere.',
+		],
+	},
+	{
 		version: '2.49.0',
 		codename: 'Fresh Off the Press',
 		date: '2026-11-07',
