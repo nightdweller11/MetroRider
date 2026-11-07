@@ -4,7 +4,7 @@ import TrainSystem from './TrainSystem';
 import GameCameraSystem from './GameCameraSystem';
 import JourneySystem from './JourneySystem';
 import {
-	nearestNewPlace, describeFind, ANNOUNCE_GAP_S, type NamedPlace,
+	nearestNewPlace, describeFind, worthFinding, ANNOUNCE_GAP_S, type NamedPlace,
 } from './data/Discovery';
 
 /**
@@ -108,6 +108,29 @@ export default class DiscoverySystem extends System {
 				if (Math.abs(label.x - where.x) > 300 || Math.abs(label.z - where.z) > 300) continue;
 
 				out.push({name: label.text, x: label.x, z: label.z, priority: label.priority});
+			}
+		}
+
+		return out;
+	}
+
+	/**
+	 * Every place worth finding in the streets loaded so far, wherever it is —
+	 * for the network map's "still to find" pins. Read when the map opens, not
+	 * every frame.
+	 */
+	public loadedPlaces(): NamedPlace[] {
+		const tileSystem = this.systemManager.getSystem(TileSystem);
+
+		if (!tileSystem) return [];
+
+		const out: NamedPlace[] = [];
+
+		for (const tile of tileSystem.tiles.values()) {
+			for (const label of tile.labelBuffersList) {
+				const place = {name: label.text, x: label.x, z: label.z, priority: label.priority};
+
+				if (worthFinding(place)) out.push(place);
 			}
 		}
 

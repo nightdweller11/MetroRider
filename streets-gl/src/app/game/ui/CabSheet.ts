@@ -48,6 +48,9 @@ const CSS = `
 .cab-sheet .row-item .pill{min-width:46px;height:32px;border-radius:7px;display:grid;place-items:center;
   font-family:var(--tech);font-weight:700;font-size:14px;letter-spacing:.06em;color:#05121c;
   box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 3px 8px rgba(0,0,0,.45);flex:0 0 auto}
+.cab-sheet .row-item .thumb{flex:0 0 auto;width:60px;height:40px;line-height:0;border-radius:7px;overflow:hidden;
+  box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+.cab-sheet .row-item .thumb svg{display:block}
 .cab-sheet .row-item .t{font-weight:800;font-size:14px;
   /* Titles come from user-authored maps and some run to a paragraph. Two
      lines keeps every row the same shape and the list scannable. */
@@ -85,6 +88,12 @@ export interface SheetRow {
 	/** Short code shown in the coloured pill, e.g. a line number. */
 	badge?: string;
 	badgeColor?: string;
+	/**
+	 * A small picture in place of the pill — a map's thumbnail. Markup from
+	 * `renderMapThumbnail` only, which writes numbers and sanitised colours
+	 * and no text from the map, so it is safe to set as innerHTML.
+	 */
+	thumb?: string;
 	title: string;
 	subtitle?: string;
 	/**
@@ -196,7 +205,13 @@ export default class CabSheet {
 			// rows now carry titles authored by other people (map names pulled
 			// from MetroDreamin, and any profile a player pastes in). A map
 			// called `<img src=x onerror=…>` must be a silly name, not script.
-			if (row.badge) {
+			if (row.thumb) {
+				const thumb = document.createElement('span');
+
+				thumb.className = 'thumb';
+				thumb.innerHTML = row.thumb;
+				item.appendChild(thumb);
+			} else if (row.badge) {
 				const pill = document.createElement('span');
 				const colour = row.badgeColor ?? '#4fb6ef';
 

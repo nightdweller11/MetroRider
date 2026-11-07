@@ -38,6 +38,14 @@ import {describeDistance, describeDuration} from './data/JourneyLog';
 import {lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
 import {SAMPLE_MAP, LatestLoad} from './data/StartMaps';
+import type {MetroMapData} from './data/RouteParser';
+import {MapLibrary, SAMPLE_KEY, mapKey} from './data/MapLibrary';
+import {fitProjection, renderMapThumbnail} from './data/MapThumbnail';
+import {sketchFor, withoutFeatured} from './data/FeaturedMaps';
+import {featuredCards, recentRows, sheetRecents, type FeaturedCardModel} from './data/MapBrowserModel';
+import {featuredRail, renderRecentList} from './ui/MapBrowser';
+import {selectLandmarks} from './data/Landmarks';
+import {drawLandmarks, landmarkLegend, mapKeyRow} from './ui/MapLandmarkMarks';
 import {lineShortLabel} from './data/LineLabel';
 import {linePickerRows} from './ui/LinePicker';
 import {boardName, passingAhead, skippedBetween, skipsPerLeg} from './data/ServicePatterns';
@@ -1196,20 +1204,77 @@ export default class GameUISystem extends System {
 	 * mean guessing at map ids — which is how you end up importing a stranger's
 	 * map because the id happened to be valid.
 	 *
-	 * Sorted biggest first, because the big ones are the famous ones.
+	 * Sorted biggest first, because the big ones are the famous ones. Above
+	 * them: the Featured maps (checked, and drawable before any fetch) and the
+	 * few you drove most recently — each with a picture of its lines where the
+	 * game has one (`data/MapBrowserModel.ts`).
 	 */
 	private openWorldTourSheet(): void {
 		if (!this.cabSheet) return;
 
-		this.cabSheet.show('Maps to drive', [{
-			badge: '…', badgeColor: '#5d6f81',
-			title: 'Looking up the maps…',
-			subtitle: 'Fetching the latest list',
-			readOnly: true,
-			onSelect: (): void => undefined,
-		}]);
+		this.cabSheet.show('Maps to drive', this.mapSheetRows(null));
 
 		void this.loadWorldTourRows();
+	}
+
+	/**
+	 * Featured and Recent, then every map on the profile: `all` is the fetched
+	 * list, null while it is still coming, or a message when it failed.
+	 */
+	private mapSheetRows(all: SheetRow[] | null): SheetRow[] {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const cached = this.mapLibrary.sketches();
+		const currentKey = this.currentMapUrl
+			? mapKey(this.currentMapUrl)
+			: trainSystem?.mapName === SAMPLE_MAP.name ? SAMPLE_KEY : null;
+		const noop = (): void => undefined;
+		const rows: SheetRow[] = [{section: true, title: 'Featured', badgeColor: '#4fd996', onSelect: noop}];
+
+		for (const card of featuredCards(cached)) {
+			rows.push({
+				thumb: renderMapThumbnail(card.sketch, 60, 40),
+				title: card.title,
+				subtitle: card.key === currentKey ? 'Driving now' : card.meta,
+				onSelect: (): void => void this.driveMap(card.id, card.title),
+			});
+		}
+
+		const recents = sheetRecents(this.mapLibrary.recents(), currentKey);
+
+		if (recents.length > 0) {
+			rows.push({section: true, title: 'Recent', badgeColor: '#7fb2ff', onSelect: noop});
+
+			const facts = recentRows(recents, cached, this.systemManager.getSystem(JourneySystem)?.snapshot(), Date.now());
+
+			for (const row of facts) {
+				const sketch = row.sketch;
+
+				rows.push({
+					thumb: sketch ? renderMapThumbnail(sketch, 60, 40) : undefined,
+					badge: sketch ? undefined : 'MAP',
+					badgeColor: '#4fb6ef',
+					title: row.name,
+					subtitle: row.driven || row.counts,
+					onSelect: (): void => void this.driveMap(row.key === SAMPLE_KEY ? null : row.key.replace(/^md:/, ''), row.name),
+				});
+			}
+		}
+
+		rows.push({section: true, title: 'All maps', badgeColor: '#f0a63f', onSelect: noop});
+
+		if (all) {
+			rows.push(...all);
+		} else {
+			rows.push({
+				badge: '…', badgeColor: '#5d6f81',
+				title: 'Looking up the maps…',
+				subtitle: 'Fetching the latest list',
+				readOnly: true,
+				onSelect: noop,
+			});
+		}
+
+		return rows;
 	}
 
 	private async loadWorldTourRows(): Promise<void> {
@@ -1226,40 +1291,73 @@ export default class GameUISystem extends System {
 			};
 
 			// A one-station sketch is not somewhere to drive.
-			const worth = data.maps
+			const worth = withoutFeatured(data.maps
 				.filter(m => m.numStations >= 6 && m.numLines >= 1)
-				.sort((a, b) => b.numStations - a.numStations);
+				.sort((a, b) => b.numStations - a.numStations));
 
 			if (!this.cabSheet?.isOpen()) return;
 
 			if (worth.length === 0) {
-				this.cabSheet.setRows([{
+				this.cabSheet.setRows(this.mapSheetRows([{
 					badge: '—', badgeColor: '#5d6f81', title: 'No maps big enough to drive yet',
 					subtitle: `${data.username} has ${data.maps.length} maps, none with six stations`,
 					readOnly: true, onSelect: (): void => undefined,
-				}]);
+				}]));
 
 				return;
 			}
 
-			this.cabSheet.setRows(worth.map(map => ({
-				badge: String(map.numStations),
-				badgeColor: map.numStations >= 200 ? '#ef7b9c' : map.numStations >= 60 ? '#f0a63f' : '#4fb6ef',
-				title: map.title,
-				subtitle: `${map.numLines} line${map.numLines === 1 ? '' : 's'} · ${map.numStations} stations`,
-				onSelect: (): void => void this.driveAnotherCity(map.id, map.title),
+			const cached = this.mapLibrary.sketches();
+
+			this.cabSheet.setRows(this.mapSheetRows(worth.map(map => {
+				// A picture only for a map the game has already loaded: drawing
+				// the rest would mean fetching every one of them.
+				const sketch = sketchFor(`md:${map.id}`, cached);
+
+				return {
+					thumb: sketch ? renderMapThumbnail(sketch, 60, 40) : undefined,
+					badge: String(map.numStations),
+					badgeColor: map.numStations >= 200 ? '#ef7b9c' : map.numStations >= 60 ? '#f0a63f' : '#4fb6ef',
+					title: map.title,
+					subtitle: `${map.numLines} line${map.numLines === 1 ? '' : 's'} · ${map.numStations} stations`,
+					onSelect: (): void => void this.driveAnotherCity(map.id, map.title),
+				};
 			})));
 		} catch (err) {
 			if (!this.cabSheet?.isOpen()) return;
 
-			this.cabSheet.setRows([{
+			this.cabSheet.setRows(this.mapSheetRows([{
 				badge: '!', badgeColor: '#ef7b9c',
 				title: 'Could not reach the map list',
 				subtitle: err instanceof Error ? err.message : 'Check the connection and try again',
 				readOnly: true,
 				onSelect: (): void => undefined,
-			}]);
+			}]));
 		}
+	}
+
+	/** Drive a map from the sheet: a MetroDreamin id, or null for the built-in one. */
+	private async driveMap(mapId: string | null, title: string): Promise<void> {
+		if (mapId !== null) {
+			await this.driveAnotherCity(mapId, title);
+			return;
+		}
+
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+
+		if (!trainSystem) return;
+
+		// Built in: nothing to fetch.
+		trainSystem.loadMap(SAMPLE_MAP);
+		this.currentMapUrl = null;
+		this.currentMapId = null;
+		this.noteDriven(trainSystem);
+
+		const camera = this.systemManager.getSystem(GameCameraSystem);
+
+		camera?.activate();
+		camera?.snapToTrain();
+		this.cabSheet?.close();
 	}
 
 	/**
@@ -1381,7 +1479,8 @@ export default class GameUISystem extends System {
 			trainSystem.loadMap(mapData);
 			this.currentMapUrl = url;
 			this.currentMapId = mapId;
-			this.saveMapEntry(url, mapData.name);
+			this.saveMapEntry(url, mapData.name, 'map', mapData);
+			this.noteDriven(trainSystem);
 
 			// loadMap re-selects line 0 and moves the map camera; the follow
 			// camera still has to be told the train is somewhere else entirely.
@@ -2557,34 +2656,25 @@ export default class GameUISystem extends System {
 	 */
 	private static readonly HOME_PROFILE_ID = 'AT6WfHaZrPQ34MZpEKpheVGjGpO2';
 
-	private loadSavedMaps(): {url: string; name: string; ts: number; type?: 'map' | 'user'}[] {
-		try {
-			const raw = localStorage.getItem(GameUISystem.SAVED_MAPS_KEY);
-			if (raw) return JSON.parse(raw);
-		} catch (e) {
-			console.error('[GameUI] Failed to read saved maps:', e);
-		}
-		return [];
+	/** Recents and map thumbnails (`data/MapLibrary.ts`). */
+	private readonly mapLibrary = MapLibrary.forBrowser();
+
+	private saveMapEntry(url: string, name: string, type: 'map' | 'user' = 'map', map?: MetroMapData): void {
+		this.mapLibrary.picked(url, name, type, map);
 	}
 
-	private saveMapEntry(url: string, name: string, type: 'map' | 'user' = 'map'): void {
-		try {
-			const maps = this.loadSavedMaps().filter(m => m.url !== url);
-			maps.unshift({url, name, ts: Date.now(), type});
-			if (maps.length > 50) maps.length = 50;
-			localStorage.setItem(GameUISystem.SAVED_MAPS_KEY, JSON.stringify(maps));
-		} catch (e) {
-			console.error('[GameUI] Failed to save map entry:', e);
-		}
-	}
+	/**
+	 * The map now loaded is being driven: it goes into Recents with today's
+	 * date. The built-in map has no URL and is kept under its own key.
+	 */
+	private noteDriven(trainSystem: TrainSystem): void {
+		const key = this.currentMapUrl
+			?? (trainSystem.mapName === SAMPLE_MAP.name ? SAMPLE_KEY : null);
 
-	private removeMapEntry(url: string): void {
-		try {
-			const maps = this.loadSavedMaps().filter(m => m.url !== url);
-			localStorage.setItem(GameUISystem.SAVED_MAPS_KEY, JSON.stringify(maps));
-		} catch (e) {
-			console.error('[GameUI] Failed to remove map entry:', e);
-		}
+		if (!key || !trainSystem.mapName) return;
+		if (key === SAMPLE_KEY && !this.mapLibrary.sketch(SAMPLE_KEY)) this.mapLibrary.remember(SAMPLE_KEY, SAMPLE_MAP);
+
+		this.mapLibrary.driven(key, trainSystem.mapName);
 	}
 
 	/**
@@ -2691,7 +2781,7 @@ export default class GameUISystem extends System {
 		statusEl.style.cssText = 'font-size: 11px; color: #aaa; margin-top: 10px; display: none;';
 
 		const savedSection = document.createElement('div');
-		savedSection.style.cssText = 'margin-top: 16px; text-align: left;';
+		savedSection.style.cssText = 'margin-top: 14px; text-align: left;';
 
 		const userMapsSection = document.createElement('div');
 		userMapsSection.style.cssText = 'margin-top: 12px; text-align: left; display: none;';
@@ -2707,6 +2797,7 @@ export default class GameUISystem extends System {
 			this.showGameUI();
 			this.rebuildLineList(trainSystem);
 			this.updateLineColorIndicator(trainSystem);
+			this.noteDriven(trainSystem);
 		};
 
 		// A shared link starts the game the same way the Play button does,
@@ -2748,7 +2839,10 @@ export default class GameUISystem extends System {
 					this.currentMapId = null;
 				}
 				this.closeMetroMapOverlay();
-				this.saveMapEntry(url, mapData.name);
+				// The map the screen opens on is fetched in the background: its
+				// picture is kept, but it is not "recent" until it is played.
+				if (autoStart) this.saveMapEntry(url, mapData.name, 'map', mapData);
+				else this.mapLibrary.remember(url, mapData);
 				statusEl.textContent = `Loaded: ${mapData.name}`;
 
 				if (autoStart) {
@@ -2889,81 +2983,47 @@ export default class GameUISystem extends System {
 			}
 		};
 
+		// Recent: newest first, each with its picture, its size, and when you
+		// last drove it (`data/MapBrowserModel.ts`).
 		const renderSavedMaps = (): void => {
-			savedSection.innerHTML = '';
-			const maps = this.loadSavedMaps();
-			if (maps.length === 0) return;
+			const rows = recentRows(
+				this.mapLibrary.recents(), this.mapLibrary.sketches(),
+				this.systemManager.getSystem(JourneySystem)?.snapshot(), Date.now(),
+			);
 
-			const header = document.createElement('div');
-			header.style.cssText = `
-				font-size: 11px; font-weight: 700; color: #888; margin-bottom: 8px;
-				text-transform: uppercase; letter-spacing: 1px;
-			`;
-			header.textContent = 'Recent';
-			savedSection.appendChild(header);
+			renderRecentList(savedSection, rows, (row) => {
+				if (row.isUser) void showUserMaps(row.url);
+				else if (row.key === SAMPLE_KEY) playSampleMap();
+				else void loadMapFromUrl(row.url);
+			}, (row) => {
+				this.mapLibrary.remove(row.url);
+				renderSavedMaps();
+			});
+		};
 
-			const list = document.createElement('div');
-			list.style.cssText = 'max-height: 180px; overflow-y: auto;';
-
-			for (const map of maps.slice(0, 20)) {
-				const isUser = map.type === 'user';
-				const row = document.createElement('div');
-				row.style.cssText = `
-					display: flex; align-items: center; justify-content: space-between;
-					padding: 8px 10px; margin-bottom: 3px; border-radius: 6px;
-					background: rgba(255,255,255,0.05); cursor: pointer;
-					transition: background 0.12s;
-				`;
-				row.addEventListener('mouseenter', () => { row.style.background = isUser ? 'rgba(168,85,247,0.15)' : 'rgba(59,130,246,0.15)'; });
-				row.addEventListener('mouseleave', () => { row.style.background = 'rgba(255,255,255,0.05)'; });
-
-				if (isUser) {
-					const tag = document.createElement('span');
-					tag.style.cssText = `
-						font-size: 10px; font-weight: 700; color: #a855f7; margin-right: 8px;
-						background: rgba(168,85,247,0.15); padding: 2px 6px; border-radius: 4px;
-						flex-shrink: 0;
-					`;
-					tag.textContent = 'USER';
-					row.appendChild(tag);
-				}
-
-				const nameEl = document.createElement('div');
-				nameEl.style.cssText = 'font-size: 13px; color: #ddd; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
-				nameEl.textContent = map.name;
-				nameEl.title = map.name;
-
-				const removeBtn = document.createElement('div');
-				removeBtn.style.cssText = `
-					font-size: 12px; color: #666; cursor: pointer; margin-left: 8px;
-					padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
-				`;
-				removeBtn.textContent = '\u2715';
-				removeBtn.title = 'Remove from recent';
-				removeBtn.addEventListener('mouseenter', () => { removeBtn.style.color = '#ef4444'; });
-				removeBtn.addEventListener('mouseleave', () => { removeBtn.style.color = '#666'; });
-				removeBtn.addEventListener('click', (ev) => {
-					ev.stopPropagation();
-					this.removeMapEntry(map.url);
-					renderSavedMaps();
-				});
-
-				row.appendChild(nameEl);
-				row.appendChild(removeBtn);
-
-				row.addEventListener('click', () => {
-					if (isUser) {
-						showUserMaps(map.url);
-					} else {
-						loadMapFromUrl(map.url);
-					}
-				});
-
-				list.appendChild(row);
+		const playFeatured = async (card: FeaturedCardModel): Promise<void> => {
+			if (card.id === null) {
+				playSampleMap();
+				return;
 			}
 
-			savedSection.appendChild(list);
+			// The map the screen opened on is already loaded: play it rather
+			// than fetch it a second time.
+			if (defaultMapReady && this.currentMapUrl && mapKey(this.currentMapUrl) === card.key) {
+				startGameFlow();
+				return;
+			}
+
+			const {buildMapUrl} = await import('./data/MetroDreaminImporter');
+
+			void loadMapFromUrl(buildMapUrl(card.id));
 		};
+		const cards = featuredCards(this.mapLibrary.sketches());
+		const featuredSection = featuredRail(cards, (key) => {
+			const card = cards.find(c => c.key === key);
+
+			if (card) void playFeatured(card);
+		});
 
 		loadBtn.addEventListener('click', async () => {
 			const url = urlInput.value.trim();
@@ -2984,6 +3044,7 @@ export default class GameUISystem extends System {
 		playDefaultBtn.addEventListener('click', playSampleMap);
 
 		renderSavedMaps();
+		this.refreshRecents = renderSavedMaps;
 
 		startBtn.appendChild(title);
 		startBtn.appendChild(versionBadge);
@@ -2993,6 +3054,7 @@ export default class GameUISystem extends System {
 		startBtn.appendChild(this.profileUI.createStartRow());
 		startBtn.appendChild(playBtn);
 		startBtn.appendChild(statusEl);
+		startBtn.appendChild(featuredSection);
 		startBtn.appendChild(urlInput);
 		startBtn.appendChild(loadBtn);
 		startBtn.appendChild(playDefaultBtn);
@@ -3061,6 +3123,8 @@ export default class GameUISystem extends System {
 	private linkConsist: string[] | null = null;
 	/** The Play button's own flow, so a shared link starts the game identically. */
 	private startGameFlow: (() => void) | null = null;
+	/** Redraw the start screen's Recent list (set by createStartButton). */
+	private refreshRecents: (() => void) | null = null;
 	private metroMapOverlayEl: HTMLElement | null = null;
 	private metroMapMarkerTimer: number = 0;
 
@@ -3104,58 +3168,6 @@ export default class GameUISystem extends System {
 		}
 	}
 
-	/**
-	 * The places you have found, marked on the map.
-	 *
-	 * Only the ones inside this map's own bounds: the record spans every city
-	 * you have driven, and a find from London has no business on a map of
-	 * Israel. Positions are stored in world metres, so they are turned back
-	 * into lat/lng to go through the same projection the lines use.
-	 */
-	private drawFoundPlaces(
-		svg: SVGSVGElement,
-		ns: string,
-		toSvg: (lat: number, lng: number) => [number, number],
-	): void {
-		const marks = this.systemManager.getSystem(JourneySystem)?.snapshot().placeMarks ?? [];
-
-		if (marks.length === 0) return;
-
-		const group = document.createElementNS(ns, 'g');
-
-		for (const mark of marks) {
-			const ll = MathUtils.meters2degrees(mark.x, mark.z);
-			const [x, y] = toSvg(ll.lat, ll.lon);
-
-			// Off this map entirely — a find from another city.
-			if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-			if (x < -40 || y < -40 || x > 1040 || y > 740) continue;
-
-			const pin = document.createElementNS(ns, 'circle');
-
-			pin.setAttribute('cx', String(x));
-			pin.setAttribute('cy', String(y));
-			pin.setAttribute('r', '4.5');
-			pin.setAttribute('fill', '#4fd996');
-			pin.setAttribute('stroke', '#08111a');
-			pin.setAttribute('stroke-width', '2');
-			group.appendChild(pin);
-
-			const label = document.createElementNS(ns, 'text');
-
-			label.setAttribute('x', String(x + 8));
-			label.setAttribute('y', String(y + 4));
-			label.setAttribute('fill', '#bfe9d2');
-			label.setAttribute('font-size', '11');
-			// textContent, never innerHTML: these names come off other people's
-			// maps and a place called `<img onerror=…>` must be a silly name.
-			label.textContent = mark.n;
-			group.appendChild(label);
-		}
-
-		if (group.childNodes.length > 0) svg.appendChild(group);
-	}
-
 	private closeMetroMapOverlay(): void {
 		if (this.metroMapMarkerTimer) {
 			window.clearInterval(this.metroMapMarkerTimer);
@@ -3185,33 +3197,9 @@ export default class GameUISystem extends System {
 		const H = 700;
 		const PAD = 50;
 
-		// Project lat/lng → local x/y (equirectangular with latitude correction).
-		let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-		let midLatSum = 0, midLatCount = 0;
-		for (const ls of trainSystem.lines) {
-			for (const pt of ls.parsed.allPoints) {
-				midLatSum += pt.lat;
-				midLatCount++;
-			}
-		}
-		const cosLat = Math.cos((midLatSum / Math.max(1, midLatCount)) * Math.PI / 180);
-		const proj = (lat: number, lng: number): [number, number] => [lng * cosLat, -lat];
-		for (const ls of trainSystem.lines) {
-			for (const pt of ls.parsed.allPoints) {
-				const [x, y] = proj(pt.lat, pt.lng);
-				if (x < minX) minX = x; if (x > maxX) maxX = x;
-				if (y < minY) minY = y; if (y > maxY) maxY = y;
-			}
-		}
-		const spanX = Math.max(1e-9, maxX - minX);
-		const spanY = Math.max(1e-9, maxY - minY);
-		const scale = Math.min((W - 2 * PAD) / spanX, (H - 2 * PAD) / spanY);
-		const offX = (W - spanX * scale) / 2;
-		const offY = (H - spanY * scale) / 2;
-		const toSvg = (lat: number, lng: number): [number, number] => {
-			const [x, y] = proj(lat, lng);
-			return [(x - minX) * scale + offX, (y - minY) * scale + offY];
-		};
+		// Project lat/lng → local x/y — the same projection the map lists'
+		// thumbnails use (`data/MapThumbnail.ts`).
+		const toSvg = fitProjection(trainSystem.lines.flatMap(ls => ls.parsed.allPoints), W, H, PAD);
 
 		const overlay = document.createElement('div');
 		overlay.id = 'metro-map-overlay';
@@ -3367,15 +3355,31 @@ export default class GameUISystem extends System {
 			toSvg,
 		);
 
+		// Places: the ones you found, lit; the ones still to find near the
+		// line, dim (`data/Landmarks.ts` decides which, and caps them).
+		const journeyLog = this.systemManager.getSystem(JourneySystem)?.snapshot();
+		const landmarks = drawLandmarks(svg, selectLandmarks({
+			lines: trainSystem.lines.map(ls => ls.parsed.allPoints.map(p => {
+				const m = MathUtils.degrees2meters(p.lat, p.lng);
+
+				return {x: m.x, z: m.y};
+			})),
+			places: this.systemManager.getSystem(DiscoverySystem)?.loadedPlaces() ?? [],
+			marks: journeyLog?.placeMarks ?? [],
+			found: new Set(journeyLog?.places ?? []),
+		}), toSvg, {width: W, height: H});
+
 		svg.appendChild(pulse);
 		svg.appendChild(marker);
-		if (rings > 0) header.insertBefore(interchangeLegend(rings), mapTitle.nextSibling);
-
-		this.drawFoundPlaces(svg, SVG_NS, toSvg);
 
 		svgWrap.appendChild(svg);
 		overlay.appendChild(header);
 		overlay.appendChild(svgWrap);
+
+		// The keys go in a strip under the map, not in the header (see mapKeyRow).
+		const keys = mapKeyRow([rings > 0 ? interchangeLegend(rings) : null, landmarkLegend(landmarks)]);
+
+		if (keys) overlay.appendChild(keys);
 		overlay.addEventListener('click', (ev) => {
 			if (ev.target === overlay) this.closeMetroMapOverlay();
 		});
@@ -3446,6 +3450,8 @@ export default class GameUISystem extends System {
 		if (startBtn) {
 			startBtn.style.display = '';
 		}
+		// What was just driven is now the newest Recent.
+		this.refreshRecents?.();
 	}
 
 	private createDebugOverlay(): void {
