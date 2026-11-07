@@ -386,7 +386,13 @@ defects than the 824-test suite has.
       passed", charged in both driving modes)
 - [ ] Density setting (Off/Light/Normal, hard cap) + consist culling
 - [ ] Perf gate: 4×-throttle profile with AI ≥85% of no-AI
-- [ ] Ambient aircraft; ambient cars
+- [ ] Ambient aircraft — **BUILT, awaiting release** (wave 1 C, branch
+      `wave1/c-aircraft`): generated flights over any city, three cruising
+      and three low passes laid across the forward view, Settings →
+      Aeroplanes. The 2.47.0 "nothing draws" was sampling + placement, not
+      the renderer (see 07 §"Ambient aircraft: as built"). Guard:
+      `aircraftAreDrawn.test.ts`. Airports and night lights not done
+- [ ] Ambient cars
 - [ ] Local + production validation, changelog entry
 
 ## F8 — Cameras & exploration (`08-cameras-and-exploration.md`)
