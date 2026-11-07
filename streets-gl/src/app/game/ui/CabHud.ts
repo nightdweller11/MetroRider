@@ -51,6 +51,8 @@ export interface CabHudState {
 	heading?: number;
 	/** Speed permitted on each leg of the line, km/h — for the ribbon's ticks. */
 	legs?: RibbonLeg[];
+	/** Stations run through without stopping on each leg (an express). */
+	legSkips?: number[];
 	/** A circle line has no end, and the strip says so. */
 	isLoop?: boolean;
 	doorsOpen: boolean;
@@ -163,6 +165,11 @@ const CSS = `
   font-weight:700;letter-spacing:.06em;color:#ffe2a8;white-space:nowrap;
   background:linear-gradient(180deg,rgba(255,180,58,.2),rgba(255,180,58,.06));
   box-shadow:inset 0 0 0 1px rgba(255,180,58,.3)}
+/* A leg an express runs straight through: a hollow ring on the line, the
+   timetable-map mark for "passes, does not stop". */
+.cab-rib .sg.skip{position:relative}
+.cab-rib .sg.skip::after{content:'';position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-4px 0 0 -4px;
+  border-radius:50%;background:#0c1219;box-shadow:0 0 0 1.5px #8fa3b7}
 .cab-rib .st{width:8px;height:8px;border-radius:50%;background:#b9c9d9;margin:0 -3px;box-shadow:0 0 0 2px #0c1219}
 .cab-rib .st.now{width:14px;height:14px;background:radial-gradient(circle at 50% 35%,#ffd489,var(--amber));
   box-shadow:0 0 0 3px #0c1219,0 0 14px rgba(255,180,58,.9)}
@@ -856,10 +863,10 @@ export default class CabHud {
 	private renderRibbon(s: CabHudState): void {
 		if (!this.ribbonEl) return;
 
-		const view = buildRibbon(s.stopCount, s.stopIndex, s.legs ?? []);
+		const view = buildRibbon(s.stopCount, s.stopIndex, s.legs ?? [], s.legSkips ?? []);
 		// The shape changes with the line, and the pace bands with it, so the
 		// key covers both rather than the dot count alone.
-		const key = `${view.dots}|${view.legPace.join('')}|${s.isLoop ? 'o' : ''}|${view.compressed ? 'c' : ''}`;
+		const key = `${view.dots}|${view.legPace.join('')}|${view.legSkips.join(',')}|${s.isLoop ? 'o' : ''}|${view.compressed ? 'c' : ''}`;
 
 		if (key !== this.lastRibbonKey) {
 			this.lastRibbonKey = key;
@@ -867,7 +874,13 @@ export default class CabHud {
 			let html = '';
 
 			for (let i = 0; i < view.dots; i++) {
-				if (i > 0) html += `<span class="sg ${view.legPace[i - 1] ?? ''}"></span>`;
+				if (i > 0) {
+					const skips = view.legSkips[i - 1] ?? 0;
+
+					html += skips > 0
+						? `<span class="sg ${view.legPace[i - 1] ?? ''} skip" title="Runs through ${skips} station${skips === 1 ? '' : 's'} without stopping"></span>`
+						: `<span class="sg ${view.legPace[i - 1] ?? ''}"></span>`;
+				}
 				html += '<span class="st"></span>';
 			}
 

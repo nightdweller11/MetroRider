@@ -20,6 +20,18 @@ export interface LineData {
   stationIds: string[];
   /** What kind of service this is, when the source map says. */
   mode?: LineMode;
+  /** The map's line group (MetroDreamin `lineGroupId`): branches of one service. */
+  groupId?: string;
+  /** The group's own label ("A"), when the map gives one. */
+  groupLabel?: string;
+  /**
+   * Stations on this line's path it runs THROUGH without calling — the
+   * express pattern (MetroDreamin `waypointOverrides`, cleaned; see
+   * `ServicePatterns.effectiveSkips`).
+   */
+  skipStationIds?: string[];
+  /** The map's author marked this line an express (name or diamond bullet). */
+  express?: boolean;
 }
 
 export interface MetroMapData {
@@ -47,6 +59,22 @@ export interface ParsedLine {
   isLoop: boolean;
   /** For each entry of `stations`, its index into `allPoints`. */
   stationPointIndices: number[];
+  groupId?: string;
+  groupLabel?: string;
+  /** The map's author marked this line an express. */
+  express?: boolean;
+  /**
+   * Real stations on the path this service runs through without stopping.
+   *
+   * Kept OUT of `stations`, deliberately: everything that asks "where does
+   * this train stop" — the stop detector, the timetable, the passengers, the
+   * other trains, the interchange index — reads `stations`, so an express
+   * that skips a station gets no stop, no due time and no waiting crowd
+   * there without any of them having to learn a new rule.
+   */
+  skipped: StationData[];
+  /** For each entry of `skipped`, its index into `allPoints`. */
+  skippedPointIndices: number[];
 }
 
 /** Endpoints closer than this (meters) are treated as a closed loop. */
@@ -97,16 +125,37 @@ export function parseMetroMap(data: MetroMapData): ParsedLine[] {
       }
     }
 
-    const stations: StationData[] = [];
-    const stationPointIndices: number[] = [];
+    let stations: StationData[] = [];
+    let stationPointIndices: number[] = [];
+    const skipped: StationData[] = [];
+    const skippedPointIndices: number[] = [];
+    const skip = new Set(line.skipStationIds ?? []);
     for (let i = 0; i < allPoints.length; i++) {
       const p = allPoints[i];
       if (p.isWaypoint) continue;
       // On a loop the closing point revisits the first station — it is the
       // same stop, not a second one.
       if (isLoop && i === allPoints.length - 1 && p.id === allPoints[0].id) continue;
+      if (skip.has(p.id)) {
+        skipped.push(p);
+        skippedPointIndices.push(i);
+        continue;
+      }
       stations.push(p);
       stationPointIndices.push(i);
+    }
+
+    // A skip list that would leave fewer than two stops is not a service
+    // pattern, it is a broken one: run the line all-stops instead.
+    if (skipped.length > 0 && stations.length < 2) {
+      const merged = [
+        ...stations.map((st, k) => ({st, at: stationPointIndices[k]})),
+        ...skipped.map((st, k) => ({st, at: skippedPointIndices[k]})),
+      ].sort((a, b) => a.at - b.at);
+      stations = merged.map(m => m.st);
+      stationPointIndices = merged.map(m => m.at);
+      skipped.length = 0;
+      skippedPointIndices.length = 0;
     }
 
     if (stations.length < 2) {
@@ -122,6 +171,11 @@ export function parseMetroMap(data: MetroMapData): ParsedLine[] {
       allPoints,
       isLoop,
       stationPointIndices,
+      groupId: line.groupId,
+      groupLabel: line.groupLabel,
+      express: line.express,
+      skipped,
+      skippedPointIndices,
     };
   });
 }

@@ -1,0 +1,1342 @@
+{
+"systemDocData": {
+"title": "Israel railways רכבת ישראל 🚉🇮🇱(plus extensions וקוים ותחנות חדשים)"
+},
+"fullSystem": {
+"map": {
+"stations": {
+"0": {
+"id": "0",
+"lat": 31.67616,
+"lng": 34.60445,
+"name": "Ashkelon A2 C7 אשקלון AKL"
+},
+"1": {
+"id": "1",
+"lat": 31.77384,
+"lng": 34.66622,
+"name": "Ashdod ad halom A5 אשדוד עד הלום ADD"
+},
+"38": {
+"id": "38",
+"lat": 31.89108,
+"lng": 34.73118,
+"name": "Yavne west יבנה מערב YNW"
+},
+"104": {
+"id": "104",
+"lat": 31.98782,
+"lng": 34.75742,
+"name": "Rishon letsiyyon moshe dayan A3 ראשון לציון משה דיין RLM"
+},
+"186": {
+"id": "186",
+"lat": 32.00085,
+"lng": 34.75935,
+"name": "Bat Yam Komemuyot בת ים קוממיות BYK"
+},
+"192": {
+"id": "192",
+"lat": 32.03517,
+"lng": 34.75966,
+"name": "Holon Wolfson חולון וולפסון HLW"
+},
+"301": {
+"id": "301",
+"lat": 32.07345,
+"lng": 34.79323,
+"name": "Tel aviv hashalom תל אביב השלום THS"
+},
+"352": {
+"id": "352",
+"lat": 32.05409,
+"lng": 34.78483,
+"name": "Tel Aviv Hahagana A4 תל אביב ההגנה THG"
+},
+"354": {
+"id": "354",
+"lat": 32.08407,
+"lng": 34.79843,
+"name": "Tel aviv savidor central C6 B4 E3 P2 תל אביב סבידור מרכז TSC"
+},
+"370": {
+"id": "370",
+"lat": 32.10394,
+"lng": 34.80481,
+"name": "Tel aviv university תל אביב האוניברסיטה TUN"
+},
+"382": {
+"id": "382",
+"lat": 32.10285,
+"lng": 34.831,
+"name": "Bne Brak בני ברק BNB"
+},
+"383": {
+"id": "383",
+"lat": 32.1063,
+"lng": 34.86286,
+"name": "Petah Tikva kiryat arye פתח תקווה קרית אריה PKA"
+},
+"384": {
+"id": "384",
+"lat": 32.11188,
+"lng": 34.90116,
+"name": "Petah Tikva segula פתח תקווה סגולה PTS"
+},
+"385": {
+"id": "385",
+"lat": 32.12076,
+"lng": 34.93442,
+"name": "Rosh ha’ayin north ראש העין צפון RAN"
+},
+"386": {
+"id": "386",
+"lat": 32.16753,
+"lng": 34.91659,
+"name": "Kfar Saba כפר סבא KFS"
+},
+"387": {
+"id": "387",
+"lat": 32.17007,
+"lng": 34.90182,
+"name": "Hod hasharon הוד השרון HHS"
+},
+"388": {
+"id": "388",
+"lat": 32.17262,
+"lng": 34.88659,
+"name": "Kfar Saba - Raanana כפר סבא - רעננה KSR"
+},
+"389": {
+"id": "389",
+"lat": 32.17992,
+"lng": 34.85104,
+"name": "Raanana רעננה RNN"
+},
+"390": {
+"id": "390",
+"lat": 32.16392,
+"lng": 34.81753,
+"name": "Herzliya A1 J1 הרצליה HZL"
+},
+"582": {
+"id": "582",
+"lat": 31.24294,
+"lng": 34.79842,
+"name": "Be’er-Sheva merkaz B2 C2 D2 E2 K3 באר שבע מרכז BSC"
+},
+"583": {
+"id": "583",
+"lat": 31.262,
+"lng": 34.80957,
+"name": "Be’er sheva north university K1 באר שבע צפון האוניברסיטה BSN"
+},
+"636": {
+"id": "636",
+"lat": 31.32161,
+"lng": 34.63431,
+"name": "Ofakim אופקים OKM"
+},
+"783": {
+"id": "783",
+"lat": 31.41067,
+"lng": 34.57182,
+"name": "Netivot נתיבות NTV"
+},
+"884": {
+"id": "884",
+"lat": 31.51588,
+"lng": 34.58542,
+"name": "Sderot שדרות SDR"
+},
+"1078": {
+"id": "1078",
+"lat": 31.86137,
+"lng": 34.74401,
+"name": "Yavne east יבנה מזרח YNE"
+},
+"1091": {
+"id": "1091",
+"lat": 32.01451,
+"lng": 34.76198,
+"name": "Bat Yam Yoseftal בת ים יוספטל BYY"
+},
+"1099": {
+"id": "1099",
+"lat": 32.03712,
+"lng": 34.77654,
+"name": "Holon Junction צומת חולון HLJ"
+},
+"1103": {
+"id": "1103",
+"lat": 31.90917,
+"lng": 34.80696,
+"name": "Rehovot C3 רחובות RHV"
+},
+"1234": {
+"id": "1234",
+"lat": 31.93247,
+"lng": 34.83057,
+"name": "Be’er  Ya’akov באר יעקב BYK"
+},
+"1298": {
+"id": "1298",
+"lat": 31.94745,
+"lng": 34.87791,
+"name": "Lod C4 P1 לוד LOD"
+},
+"1347": {
+"id": "1347",
+"lat": 31.967,
+"lng": 34.87873,
+"name": "Lod Ganei Aviv C5 לוד גני אביב LGA"
+},
+"1375": {
+"id": "1375",
+"lat": 31.99286,
+"lng": 34.85333,
+"name": "Kfar Chabad כפר חב”ד KHB"
+},
+"1422": {
+"id": "1422",
+"lat": 32.26262,
+"lng": 34.86024,
+"name": "Beit Yehoshuha בית יהושוע BYS"
+},
+"1449": {
+"id": "1449",
+"lat": 32.27956,
+"lng": 34.86548,
+"name": "Netanya Sapir נתניה ספיר NSP"
+},
+"1450": {
+"id": "1450",
+"lat": 32.31996,
+"lng": 34.86931,
+"name": "Netanya B1 נתניה NTN"
+},
+"1463": {
+"id": "1463",
+"lat": 32.43837,
+"lng": 34.89935,
+"name": "Hadera West חדרה מערב HDW"
+},
+"1579": {
+"id": "1579",
+"lat": 32.48526,
+"lng": 34.95416,
+"name": "Caesarea Pardes Hana קיסריה פרדס חנה CPH"
+},
+"1580": {
+"id": "1580",
+"lat": 32.51455,
+"lng": 34.94964,
+"name": "Binyamina C1 H2 בנימינה BNM"
+},
+"1596": {
+"id": "1596",
+"lat": 31.92924,
+"lng": 34.87684,
+"name": "Ramla רמלה RML"
+},
+"1627": {
+"id": "1627",
+"lat": 31.3698,
+"lng": 34.798,
+"name": "Lehavim Rahat להבים רהט LRT"
+},
+"1655": {
+"id": "1655",
+"lat": 31.60313,
+"lng": 34.77797,
+"name": "Kiryat Gat קריית גת KRG I1"
+},
+"1861": {
+"id": "1861",
+"lat": 31.74696,
+"lng": 34.82251,
+"name": "Kiryat Mal’achi Yoav קריית מלאכי יואב KMY"
+},
+"1966": {
+"id": "1966",
+"lat": 31.84213,
+"lng": 34.8563,
+"name": "Mazkeret Batya מזכרת בתיה MZB"
+},
+"2104": {
+"id": "2104",
+"lat": 31.7578,
+"lng": 34.98938,
+"name": "Bet Shemesh B3 בית שמש BSE"
+},
+"2352": {
+"id": "2352",
+"lat": 32.69277,
+"lng": 34.94021,
+"name": "Atlit עתלית ATL"
+},
+"2426": {
+"id": "2426",
+"lat": 32.56736,
+"lng": 34.93273,
+"name": "Zikhron Ya’akov זיכרון יעקב ZYK"
+},
+"2437": {
+"id": "2437",
+"lat": 32.63944,
+"lng": 34.93093,
+"name": "Habonim הבונים HBN"
+},
+"2468": {
+"id": "2468",
+"lat": 32.79352,
+"lng": 34.95737,
+"name": "Haifa Hof Hakarmel G2 חיפה חוף הכרמל HHC"
+},
+"2488": {
+"id": "2488",
+"lat": 32.7503,
+"lng": 34.95252,
+"name": "Hahoterim החותרים HHT"
+},
+"2499": {
+"id": "2499",
+"lat": 32.83036,
+"lng": 34.98178,
+"name": "Haifa Bat Galim חיפה בת גלים HBG"
+},
+"2545": {
+"id": "2545",
+"lat": 32.82232,
+"lng": 34.99733,
+"name": "Haifa HaShmona Center H3 חיפה מרכז השמונה HCH"
+},
+"2562": {
+"id": "2562",
+"lat": 32.79391,
+"lng": 35.03707,
+"name": "Hamifratz Central - HaKrayot Line G3 מרכזית המפרץ קו הקריות HMC"
+},
+"2606": {
+"id": "2606",
+"lat": 32.82485,
+"lng": 35.06414,
+"name": "Kiryat Haim קריית חיים KYH"
+},
+"2618": {
+"id": "2618",
+"lat": 32.80949,
+"lng": 35.05432,
+"name": "Hutzot Hamifratz חוצות המפרץ HHM"
+},
+"2645": {
+"id": "2645",
+"lat": 32.83296,
+"lng": 35.06991,
+"name": "Kiryat Motzkin קריית מוצקין KYM"
+},
+"2686": {
+"id": "2686",
+"lat": 32.91161,
+"lng": 35.17348,
+"name": "Achihud אחיהוד AHH"
+},
+"2784": {
+"id": "2784",
+"lat": 32.92433,
+"lng": 35.29691,
+"name": "Karmiel D1 G1 כרמיאל KML"
+},
+"2865": {
+"id": "2865",
+"lat": 32.92819,
+"lng": 35.08307,
+"name": "Acre אכו ACR"
+},
+"2900": {
+"id": "2900",
+"lat": 33.00494,
+"lng": 35.09887,
+"name": "Nahariya E1 F1 נהריה NHR"
+},
+"3054": {
+"id": "3054",
+"lat": 32.00036,
+"lng": 34.8705,
+"name": "Ben Gurion Airport (TLV) נתב”ג BGN"
+},
+"3098": {
+"id": "3098",
+"lat": 31.89304,
+"lng": 34.96066,
+"name": "Pa’atei Modi’in פאתי מודיעין PTM"
+},
+"3216": {
+"id": "3216",
+"lat": 31.90103,
+"lng": 35.00572,
+"name": "Modi’in Central F2 M1 P3 מודיעין מרכז MDC"
+},
+"3290": {
+"id": "3290",
+"lat": 32.79284,
+"lng": 35.03314,
+"name": "Hamifratz Central - HaEmek Line מרכזית המפרץ קו העמק HMC"
+},
+"3311": {
+"id": "3311",
+"lat": 32.68063,
+"lng": 35.12626,
+"name": "Kfar Yehoshuha Yokneam כפר יהושוע יוקנים KYY"
+},
+"3479": {
+"id": "3479",
+"lat": 32.64719,
+"lng": 35.2095,
+"name": "Migdal HaEmek Kfar Baruch מגדל העמק כפר ברוך MDE"
+},
+"3539": {
+"id": "3539",
+"lat": 32.6219,
+"lng": 35.29537,
+"name": "Afula עפולה APL"
+},
+"3591": {
+"id": "3591",
+"lat": 32.51471,
+"lng": 35.48851,
+"name": "Beit Shean H1 בית שען BSA"
+},
+"3776": {
+"id": "3776",
+"lat": 31.78806,
+"lng": 35.20354,
+"name": "Jerusalem Yitzhak Navon J2 M2 ירושלים יצחק נבון JYN"
+},
+"3916": {
+"id": "3916",
+"lat": 31.06881,
+"lng": 35.01173,
+"name": "Dimona K2 דימונה DMA"
+},
+"4163": {
+"id": "4163",
+"lat": 31.94872,
+"lng": 34.80324,
+"name": "Rishon Letsiyyon Harishonim ראשון לציון הראשונים RLR"
+},
+"4237": {
+"id": "4237",
+"lat": 32.62308,
+"lng": 34.64489,
+"name": "israel railways רכבת ישראל"
+},
+"4238": {
+"id": "4238",
+"lat": 32.57574,
+"lng": 34.65185,
+"name": "just enjoy the ride פשוט להנות מהדרך"
+},
+"4557": {
+"id": "4557",
+"lat": 32.21189,
+"lng": 34.8379,
+"name": "Shefayim שפיים SHF"
+},
+"4575": {
+"id": "4575",
+"lat": 32.22978,
+"lng": 34.97707,
+"name": "Tira - Kochav Yair טירה  - כוכב יאיר TKY"
+},
+"4634": {
+"id": "4634",
+"lat": 32.2768,
+"lng": 34.99678,
+"name": "Shomron - Tayyiba שומרון - טייבה STB"
+},
+"4673": {
+"id": "4673",
+"lat": 31.95577,
+"lng": 34.77691,
+"name": "Meuyan Sorek מעוין שורק MUS"
+},
+"4710": {
+"id": "4710",
+"lat": 32.44454,
+"lng": 34.95064,
+"name": "Hadera East חדרה מזרח HDE"
+},
+"4861": {
+"id": "4861",
+"lat": 31.91553,
+"lng": 34.86599,
+"name": "Ramla South רמלה דרום RLS"
+},
+"4930": {
+"id": "4930",
+"lat": 32.06466,
+"lng": 34.93357,
+"name": "Elad אלעד ELD"
+},
+"4936": {
+"id": "4936",
+"lat": 32.10461,
+"lng": 34.93477,
+"name": "Rosh Ha’ayin South ראש העין דרום RAS"
+},
+"4968": {
+"id": "4968",
+"lat": 31.99027,
+"lng": 34.90658,
+"name": "Shoham - Airport שוהם - תעופה SHA"
+},
+"4999": {
+"id": "4999",
+"lat": 32.79303,
+"lng": 35.03417,
+"name": "Hamifratz Central  - Terminating I2 מרכזית המפרץ - מסתיימת HMC"
+},
+"5039": {
+"id": "5039",
+"lat": 31.31499,
+"lng": 34.89549,
+"name": "Lakiya - Karmit לקיה- כרמית LKK"
+},
+"5051": {
+"id": "5051",
+"lat": 31.29198,
+"lng": 34.92353,
+"name": "Hura חורה HUR"
+},
+"5151": {
+"id": "5151",
+"lat": 31.25614,
+"lng": 35.08101,
+"name": "Kuseife כוסייפה KSF"
+},
+"5198": {
+"id": "5198",
+"lat": 31.25753,
+"lng": 35.20956,
+"name": "Arad ארד ARD"
+}
+},
+"lines": {
+"0": {
+"mode": "REGIONAL",
+"color": "#e6194b",
+"name": "A1 - A2 Sharon Local - Ayalon Local",
+"stationIds": [
+"390",
+"389",
+"388",
+"387",
+"386",
+"385",
+"384",
+"383",
+"382",
+"370",
+"354",
+"301",
+"352",
+"1099",
+"192",
+"1091",
+"186",
+"104",
+"38",
+"1",
+"0"
+],
+"id": "0",
+"lineGroupId": "2"
+},
+"1": {
+"waypointOverrides": [
+"1234",
+"1347"
+],
+"stationIds": [
+"1450",
+"1449",
+"1422",
+"4557",
+"390",
+"370",
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1234",
+"1103",
+"1078",
+"1",
+"0",
+"884",
+"783",
+"636",
+"583",
+"582"
+],
+"mode": "REGIONAL",
+"lineGroupId": "3",
+"id": "1",
+"color": "#42d4f4",
+"name": "B1 - B2 Beach Local - Beersheba West Local",
+"icon": "circle"
+},
+"4": {
+"lineGroupId": "4",
+"id": "4",
+"mode": "REGIONAL",
+"stationIds": [
+"0",
+"884",
+"783",
+"636",
+"583",
+"582"
+],
+"color": "#4363d8",
+"name": "C2 - C7 Beersheba West Local - Part Route"
+},
+"8": {
+"id": "8",
+"name": "A1 - A3 Sharon Local - Ayalon Local",
+"color": "#e6194b",
+"lineGroupId": "2",
+"mode": "REGIONAL",
+"stationIds": [
+"390",
+"389",
+"388",
+"387",
+"386",
+"385",
+"384",
+"383",
+"382",
+"370",
+"354",
+"301",
+"352",
+"1099",
+"192",
+"1091",
+"186",
+"104"
+],
+"waypointOverrides": []
+},
+"9": {
+"mode": "REGIONAL",
+"lineGroupId": "2",
+"id": "9",
+"waypointOverrides": [],
+"name": "A1 - A4 Sharon Local - Ayalon Local",
+"stationIds": [
+"390",
+"389",
+"388",
+"387",
+"386",
+"385",
+"384",
+"383",
+"382",
+"370",
+"354",
+"301",
+"352"
+],
+"color": "#e6194b"
+},
+"10": {
+"lineGroupId": "2",
+"mode": "REGIONAL",
+"waypointOverrides": [
+"186",
+"1091",
+"192",
+"1099"
+],
+"icon": "diamond",
+"name": "A1 - A5 - Sharon Local - Ayalon Express",
+"id": "10",
+"stationIds": [
+"390",
+"389",
+"388",
+"387",
+"386",
+"385",
+"384",
+"383",
+"382",
+"370",
+"354",
+"301",
+"352",
+"1099",
+"192",
+"1091",
+"186",
+"104",
+"38",
+"1"
+],
+"color": "#e6194b"
+},
+"12": {
+"icon": "circle",
+"name": "C1 - C2 Beach Local - Beersheba West Local",
+"lineGroupId": "4",
+"stationIds": [
+"1580",
+"1579",
+"1463",
+"1450",
+"1449",
+"1422",
+"4557",
+"390",
+"370",
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1234",
+"1103",
+"1078",
+"1",
+"0",
+"884",
+"783",
+"636",
+"583",
+"582"
+],
+"color": "#4363d8",
+"id": "12",
+"mode": "REGIONAL",
+"waypointOverrides": []
+},
+"13": {
+"id": "13",
+"color": "#4363d8",
+"mode": "REGIONAL",
+"lineGroupId": "4",
+"waypointOverrides": [],
+"stationIds": [
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298"
+],
+"name": "C6 - C4 Part Route"
+},
+"14": {
+"mode": "REGIONAL",
+"id": "14",
+"waypointOverrides": [],
+"lineGroupId": "4",
+"stationIds": [
+"354",
+"301",
+"352",
+"1375",
+"1347"
+],
+"name": "C6 - C5 Part Route",
+"color": "#4363d8"
+},
+"15": {
+"color": "#4363d8",
+"name": "C1 - C3 Beach Local - Part Route",
+"stationIds": [
+"1580",
+"1579",
+"1463",
+"1450",
+"1449",
+"1422",
+"4557",
+"390",
+"370",
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1234",
+"1103"
+],
+"id": "15",
+"waypointOverrides": [],
+"lineGroupId": "4",
+"mode": "REGIONAL"
+},
+"16": {
+"mode": "REGIONAL",
+"stationIds": [
+"2784",
+"2686",
+"2645",
+"2606",
+"2618",
+"2562",
+"2545",
+"2499",
+"2468",
+"2488",
+"2352",
+"2437",
+"2426",
+"1580",
+"1579",
+"1463",
+"1450",
+"1449",
+"1422",
+"4557",
+"390",
+"370",
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1596",
+"1966",
+"1861",
+"1655",
+"1627",
+"583",
+"582"
+],
+"waypointOverrides": [
+"1596",
+"1966",
+"1861",
+"1627",
+"1347",
+"1375",
+"1422",
+"1449",
+"1579",
+"2606",
+"2618",
+"1864",
+"4557",
+"2488",
+"2488",
+"2426",
+"2437"
+],
+"color": "#f58231",
+"id": "16",
+"icon": "diamond",
+"name": "D1 - D2 Beach Express - Beersheba East Express",
+"lineGroupId": "5"
+},
+"18": {
+"stationIds": [
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1596",
+"2104"
+],
+"color": "#42d4f4",
+"mode": "REGIONAL",
+"lineGroupId": "3",
+"id": "18",
+"name": "B4 - B3 Bet Shemesh Local - Part Route",
+"waypointOverrides": [
+"1347"
+]
+},
+"19": {
+"stationIds": [
+"2900",
+"2865",
+"2645",
+"2606",
+"2618",
+"2562",
+"2545",
+"2499",
+"2468",
+"2488",
+"2352",
+"2437",
+"2426",
+"1580",
+"1579",
+"1463",
+"1450",
+"1449",
+"1422",
+"4557",
+"390",
+"370",
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1596",
+"1966",
+"1861",
+"1655",
+"1627",
+"583",
+"582"
+],
+"color": "#3cb44b",
+"name": "E1 - E2 Beach Express - Beersheba East Local",
+"icon": "diamond",
+"lineGroupId": "6",
+"id": "19",
+"waypointOverrides": [
+"1347",
+"1375",
+"1422",
+"1449",
+"1463",
+"1579",
+"2606",
+"2618",
+"1864",
+"4557",
+"2488",
+"2426",
+"2437"
+],
+"mode": "REGIONAL"
+},
+"20": {
+"id": "20",
+"waypointOverrides": [
+"1347",
+"1375",
+"1864"
+],
+"color": "#3cb44b",
+"name": "E3 - E2 Beersheba East Local - Part Route",
+"lineGroupId": "6",
+"mode": "REGIONAL",
+"stationIds": [
+"354",
+"301",
+"352",
+"1375",
+"1347",
+"1298",
+"1596",
+"1966",
+"1861",
+"1655",
+"1627",
+"583",
+"582"
+]
+},
+"22": {
+"stationIds": [
+"2784",
+"2686",
+"2645",
+"2606",
+"2618",
+"2562",
+"2545",
+"2499",
+"2468"
+],
+"waypointOverrides": [
+"1347",
+"1375"
+],
+"id": "22",
+"name": "G1 - G2 Karmiel Local - Haifa Local",
+"color": "#f032e6",
+"mode": "REGIONAL",
+"lineGroupId": "8"
+},
+"23": {
+"color": "#f032e6",
+"stationIds": [
+"2784",
+"2686",
+"2645",
+"2606",
+"2618",
+"2562"
+],
+"name": "G1 - G3 Karmiel Local - Part Route",
+"lineGroupId": "8",
+"id": "23",
+"waypointOverrides": [
+"1347",
+"1375"
+],
+"mode": "REGIONAL"
+},
+"24": {
+"id": "24",
+"color": "#bfef45",
+"mode": "REGIONAL",
+"stationIds": [
+"3216",
+"3098",
+"3054",
+"352",
+"301",
+"354",
+"370",
+"390",
+"4557",
+"1422",
+"1449",
+"1450",
+"1463",
+"1579",
+"1580",
+"2426",
+"2437",
+"2352",
+"2488",
+"2468",
+"2499",
+"2545",
+"2562",
+"2618",
+"2606",
+"2645",
+"2865",
+"2900"
+],
+"waypointOverrides": [
+"1579",
+"1463",
+"1449",
+"1422",
+"4557",
+"2488",
+"2437",
+"2426"
+],
+"icon": "diamond",
+"name": "F1 - F2 Beach Express - Modi’in Local",
+"lineGroupId": "7"
+},
+"25": {
+"mode": "REGIONAL",
+"color": "#911eb4",
+"stationIds": [
+"3591",
+"3539",
+"3479",
+"3311",
+"3290",
+"2545",
+"2499",
+"2468",
+"2488",
+"2352",
+"2437",
+"2426",
+"1580"
+],
+"name": "H1 - H2 Haifa Local - Bet Shean Local",
+"lineGroupId": "9",
+"waypointOverrides": [],
+"id": "25"
+},
+"27": {
+"icon": "diamond",
+"name": "H1 - H3 Haifa Express - Bet Shean Local",
+"color": "#911eb4",
+"waypointOverrides": [
+"3290"
+],
+"id": "27",
+"mode": "REGIONAL",
+"stationIds": [
+"3591",
+"3539",
+"3479",
+"3311",
+"3290",
+"2545"
+],
+"lineGroupId": "9"
+},
+"28": {
+"mode": "REGIONAL",
+"id": "28",
+"stationIds": [
+"3776",
+"3054",
+"352",
+"301",
+"354",
+"370",
+"390"
+],
+"color": "#bf65bb",
+"name": "J1 - J2 Ayalon Local - Jerusalem Highspeed",
+"lineGroupId": "10"
+},
+"29": {
+"color": "#f58231",
+"lineGroupId": "11",
+"icon": "circle",
+"stationIds": [
+"583",
+"3916"
+],
+"id": "29",
+"name": "K1 - K2 Beersheba City Local - Dimona Shuttle",
+"waypointOverrides": [],
+"mode": "REGIONAL"
+},
+"30": {
+"name": "M1 - M2 Modi’in Local - Jerusalem Local",
+"id": "30",
+"color": "#9a6324",
+"lineGroupId": "12",
+"mode": "REGIONAL",
+"stationIds": [
+"3216",
+"3098",
+"3776"
+]
+},
+"31": {
+"color": "#911eb4",
+"lineGroupId": "13",
+"stationIds": [
+"1298",
+"1234",
+"4163",
+"4673",
+"104",
+"186",
+"1091",
+"192",
+"1099",
+"352",
+"301",
+"354"
+],
+"name": "P1 - P2 Lod Local - 431 Train Local",
+"waypointOverrides": [],
+"id": "31",
+"mode": "REGIONAL"
+},
+"32": {
+"color": "#4363d8",
+"lineGroupId": "14",
+"id": "32",
+"name": "Blue Line - Top Straight",
+"waypointOverrides": [],
+"stationIds": [],
+"mode": "REGIONAL"
+},
+"33": {
+"id": "33",
+"mode": "REGIONAL",
+"lineGroupId": "14",
+"stationIds": [],
+"color": "#4363d8",
+"name": "Blue Line - Bottom Curved"
+},
+"34": {
+"color": "#4363d8",
+"lineGroupId": "14",
+"name": "Blue Line - Top Curved",
+"stationIds": [
+"4237"
+],
+"id": "34",
+"mode": "REGIONAL"
+},
+"35": {
+"stationIds": [
+"4238"
+],
+"waypointOverrides": [],
+"color": "#4363d8",
+"mode": "REGIONAL",
+"id": "35",
+"lineGroupId": "14",
+"name": "Blue Line - Bottom Straight"
+},
+"37": {
+"color": "#bfef45",
+"stationIds": [
+"4999",
+"2545",
+"2499",
+"2468",
+"2488",
+"2352",
+"2437",
+"2426",
+"1580",
+"1579",
+"4710",
+"4634",
+"4575",
+"385",
+"4936",
+"4930",
+"4968",
+"1298",
+"1596",
+"1966",
+"1861",
+"1655"
+],
+"id": "37",
+"waypointOverrides": [],
+"name": "I1 - I2 Beersheba East Local - Eastern Local",
+"lineGroupId": "16",
+"mode": "REGIONAL"
+},
+"40": {
+"name": "P2 - P3 Ayalon Local - 431 Train Local",
+"id": "40",
+"waypointOverrides": [],
+"lineGroupId": "13",
+"mode": "REGIONAL",
+"color": "#911eb4",
+"stationIds": [
+"3216",
+"3098",
+"4861",
+"4163",
+"4673",
+"104",
+"186",
+"1091",
+"192",
+"1099",
+"352",
+"301",
+"354"
+]
+},
+"41": {
+"icon": "solid",
+"name": "K3-K4 Beersheba Local Arad Local",
+"lineGroupId": "11",
+"stationIds": [
+"5198",
+"5151",
+"5051",
+"5039",
+"583",
+"582"
+],
+"waypointOverrides": [],
+"color": "#f58231",
+"id": "41",
+"mode": "REGIONAL"
+}
+},
+"interchanges": {
+"0": {
+"hasLines": [
+"25",
+"16",
+"19",
+"22",
+"23",
+"24"
+],
+"id": "0",
+"stationIds": [
+"3290",
+"4999",
+"2562"
+]
+}
+},
+"lineGroups": {
+"2": {
+"label": "A",
+"id": "2"
+},
+"3": {
+"label": "B",
+"id": "3"
+},
+"4": {
+"label": "C",
+"id": "4"
+},
+"5": {
+"label": "D",
+"id": "5"
+},
+"6": {
+"id": "6",
+"label": "E"
+},
+"7": {
+"label": "F",
+"id": "7"
+},
+"8": {
+"id": "8",
+"label": "G"
+},
+"9": {
+"label": "H",
+"id": "9"
+},
+"10": {
+"id": "10",
+"label": "J"
+},
+"11": {
+"id": "11",
+"label": "K"
+},
+"12": {
+"label": "M",
+"id": "12"
+},
+"13": {
+"id": "13",
+"label": "P"
+},
+"14": {
+"id": "14",
+"label": "symbol  סמל"
+},
+"16": {
+"label": "I",
+"id": "16"
+}
+}
+}
+}
+}

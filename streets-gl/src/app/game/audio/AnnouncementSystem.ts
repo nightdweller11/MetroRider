@@ -63,12 +63,26 @@ export default class AnnouncementSystem extends System {
 	}
 
 	/** Pulling away — what is coming up. */
-	public announceNext(name: string): void {
+	public announceNext(name: string, passing: string[] = []): void {
 		const stop = this.speakable(name);
 
 		if (!stop) return;
 
-		this.speakAfter(`The next station is ${stop}.`, 0);
+		// An express names what it runs through, the way a real one does:
+		// "This train does not stop at Bat Yam Komemuyot or Holon Junction."
+		// Four at most — past that it is a list, not an announcement.
+		const skipped = passing.map(p => this.speakable(p)).filter(Boolean);
+		let tail = '';
+
+		if (skipped.length === 1) {
+			tail = ` This train does not stop at ${skipped[0]}.`;
+		} else if (skipped.length > 1 && skipped.length <= 4) {
+			tail = ` This train does not stop at ${skipped.slice(0, -1).join(', ')} or ${skipped[skipped.length - 1]}.`;
+		} else if (skipped.length > 4) {
+			tail = ` This train runs non-stop through ${skipped.length} stations.`;
+		}
+
+		this.speakAfter(`The next station is ${stop}.${tail}`, 0);
 	}
 
 	public announceDoors(open: boolean): void {

@@ -1,5 +1,6 @@
 import type { MetroMapData, LineData } from './RouteParser';
 import { parseLineMode } from './LineModes';
+import { authorMarkedExpress, effectiveSkips } from './ServicePatterns';
 
 const CORS_PROXIES = [
   (url: string): string => `/api/metrodreamin/view/${extractMapId(url)}`,
@@ -89,6 +90,15 @@ interface MDLine {
   stationIds: string[];
   mode?: string;
   lineGroupId?: string;
+  /** Stations this line runs through without calling — its express pattern. */
+  waypointOverrides?: unknown;
+  /** Bullet shape; 'diamond' is the express bullet. */
+  icon?: string;
+}
+
+interface MDLineGroup {
+  id?: string;
+  label?: string;
 }
 
 interface MDFullSystem {
@@ -96,6 +106,7 @@ interface MDFullSystem {
     stations: Record<string, MDStation>;
     lines: Record<string, MDLine>;
     interchanges?: Record<string, unknown>;
+    lineGroups?: Record<string, MDLineGroup>;
   };
 }
 
@@ -204,6 +215,8 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
   }
 
   const lines: LineData[] = [];
+  const lineGroups = fullSystem.map.lineGroups ?? {};
+  let skippingLines = 0;
 
   for (const [, line] of Object.entries(mdLines)) {
     if (!line.stationIds || !Array.isArray(line.stationIds)) {
@@ -223,12 +236,25 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
       continue;
     }
 
+    const realIds = validStationIds.filter(id => !mdStations[id]?.isWaypoint);
+    const skipStationIds = effectiveSkips(realIds, line.waypointOverrides);
+    const groupId = line.lineGroupId !== undefined && line.lineGroupId !== null && String(line.lineGroupId) !== ''
+      ? String(line.lineGroupId)
+      : undefined;
+    const groupLabel = groupId ? lineGroups[groupId]?.label?.trim() || undefined : undefined;
+
+    if (skipStationIds.length) skippingLines++;
+
     lines.push({
       id: line.id || String(lines.length),
       name: line.name || `Line ${lines.length + 1}`,
       color: line.color || '#888888',
       stationIds: validStationIds,
       mode: parseLineMode(line.mode),
+      groupId,
+      groupLabel,
+      skipStationIds: skipStationIds.length ? skipStationIds : undefined,
+      express: authorMarkedExpress(line.name, line.icon) || undefined,
     });
   }
 
@@ -239,7 +265,8 @@ function convertToMetroMapData(pageProps: MDPageProps): MetroMapData {
   const interchangeCount = Object.values(stations).filter(s => s.isInterchange).length;
   console.log(
     `[MetroDreaminImporter] Converted: ${realStationCount} real stations, ` +
-    `${waypointCount} waypoints, ${lines.length} lines, ${interchangeCount} interchange stops`
+    `${waypointCount} waypoints, ${lines.length} lines, ${interchangeCount} interchange stops, ` +
+    `${new Set(lines.map(l => l.groupId).filter(Boolean)).size} line groups, ${skippingLines} lines with skipped stations`
   );
 
   return {

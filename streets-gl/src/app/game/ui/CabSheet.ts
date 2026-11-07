@@ -55,6 +55,13 @@ const CSS = `
 .cab-sheet .row-item .s{color:#5d6f81;font-size:11.5px;font-weight:600}
 .cab-sheet .row-item .s .ic{font-size:15px;line-height:1;opacity:1;margin-right:4px;vertical-align:-2px}
 .cab-sheet .row-item .go{margin-left:auto;color:#5d6f81;font-size:17px}
+/* A group heading: a coloured rule and the group's name, then the services in
+   it, indented beneath. */
+.cab-sheet .sect{display:flex;align-items:baseline;gap:8px;padding:10px 4px 0 4px;
+  font-family:var(--tech);font-size:13px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#cfdbe7}
+.cab-sheet .sect::before{content:'';align-self:center;width:4px;height:16px;border-radius:2px;background:var(--sect,#4fb6ef)}
+.cab-sheet .sect .n{color:#5d6f81;font-size:11px;letter-spacing:.06em}
+.cab-sheet .row-item.grp{margin-left:12px}
 
 /* landscape: docked right, full height */
 .cab-sheet[data-o="land"]{right:20px;top:20px;bottom:20px;width:min(400px,35%);border-radius:20px}
@@ -101,6 +108,14 @@ export interface SheetRow {
 	 * is a promise the interface cannot keep.
 	 */
 	readOnly?: boolean;
+	/**
+	 * A heading over the rows that follow (a line group: "A · 4 services"),
+	 * not a row of its own — no pill, no card, not clickable. `badgeColor`
+	 * tints its rule.
+	 */
+	section?: boolean;
+	/** Sits under a section heading, and is indented to show it. */
+	inGroup?: boolean;
 	onSelect: () => void;
 }
 
@@ -151,9 +166,31 @@ export default class CabSheet {
 		const body = el.querySelector('.body') as HTMLElement;
 
 		for (const row of rows) {
+			if (row.section) {
+				const head = document.createElement('div');
+				const name = document.createElement('span');
+
+				head.className = 'sect';
+				if (row.badgeColor) head.style.setProperty('--sect', row.badgeColor);
+				name.textContent = row.title;
+				head.appendChild(name);
+
+				if (row.subtitle) {
+					const n = document.createElement('span');
+
+					n.className = 'n';
+					n.textContent = row.subtitle;
+					head.appendChild(n);
+				}
+
+				body.appendChild(head);
+				continue;
+			}
+
 			const item = document.createElement('button');
 
 			item.className = row.readOnly ? 'row-item fact' : 'row-item';
+			if (row.inGroup) item.classList.add('grp');
 
 			// Built as elements with textContent rather than innerHTML: these
 			// rows now carry titles authored by other people (map names pulled

@@ -15,6 +15,7 @@ import {buildTrackData, getPositionAtDistance, wrapTrackDistance} from './data/T
 import {bearing} from './data/CoordinateSystem';
 import {buildInterchangeIndex, connectionsAt, speakInterchange, type InterchangeIndex} from './data/Interchanges';
 import {StationManager, StationState} from './data/StationManager';
+import {skippedBetween} from './data/ServicePatterns';
 import {
 	TrainPhysicsState,
 	TrainInput,
@@ -60,6 +61,11 @@ export interface LineState {
 	parsed: ParsedLine;
 	track: TrackData;
 	realStationDists: number[];
+	/**
+	 * Along-track distance of each station the service runs through without
+	 * stopping, aligned with `parsed.skipped`. Empty on an all-stops line.
+	 */
+	skippedStationDists: number[];
 }
 
 export default class TrainSystem extends System {
@@ -138,7 +144,8 @@ export default class TrainSystem extends System {
 			// stationPointIndices keeps stations[] and realStationDists aligned,
 			// including on loops where the closing point revisits station 0.
 			const realStationDists = line.stationPointIndices.map(i => track.stationDists[i]);
-			return {parsed: line, track, realStationDists};
+			const skippedStationDists = line.skippedPointIndices.map(i => track.stationDists[i]);
+			return {parsed: line, track, realStationDists, skippedStationDists};
 		});
 
 		this.interchangeIndex = buildInterchangeIndex(this.lines.map(l => l.parsed));
@@ -721,8 +728,21 @@ export default class TrainSystem extends System {
 				const next = ls.parsed.stations[nextIdx];
 
 				if (next) {
+					// An express says what it is NOT stopping at, as a real one
+					// does — otherwise a passenger for Holon Junction finds out
+					// by watching it go past.
+					const here = ls.realStationDists[this.lastStationChimeIdx];
+					const there = ls.realStationDists[nextIdx];
+					const passing = here === undefined || there === undefined ? [] :
+						skippedBetween(
+							here, there, ls.skippedStationDists,
+							this.physicsState.direction, ls.track.isLoop ? ls.track.totalLength : 0,
+						)
+							.map(i => ls.parsed.skipped[i]?.name ?? '')
+							.filter(Boolean);
+
 					this.systemManager.getSystem(AnnouncementSystem)
-						?.announceNext(this.stationState.stationName || next.name);
+						?.announceNext(this.stationState.stationName || next.name, passing);
 				}
 			}
 

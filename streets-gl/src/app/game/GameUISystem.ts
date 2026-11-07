@@ -32,10 +32,12 @@ import AmbientTrainSystem from './AmbientTrainSystem';
 import {connectionsAt, describeInterchange} from './data/Interchanges';
 import DiscoverySystem from './DiscoverySystem';
 import {describeDistance, describeDuration} from './data/JourneyLog';
-import {inferLineMode, lineModeInfo} from './data/LineModes';
+import {lineModeInfo} from './data/LineModes';
 import {parseRideLink, buildRideLink} from './data/ShareLink';
 import {SAMPLE_MAP, LatestLoad} from './data/StartMaps';
-import {lineBadge, lineNameWithoutCode, lineShortLabel} from './data/LineLabel';
+import {lineShortLabel} from './data/LineLabel';
+import {linePickerRows} from './ui/LinePicker';
+import {boardName, passingAhead, skippedBetween, skipsPerLeg} from './data/ServicePatterns';
 import {limitAt} from './limits/SpeedProfile';
 import {buildMiniMapView, type MiniMapLineInput, type MiniMapPoint, type MiniMapView} from './ui/MiniMap';
 import {bakeTileGround, drawGround, type BakedTile} from './ui/MiniMapGround';
@@ -56,6 +58,8 @@ import MathUtils from '~/lib/math/MathUtils';
  */
 const STOP_MARK_READOUT_S = 20;
 const STOP_MARK_READOUT_FLOOR_M = 250;
+/** How far ahead an express's board names the station it will run through, metres. */
+const PASSING_NOTICE_M = 900;
 /**
  * How much ground the corner map covers, metres across.
  *
@@ -955,6 +959,24 @@ export default class GameUISystem extends System {
 	}
 
 	/** "NEXT STOP · DUE 09:14 · 2 MIN LATE" — state, schedule, standing. */
+	/** "NOT STOPPING · HOLON JUNCTION", while a skipped station is just ahead. */
+	private passingNotice(): string {
+		const trainSystem = this.systemManager.getSystem(TrainSystem);
+		const ls = trainSystem?.getCurrentLine();
+		const ss = trainSystem?.stationState;
+
+		if (!trainSystem || !ls || !ss || !(ls.skippedStationDists?.length)) return '';
+
+		const i = passingAhead(
+			ls.skippedStationDists, trainSystem.physicsState.trainDist,
+			trainSystem.physicsState.direction, ss.nextStationDist, PASSING_NOTICE_M,
+			ls.track.isLoop ? ls.track.totalLength : 0,
+		);
+		const name = i >= 0 ? ls.parsed.skipped[i]?.name : undefined;
+
+		return name ? `NOT STOPPING · ${boardName(name).toUpperCase()}` : '';
+	}
+
 	private stationMetaLine(doorsOpen: boolean | undefined, arriving: boolean | undefined): string {
 		const state = doorsOpen ? 'DOORS OPEN' : arriving ? 'ARRIVING' : 'NEXT STOP';
 		// Appended at every exit rather than at one of them: this line has
@@ -975,6 +997,12 @@ export default class GameUISystem extends System {
 				return withChange(`STOP MARK IN ${Math.round(away)} m`);
 			}
 		}
+		// An express about to run through a station says so, so the platform
+		// going past is not read as one you were meant to stop at.
+		const passing = !doorsOpen && !arriving ? this.passingNotice() : '';
+
+		if (passing) return withChange(passing);
+
 		const service = this.systemManager.getSystem(ServiceSystem);
 		const due = service?.dueAtNext();
 
@@ -1090,7 +1118,31 @@ export default class GameUISystem extends System {
 
 		if (!ls || !this.cabSheet || stops.length === 0) return;
 
-		const rows: SheetRow[] = stops.map(stop => {
+		const rows: SheetRow[] = [];
+		// The stations an express runs through sit in the list where the train
+		// passes them, with no time against them — a real working timetable
+		// shows a pass, and a stop that is not in the list at all reads as a
+		// station the line does not go near.
+		const passRows = (from: number, to: number): SheetRow[] => {
+			const a = ls.realStationDists[from];
+			const b = ls.realStationDists[to];
+
+			if (a === undefined || b === undefined || !ls.skippedStationDists?.length) return [];
+
+			const dir = ls.track.isLoop ? (trainSystem?.physicsState.direction ?? 1) : (b >= a ? 1 : -1);
+
+			return skippedBetween(a, b, ls.skippedStationDists, dir, ls.track.isLoop ? ls.track.totalLength : 0)
+				.map(i => ({
+					badge: '—',
+					badgeColor: '#3a4756',
+					title: ls.parsed.skipped[i]?.name ?? '—',
+					subtitle: 'Passes — this train does not stop',
+					readOnly: true,
+					onSelect: (): void => undefined,
+				}));
+		};
+
+		const stopRow = (stop: typeof stops[number]): SheetRow => {
 			const actual = service?.actualFor(stop.stationIndex);
 			const late = actual === undefined ? null : latenessSeconds(stop, actual);
 			const name = ls.parsed.stations[stop.stationIndex]?.name ?? '—';
@@ -1107,6 +1159,11 @@ export default class GameUISystem extends System {
 				readOnly: true,
 				onSelect: (): void => undefined,
 			};
+		};
+
+		stops.forEach((stop, k) => {
+			if (k > 0) rows.push(...passRows(stops[k - 1].stationIndex, stop.stationIndex));
+			rows.push(stopRow(stop));
 		});
 
 		this.cabSheet.show('Timetable', rows);
@@ -1374,6 +1431,19 @@ export default class GameUISystem extends System {
 			{badge: 'STOP', badgeColor: '#4fd996', title: `${stops} stations`, subtitle:
 				gaps.length ? `About ${km(length / gaps.length)} between stops` : 'A single stop', readOnly: true, onSelect: (): void => undefined},
 		];
+
+		// The service pattern, when it is not all-stops: what the map's author
+		// says this line runs through without calling at.
+		if (ls.parsed.skipped.length > 0) {
+			const n = ls.parsed.skipped.length;
+
+			rows.push({
+				badge: 'PASS', badgeColor: '#8fa3b7',
+				title: `${ls.parsed.express ? 'Express — runs' : 'Runs'} through ${n} station${n === 1 ? '' : 's'} without stopping`,
+				subtitle: ls.parsed.skipped.slice(0, 4).map(st => boardName(st.name)).join(' · ') + (n > 4 ? ` · and ${n - 4} more` : ''),
+				readOnly: true, onSelect: (): void => undefined,
+			});
+		}
 
 		if (gaps.length) {
 			rows.push({
@@ -1878,37 +1948,12 @@ export default class GameUISystem extends System {
 
 		if (!trainSystem || !this.cabSheet) return;
 
-		this.cabSheet.show('Pick a line', trainSystem.lines.map((ls, idx) => {
-			// The map usually says what kind of service a line runs; when it
-			// does not, the line itself is read. Either way the player should
-			// know they are about to drive a bus before they pick it.
-			const mode = lineModeInfo(
-				ls.parsed.mode ?? inferLineMode(
-					ls.parsed.name, ls.track.totalLength, ls.parsed.stations.length,
-				),
-			);
-
-			return {
-				// BOTH codes — a service is the A1 to A2, and taking only the
-				// first badged four different routes on the built-in map "A1".
-				// parsed.id is a numeric index and means nothing to a player.
-				badge: lineBadge(ls.parsed.name, idx),
-				badgeColor: ls.parsed.color,
-				// The name without the code it is already badged with, so the
-				// row is not "A1-A2 · A1 - A2 Sharon Local - Ayalon Local".
-				title: ls.parsed.isLoop
-					? `${lineNameWithoutCode(ls.parsed.name)} ⟳`
-					: lineNameWithoutCode(ls.parsed.name),
-				subtitleIcon: mode.icon,
-				subtitle: `${mode.label} · ${ls.parsed.stations.length} stops`,
-				// Tapping a line DRIVES that line, from its first stop. It used to
-				// open the old station panel instead, so choosing a line was two
-				// steps and the first one appeared to do nothing to the line you
-				// had actually picked. Where to start is a separate question, and
-				// it gets its own row below.
-				onSelect: () => this.driveLine(trainSystem, idx, 0),
-			};
-		}));
+		// Grouped by the map's own line groups, express and short workings
+		// labelled — see ui/LinePicker.ts. Tapping a row drives that line.
+		this.cabSheet.show('Pick a line', linePickerRows(
+			trainSystem.lines,
+			idx => this.driveLine(trainSystem, idx, 0),
+		));
 	}
 
 	/** Put the train on a line and start it, from the given stop. */
@@ -2028,6 +2073,7 @@ export default class GameUISystem extends System {
 			miniView: this.miniView,
 			heading: this.miniHeading,
 			legs: this.ribbonLegs(ls, limits),
+			legSkips: ls ? skipsPerLeg(ls.realStationDists, ls.skippedStationDists ?? []) : [],
 			isLoop: ls?.parsed.isLoop ?? false,
 			// Null all the way through when this journey has no record yet, so
 			// the chip stays hidden rather than claiming a dead heat with a

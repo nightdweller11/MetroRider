@@ -1436,15 +1436,18 @@ export default class TrainRenderingSystem extends System {
 		this.placeProceduralStations(ls);
 	}
 
-	private placeProceduralStations(ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]}): void {
+	private placeProceduralStations(ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]; skippedStationDists?: number[]}): void {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem) return;
 
 		const track = ls.track;
-		const stations = ls.parsed.stations;
-		const realDists = ls.realStationDists;
+		// Every platform on the route, including the ones this service runs
+		// through without stopping: an express passes a real station, not a
+		// bare stretch of track, and the platform it does not stop at is the
+		// clearest way to see that it is not stopping.
+		const realDists = [...ls.realStationDists, ...(ls.skippedStationDists ?? [])];
 
-		for (let si = 0; si < stations.length; si++) {
+		for (let si = 0; si < realDists.length; si++) {
 			const dist = realDists[si] ?? 0;
 
 			const splinePos = getPositionAtDistance(track.spline.points, track.cumDist, dist);
@@ -1484,7 +1487,7 @@ export default class TrainRenderingSystem extends System {
 	private async loadStationGLBModel(
 		url: string, modelId: string,
 		trainSystem: TrainSystem,
-		ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]},
+		ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]; skippedStationDists?: number[]},
 	): Promise<void> {
 		try {
 			const response = await fetch(url);
@@ -1512,15 +1515,18 @@ export default class TrainRenderingSystem extends System {
 
 	private placeStationGLBs(
 		trainSystem: TrainSystem,
-		ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]},
+		ls: {parsed: {stations: any[]; color: string}; track: any; realStationDists: number[]; skippedStationDists?: number[]},
 		glbBuffers: GeometryBuffers,
 	): void {
 		const sceneSystem = this.systemManager.getSystem(SceneSystem);
 		if (!sceneSystem) return;
 
 		const track = ls.track;
-		const stations = ls.parsed.stations;
-		const realDists = ls.realStationDists;
+		// Every platform on the route, including the ones this service runs
+		// through without stopping: an express passes a real station, not a
+		// bare stretch of track, and the platform it does not stop at is the
+		// clearest way to see that it is not stopping.
+		const realDists = [...ls.realStationDists, ...(ls.skippedStationDists ?? [])];
 
 		const vertCount = glbBuffers.position.length / 3;
 		let minX = Infinity, maxX = -Infinity;
@@ -1556,7 +1562,7 @@ export default class TrainRenderingSystem extends System {
 			`(scale=${scaleFactor.toFixed(4)}, rotated=${needsRotation})`
 		);
 
-		for (let si = 0; si < stations.length; si++) {
+		for (let si = 0; si < realDists.length; si++) {
 			const dist = realDists[si] ?? 0;
 
 			const splinePos = getPositionAtDistance(track.spline.points, track.cumDist, dist);

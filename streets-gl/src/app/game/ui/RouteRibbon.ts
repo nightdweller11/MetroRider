@@ -36,6 +36,12 @@ export interface RibbonView {
 	compressed: boolean;
 	/** Per-leg pace, one shorter than `dots`: how each leg compares to the fastest. */
 	legPace: ('slow' | 'medium' | 'fast')[];
+	/**
+	 * Per drawn leg, how many stations the train runs through on it without
+	 * stopping (an express). Drawn as a hollow ring on the leg — the
+	 * timetable-map convention for "passes, does not call".
+	 */
+	legSkips: number[];
 }
 
 /**
@@ -64,6 +70,7 @@ export function buildRibbon(
 	stationCount: number,
 	stopIndex: number,
 	legs: RibbonLeg[],
+	skipsPerLeg: number[] = [],
 ): RibbonView {
 	const stations = Math.max(2, stationCount);
 	const compressed = stations > MAX_DOTS;
@@ -81,6 +88,7 @@ export function buildRibbon(
 
 	const fastest = legs.reduce((max, leg) => Math.max(max, leg.limitKmh), 0);
 	const legPace: ('slow' | 'medium' | 'fast')[] = [];
+	const legSkips: number[] = [];
 
 	for (let i = 0; i < dots - 1; i++) {
 		// Compressed: each drawn leg stands for several real ones, so take the
@@ -97,7 +105,18 @@ export function buildRibbon(
 		}
 
 		legPace.push(paceFor(Number.isFinite(slowest) ? slowest : fastest, fastest));
+
+		// Skips are counted on the real legs, which on a compressed strip are
+		// not the legs' own pace range: map this drawn leg to the real ones it
+		// covers, every one of them exactly once.
+		const realFrom = compressed ? Math.round((i / (dots - 1)) * (stations - 1)) : i;
+		const realTo = compressed ? Math.round(((i + 1) / (dots - 1)) * (stations - 1)) : i + 1;
+		let skipped = 0;
+
+		for (let k = realFrom; k < realTo; k++) skipped += skipsPerLeg[k] ?? 0;
+
+		legSkips.push(skipped);
 	}
 
-	return {dots, here, compressed, legPace};
+	return {dots, here, compressed, legPace, legSkips};
 }
